@@ -4,6 +4,7 @@
  * Export all admin-related pages.
  */
 
+export { default as AdminDashboardPage } from './AdminDashboardPage.jsx';
 export { default as AdminUsersPage } from './AdminUsersPage.jsx';
 export { default as AdminOrganizationsPage } from './AdminOrganizationsPage.jsx';
 export { default as AdminOrganizationDetailPage } from './AdminOrganizationDetailPage.jsx';

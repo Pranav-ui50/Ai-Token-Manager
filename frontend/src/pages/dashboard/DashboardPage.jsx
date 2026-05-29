@@ -2,19 +2,121 @@
  * Dashboard Page
  *
  * Main dashboard page after login with Red & White theme.
+ * Dynamic data fetching for viewers and default users.
  */
 
-import { useNavigate } from 'react-router-dom';
-import Loader from '../../components/common/Loader.jsx';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import projectApi from '../../services/api/project.api.js';
+import featureApi from '../../services/api/feature.api.js';
+import planApi from '../../services/api/plan.api.js';
+import simulationApi from '../../services/api/simulation.api.js';
+
+// Helper to extract numeric value from potentially nested object
+const extractNumber = (value) => {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'object') {
+    return value.total || value.count || 0;
+  }
+  return 0;
+};
 
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [stats, setStats] = useState({
+    projects: 0,
+    features: 0,
+    plans: 0,
+    simulations: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch all data in parallel
+      const [projectsRes, featuresRes, plansRes, simulationsRes] = await Promise.allSettled([
+        projectApi.getForOrganization?.(user?.organization?._id || user?.organization) || projectApi.getAll?.(),
+        featureApi.getAll({ limit: 1 }),
+        planApi.getAll({ limit: 1 }),
+        simulationApi.getAll?.({ limit: 1 }) || Promise.resolve({ status: 'fulfilled', value: {} })
+      ]);
+
+      // Process projects
+      if (projectsRes.status === 'fulfilled') {
+        const projectsData = projectsRes.value?.data || projectsRes.value || {};
+        const projectsList = projectsData.projects || projectsData.data || [];
+        setStats(prev => ({
+          ...prev,
+          projects: projectsData.total || projectsData.count || (Array.isArray(projectsList) ? projectsList.length : 0)
+        }));
+      }
+
+      // Process features
+      if (featuresRes.status === 'fulfilled') {
+        const featuresData = featuresRes.value?.data || featuresRes.value || {};
+        const featuresList = featuresData.features || featuresData.data || [];
+        setStats(prev => ({
+          ...prev,
+          features: featuresData.total || featuresData.count || (Array.isArray(featuresList) ? featuresList.length : 0)
+        }));
+      }
+
+      // Process plans
+      if (plansRes.status === 'fulfilled') {
+        const plansData = plansRes.value?.data || plansRes.value || {};
+        const plansList = plansData.plans || plansData.data || [];
+        setStats(prev => ({
+          ...prev,
+          plans: plansData.total || plansData.count || (Array.isArray(plansList) ? plansList.length : 0)
+        }));
+      }
+
+      // Process simulations
+      if (simulationsRes.status === 'fulfilled') {
+        const simulationsData = simulationsRes.value?.data || simulationsRes.value || {};
+        const simulationsList = simulationsData.simulations || simulationsData.data || [];
+        setStats(prev => ({
+          ...prev,
+          simulations: simulationsData.total || simulationsData.count || (Array.isArray(simulationsList) ? simulationsList.length : 0)
+        }));
+      }
+
+    } catch (err) {
+      console.error('Failed to fetch dashboard data:', err);
+      setError(err.response?.data?.error?.message || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <div className="text-center">
+          <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <p className="mt-4 text-gray-500">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -87,11 +189,11 @@ const DashboardPage = () => {
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Projects Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+          <Link to="/projects" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Projects</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.projects}</p>
               </div>
               <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,16 +202,16 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-400">No projects yet</span>
+              <span className="text-gray-400">{stats.projects === 0 ? 'No projects yet' : 'Manage projects'}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Features Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+          <Link to="/features" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Features</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.features}</p>
               </div>
               <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,16 +220,16 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-400">No features yet</span>
+              <span className="text-gray-400">{stats.features === 0 ? 'No features yet' : 'View features'}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Plans Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+          <Link to="/plans" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Plans</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.plans}</p>
               </div>
               <div className="w-12 h-12 bg-yellow-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,16 +238,16 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-400">No plans yet</span>
+              <span className="text-gray-400">{stats.plans === 0 ? 'No plans yet' : 'View plans'}</span>
             </div>
-          </div>
+          </Link>
 
           {/* Simulations Card */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+          <Link to="/simulations" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Simulations</p>
-                <p className="text-3xl font-bold text-gray-900">0</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.simulations}</p>
               </div>
               <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
                 <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,9 +256,9 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-400">No simulations yet</span>
+              <span className="text-gray-400">{stats.simulations === 0 ? 'No simulations yet' : 'View simulations'}</span>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Getting Started */}
@@ -166,7 +268,10 @@ const DashboardPage = () => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Step 1 */}
-            <div className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all cursor-pointer">
+            <button
+              onClick={() => navigate('/providers')}
+              className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all text-left"
+            >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-[#DC2626] transition-colors">
                   <span className="text-[#DC2626] font-bold group-hover:text-white">1</span>
@@ -180,10 +285,13 @@ const DashboardPage = () => {
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
 
             {/* Step 2 */}
-            <div className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all cursor-pointer">
+            <button
+              onClick={() => navigate('/features')}
+              className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all text-left"
+            >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-[#DC2626] transition-colors">
                   <span className="text-[#DC2626] font-bold group-hover:text-white">2</span>
@@ -197,10 +305,13 @@ const DashboardPage = () => {
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
 
             {/* Step 3 */}
-            <div className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all cursor-pointer">
+            <button
+              onClick={() => navigate('/plans')}
+              className="group border border-gray-200 rounded-xl p-5 hover:border-[#DC2626] hover:shadow-md transition-all text-left"
+            >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-[#DC2626] transition-colors">
                   <span className="text-[#DC2626] font-bold group-hover:text-white">3</span>
@@ -214,7 +325,7 @@ const DashboardPage = () => {
                   </p>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -254,7 +365,7 @@ const DashboardPage = () => {
             >
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
                 <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4c1.11 0 2.08.4 2.83 1.07M12 6c1.11 0 2.08.4 2.83 1.07M12 6c-1.11 0-2.08.4-2.83 1.07M12 6c-1.11 0-2.08.4-2.83 1.07m6.83 2.83A2.99 2.99 0 0015 8.5m2.83 2.83a5.5 5.5 0 01-7.78 0M19 12a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-5 8a4 4 0 01-4-4V5a2 2 0 012-2h14a2 2 0 012 2v8a4 4 0 01-4 4H7z" />
                 </svg>
               </div>
               <span className="font-medium text-gray-700">Pricing Calculator</span>
@@ -266,7 +377,7 @@ const DashboardPage = () => {
             >
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
                 <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 2v-2m5.618-4.574A9 9 0 0012 3a9 9 0 00-8.618 6.426M21 12a9 9 0 01-9 9m9-9H3m9 9a9 9 0 01-9-9" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m5 2v-2m5.618-4.574A9 9 0 0012 3a9 9 0 00-8.618 6.426M21 12a9 9 0 01-9 9m9-9H3m9 9a9 9 0 01-9-9" />
                 </svg>
               </div>
               <span className="font-medium text-gray-700">View Reports</span>

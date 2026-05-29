@@ -1,16 +1,31 @@
 /**
  * Product Manager Dashboard
  *
- * Product and features overview for PRODUCT_MANAGER role.
+ * Product and features overview for PRODUCT_MANAGER role with real API data.
  * Red & White theme styling.
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Loader from '../../components/common/Loader.jsx';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth.js';
+import featureApi from '../../services/api/feature.api.js';
+import planApi from '../../services/api/plan.api.js';
+import modelApi from '../../services/api/model.api.js';
+import analyticsApi from '../../services/api/analytics.api.js';
+
+// Helper to extract numeric value from potentially nested object
+const extractNumber = (value) => {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'object') {
+    return value.total || value.count || value.active || 0;
+  }
+  return 0;
+};
 
 function ProductManagerDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [stats, setStats] = useState({
     features: 0,
     models: 0,
@@ -21,50 +36,91 @@ function ProductManagerDashboard() {
   const [plans, setPlans] = useState([]);
   const [modelUsage, setModelUsage] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Simulate loading - replace with actual API calls
-    const timer = setTimeout(() => {
-      setStats({
-        features: 23,
-        models: 42,
-        plans: 5,
-        usageThisMonth: 8500000
-      });
-      setFeatures([
-        { _id: '1', name: 'Chat Completion', model: 'GPT-4', tokens: 2500000, status: 'active' },
-        { _id: '2', name: 'Text Summarization', model: 'Claude 3 Sonnet', tokens: 1800000, status: 'active' },
-        { _id: '3', name: 'Image Generation', model: 'DALL-E 3', tokens: 500000, status: 'active' },
-        { _id: '4', name: 'Embedding Search', model: 'text-embedding-3', tokens: 1200000, status: 'active' }
-      ]);
-      setPlans([
-        { _id: '1', name: 'Free Trial', users: 150, revenue: 0, features: 5 },
-        { _id: '2', name: 'Starter', users: 89, revenue: 890, features: 12 },
-        { _id: '3', name: 'Professional', users: 45, revenue: 2250, features: 20 },
-        { _id: '4', name: 'Enterprise', users: 12, revenue: 4800, features: 23 }
-      ]);
-      setModelUsage([
-        { _id: '1', model: 'GPT-4', requests: 125000, avgLatency: 1.2, cost: 3200 },
-        { _id: '2', model: 'Claude 3 Opus', requests: 85000, avgLatency: 1.5, cost: 2800 },
-        { _id: '3', model: 'GPT-3.5 Turbo', requests: 450000, avgLatency: 0.3, cost: 1350 },
-        { _id: '4', model: 'Claude 3 Sonnet', requests: 120000, avgLatency: 0.8, cost: 1200 }
-      ]);
-      setIsLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
+    fetchDashboardData();
   }, []);
 
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch all data in parallel
+      const [featuresRes, plansRes, modelsRes, analyticsRes] = await Promise.allSettled([
+        featureApi.getAll({ limit: 5 }),
+        planApi.getAll({ limit: 5 }),
+        modelApi.getAll({ limit: 10 }),
+        analyticsApi.getDashboard()
+      ]);
+
+      // Process features
+      if (featuresRes.status === 'fulfilled') {
+        const featuresData = featuresRes.value?.data || featuresRes.value || {};
+        const featuresList = featuresData.features || featuresData.data || [];
+        setFeatures(Array.isArray(featuresList) ? featuresList.slice(0, 5) : []);
+        setStats(prev => ({
+          ...prev,
+          features: featuresData.total || featuresData.count || (Array.isArray(featuresList) ? featuresList.length : 0)
+        }));
+      }
+
+      // Process plans
+      if (plansRes.status === 'fulfilled') {
+        const plansData = plansRes.value?.data || plansRes.value || {};
+        const plansList = plansData.plans || plansData.data || [];
+        setPlans(Array.isArray(plansList) ? plansList.slice(0, 5) : []);
+        setStats(prev => ({
+          ...prev,
+          plans: plansData.total || plansData.count || (Array.isArray(plansList) ? plansList.length : 0)
+        }));
+      }
+
+      // Process models
+      if (modelsRes.status === 'fulfilled') {
+        const modelsData = modelsRes.value?.data || modelsRes.value || {};
+        const modelsList = modelsData.models || modelsData.data || [];
+        setModelUsage(Array.isArray(modelsList) ? modelsList.slice(0, 5) : []);
+        setStats(prev => ({
+          ...prev,
+          models: modelsData.total || modelsData.count || (Array.isArray(modelsList) ? modelsList.length : 0)
+        }));
+      }
+
+      // Process analytics
+      if (analyticsRes.status === 'fulfilled') {
+        const analyticsData = analyticsRes.value?.data || analyticsRes.value || {};
+        const summary = analyticsData?.summary || {};
+        setStats(prev => ({
+          ...prev,
+          usageThisMonth: extractNumber(summary.totalTokens || summary.tokenUsage)
+        }));
+      }
+
+    } catch (err) {
+      console.error('Failed to fetch dashboard data:', err);
+      setError(err.response?.data?.error?.message || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const formatNumber = (num) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
+    const numValue = typeof num === 'object' ? extractNumber(num) : num;
+    if (!numValue && numValue !== 0) return '0';
+    if (numValue >= 1000000) return `${(numValue / 1000000).toFixed(1)}M`;
+    if (numValue >= 1000) return `${(numValue / 1000).toFixed(1)}K`;
+    return numValue.toString();
   };
 
   const formatCurrency = (amount) => {
+    const numValue = typeof amount === 'object' ? extractNumber(amount) : amount;
+    if (!numValue && numValue !== 0) return '$0.00';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD'
-    }).format(amount);
+    }).format(numValue);
   };
 
   if (isLoading) {
@@ -81,22 +137,39 @@ function ProductManagerDashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        {error}
+        <button onClick={fetchDashboardData} className="ml-4 text-red-800 hover:text-red-900 underline">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Product Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Product Dashboard</h1>
           <p className="text-sm text-gray-500">Features, models, and usage analytics</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <button
+            onClick={() => navigate('/analytics')}
+            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
             <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
             Analytics
           </button>
-          <button className="px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors">
+          <button
+            onClick={() => navigate('/features/new')}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
+          >
             <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
@@ -106,82 +179,60 @@ function ProductManagerDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <Link to="/features" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Features</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.features}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 truncate">Features</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.features}</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center text-xs">
-            <span className="text-green-600 flex items-center gap-1">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-              +3 this week
-            </span>
-          </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Link to="/models" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
               </svg>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Models</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.models}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 truncate">Models</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.models}</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center text-xs">
-            <span className="text-gray-500">8 providers integrated</span>
-          </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <Link to="/plans" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Plans</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.plans}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 truncate">Plans</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.plans}</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center text-xs">
-            <span className="text-green-600 flex items-center gap-1">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-              +1 this month
-            </span>
-          </div>
-        </div>
+        </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
               </svg>
             </div>
-            <div>
-              <p className="text-xs text-gray-500">Tokens This Month</p>
-              <p className="text-2xl font-bold text-gray-900">{formatNumber(stats.usageThisMonth)}</p>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 truncate">Tokens This Month</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatNumber(stats.usageThisMonth)}</p>
             </div>
-          </div>
-          <div className="mt-3 flex items-center text-xs">
-            <span className="text-yellow-600">85% of allocation</span>
           </div>
         </div>
       </div>
@@ -192,57 +243,77 @@ function ProductManagerDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Active Features</h2>
-            <button className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+            <Link to="/features" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
               View All
-            </button>
+            </Link>
           </div>
-          <div className="space-y-3">
-            {features.map((feature) => (
-              <div key={feature._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
+          {features.length > 0 ? (
+            <div className="space-y-3">
+              {features.map((feature) => (
+                <Link
+                  key={feature._id}
+                  to={`/features/${feature._id}`}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{feature.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{feature.model?.name || feature.modelName || 'No model'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{feature.name}</p>
-                    <p className="text-xs text-gray-500">{feature.model}</p>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900 text-sm">{formatNumber(feature.estimatedTokens || feature.tokens || 0)} tokens</p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${feature.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                      {feature.status || 'active'}
+                    </span>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">{formatNumber(feature.tokens)} tokens</p>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                    {feature.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No features yet. <Link to="/features/new" className="text-[#DC2626] hover:underline">Create one</Link>
+            </div>
+          )}
         </div>
 
         {/* Subscription Plans */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Subscription Plans</h2>
-            <button className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+            <Link to="/plans" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
               Manage Plans
-            </button>
+            </Link>
           </div>
-          <div className="space-y-3">
-            {plans.map((plan) => (
-              <div key={plan._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors">
-                <div>
-                  <p className="font-medium text-gray-900">{plan.name}</p>
-                  <p className="text-xs text-gray-500">{plan.features} features</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">{plan.users} users</p>
-                  <p className="text-xs text-gray-500">{formatCurrency(plan.revenue)}/mo</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          {plans.length > 0 ? (
+            <div className="space-y-3">
+              {plans.map((plan) => (
+                <Link
+                  key={plan._id}
+                  to={`/plans/${plan._id}`}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{plan.name}</p>
+                    <p className="text-xs text-gray-500">{plan.features?.length || 0} features</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">{plan.users || plan.subscriberCount || 0} users</p>
+                    <p className="text-xs text-gray-500">{formatCurrency(plan.price || 0)}/mo</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No plans yet. <Link to="/plans" className="text-[#DC2626] hover:underline">Create one</Link>
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,58 +321,56 @@ function ProductManagerDashboard() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Model Performance</h2>
-          <select className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none ">
-            <option>Last 7 days</option>
-            <option>Last 30 days</option>
-            <option>Last 90 days</option>
-          </select>
+          <Link to="/models" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+            View All
+          </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Model</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Requests</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Avg Latency</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Cost</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Performance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {modelUsage.map((model) => (
-                <tr key={model._id} className="hover:bg-red-50/30 transition-colors">
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <p className="font-medium text-gray-900">{model.model}</p>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-600">{formatNumber(model.requests)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-gray-600">{model.avgLatency}s</td>
-                  <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900">{formatCurrency(model.cost)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-[#DC2626] rounded-full"
-                          style={{ width: `${Math.min((model.cost / 3500) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {Math.round((model.cost / 3500) * 100)}%
-                      </span>
-                    </div>
-                  </td>
+        {modelUsage.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Model</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Provider</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {modelUsage.map((model) => (
+                  <tr key={model._id} className="hover:bg-red-50/30 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <p className="font-medium text-gray-900">{model.name || model.displayName}</p>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                      {model.provider?.name || model.providerName || '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                      {model.type || '-'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${model.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                        {model.isActive !== false ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            No models configured yet. <Link to="/models" className="text-[#DC2626] hover:underline">Configure models</Link>
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <button
-            onClick={() => navigate('/features')}
+            onClick={() => navigate('/features/new')}
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
           >
             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">

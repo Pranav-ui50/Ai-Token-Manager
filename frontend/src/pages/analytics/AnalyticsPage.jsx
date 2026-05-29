@@ -14,7 +14,7 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
-import { useOrganization } from '../../context/OrganizationContext.jsx';
+import { useAuth } from '../../hooks/useAuth.js';
 import Loader from '../../components/common/Loader.jsx';
 import analyticsApi from '../../services/api/analytics.api.js';
 
@@ -37,10 +37,13 @@ const CHART_COLORS = {
 };
 
 function AnalyticsPage() {
-  const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const { user, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Get organization ID from user
+  const orgId = user?.organization?._id || user?.organization;
 
   // Data states
   const [dashboardData, setDashboardData] = useState(null);
@@ -55,10 +58,10 @@ function AnalyticsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    if (currentOrganization) {
+    if (orgId) {
       fetchAllData();
     }
-  }, [currentOrganization, projectId]);
+  }, [orgId, projectId]);
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -74,10 +77,10 @@ function AnalyticsPage() {
         analyticsApi.getMargins(filters)
       ]);
 
-      setDashboardData(dashboard.data);
-      setCostsData(costs.data);
-      setProfitabilityData(profitability.data);
-      setMarginsData(margins.data);
+      setDashboardData(dashboard?.data || dashboard);
+      setCostsData(costs?.data || costs);
+      setProfitabilityData(profitability?.data || profitability);
+      setMarginsData(margins?.data || margins);
     } catch (err) {
       console.error('Failed to fetch analytics:', err);
       setError(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to load analytics');
@@ -116,12 +119,12 @@ function AnalyticsPage() {
   };
 
   // Loading state
-  if (orgLoading || isLoading) {
+  if (authLoading || isLoading) {
     return <Loader fullPage text="Loading analytics..." />;
   }
 
   // No organization state
-  if (!currentOrganization) {
+  if (!orgId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-96">
         <div className="text-center">
@@ -130,14 +133,8 @@ function AnalyticsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization Selected</h2>
-          <p className="text-gray-500 mb-4">Please select an organization to view analytics.</p>
-          <a
-            href="/organizations"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
-          >
-            <span>Go to Organizations</span>
-          </a>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization</h2>
+          <p className="text-gray-500 mb-4">Please contact your administrator to be added to an organization.</p>
         </div>
       </div>
     );
@@ -213,37 +210,77 @@ function AnalyticsPage() {
 
       {/* Tab Content */}
       <div className="mt-6">
-        {activeTab === 'overview' && dashboardData && (
-          <OverviewTab
-            data={dashboardData}
-            costsData={costsData}
-            formatCurrency={formatCurrency}
-            formatNumber={formatNumber}
-          />
+        {activeTab === 'overview' && (
+          dashboardData ? (
+            <OverviewTab
+              data={dashboardData}
+              costsData={costsData}
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Data Available</h3>
+              <p className="text-gray-500">Analytics data will appear here once you have usage activity.</p>
+            </div>
+          )
         )}
 
-        {activeTab === 'costs' && costsData && (
-          <CostsTab
-            data={costsData}
-            formatCurrency={formatCurrency}
-            formatNumber={formatNumber}
-          />
+        {activeTab === 'costs' && (
+          costsData ? (
+            <CostsTab
+              data={costsData}
+              formatCurrency={formatCurrency}
+              formatNumber={formatNumber}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Cost Data</h3>
+              <p className="text-gray-500">Cost analytics will appear here once you have usage activity.</p>
+            </div>
+          )
         )}
 
-        {activeTab === 'profitability' && profitabilityData && (
-          <ProfitabilityTab
-            data={profitabilityData}
-            formatCurrency={formatCurrency}
-            formatPercent={formatPercent}
-          />
+        {activeTab === 'profitability' && (
+          profitabilityData ? (
+            <ProfitabilityTab
+              data={profitabilityData}
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Profitability Data</h3>
+              <p className="text-gray-500">Profitability analytics will appear here once you have revenue data.</p>
+            </div>
+          )
         )}
 
-        {activeTab === 'margins' && marginsData && (
-          <MarginsTab
-            data={marginsData}
-            formatCurrency={formatCurrency}
-            formatPercent={formatPercent}
-          />
+        {activeTab === 'margins' && (
+          marginsData ? (
+            <MarginsTab
+              data={marginsData}
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Margin Data</h3>
+              <p className="text-gray-500">Margin analytics will appear here once you have feature data.</p>
+            </div>
+          )
         )}
       </div>
     </div>
@@ -252,7 +289,9 @@ function AnalyticsPage() {
 
 // Overview Tab Component
 function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
-  const { summary, costTrend, recentActivity } = data;
+  const summary = data?.summary || { costs: {}, features: {}, usage: {} };
+  const costTrend = data?.costTrend || [];
+  const recentActivity = data?.recentActivity || [];
 
   return (
     <div className="space-y-6">
@@ -267,7 +306,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Cost</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(summary.costs.total)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(summary.costs?.total || 0)}</p>
             </div>
           </div>
         </div>
@@ -281,7 +320,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Active Features</p>
-              <p className="text-xl font-bold text-gray-900">{summary.features.active} / {summary.features.total}</p>
+              <p className="text-xl font-bold text-gray-900">{summary.features?.active || 0} / {summary.features?.total || 0}</p>
             </div>
           </div>
         </div>
@@ -295,7 +334,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Tokens</p>
-              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage.totalTokens)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage?.totalTokens || 0)}</p>
             </div>
           </div>
         </div>
@@ -310,7 +349,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Requests</p>
-              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage.totalRequests)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage?.totalRequests || 0)}</p>
             </div>
           </div>
         </div>
@@ -385,7 +424,10 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
 
 // Costs Tab Component
 function CostsTab({ data, formatCurrency, formatNumber }) {
-  const { summary, costsByModel, costsByProvider, topCostFeatures, costTrend } = data;
+  const summary = data?.summary || { totalCost: 0, totalTokens: 0, totalRequests: 0, featureCount: 0 };
+  const costsByModel = data?.costsByModel || [];
+  const costsByProvider = data?.costsByProvider || [];
+  const topCostFeatures = data?.topCostFeatures || [];
 
   return (
     <div className="space-y-6">
@@ -393,19 +435,19 @@ function CostsTab({ data, formatCurrency, formatNumber }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Cost</p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalCost)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalCost || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Tokens</p>
-          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalTokens)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalTokens || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Requests</p>
-          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalRequests)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalRequests || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Features</p>
-          <p className="text-2xl font-bold text-gray-900">{summary.featureCount}</p>
+          <p className="text-2xl font-bold text-gray-900">{summary.featureCount || 0}</p>
         </div>
       </div>
 
@@ -469,7 +511,10 @@ function CostsTab({ data, formatCurrency, formatNumber }) {
 
 // Profitability Tab Component
 function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
-  const { summary, features, topPerformers, bottomPerformers } = data;
+  const summary = data?.summary || { totalRevenue: 0, totalCosts: 0, totalProfit: 0, overallMargin: 0 };
+  const features = data?.features || [];
+  const topPerformers = data?.topPerformers || [];
+  const bottomPerformers = data?.bottomPerformers || [];
 
   return (
     <div className="space-y-6">
@@ -477,22 +522,22 @@ function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
-          <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalRevenue)}</p>
+          <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalRevenue || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Costs</p>
-          <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalCosts)}</p>
+          <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalCosts || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Profit</p>
-          <p className={`text-2xl font-bold ${summary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(summary.totalProfit)}
+          <p className={`text-2xl font-bold ${(summary.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {formatCurrency(summary.totalProfit || 0)}
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Overall Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.overallMargin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.overallMargin}%
+          <p className={`text-2xl font-bold ${parseFloat(summary.overallMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary.overallMargin || 0}%
           </p>
         </div>
       </div>
@@ -580,7 +625,9 @@ function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
 
 // Margins Tab Component
 function MarginsTab({ data, formatCurrency, formatPercent }) {
-  const { summary, marginDistribution, features } = data;
+  const summary = data?.summary || { averageMargin: 0, medianMargin: 0, profitableFeatures: 0, unprofitableFeatures: 0 };
+  const marginDistribution = data?.marginDistribution || [];
+  const features = data?.features || [];
 
   return (
     <div className="space-y-6">
@@ -588,23 +635,23 @@ function MarginsTab({ data, formatCurrency, formatPercent }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Average Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.averageMargin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.averageMargin}%
+          <p className={`text-2xl font-bold ${parseFloat(summary.averageMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary.averageMargin || 0}%
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Median Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.medianMargin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.medianMargin}%
+          <p className={`text-2xl font-bold ${parseFloat(summary.medianMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary.medianMargin || 0}%
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Profitable Features</p>
-          <p className="text-2xl font-bold text-green-600">{summary.profitableFeatures}</p>
+          <p className="text-2xl font-bold text-green-600">{summary.profitableFeatures || 0}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Unprofitable Features</p>
-          <p className="text-2xl font-bold text-red-600">{summary.unprofitableFeatures}</p>
+          <p className="text-2xl font-bold text-red-600">{summary.unprofitableFeatures || 0}</p>
         </div>
       </div>
 

@@ -101,6 +101,7 @@ const PricingHistoryPage = lazy(() => import('../pages/pricing/PricingHistoryPag
 const SimulationsPage = lazy(() => import('../pages/simulations/SimulationsPage.jsx'));
 const TeamPage = lazy(() => import('../pages/team/TeamPage.jsx'));
 const BillingPage = lazy(() => import('../pages/billing/BillingPage.jsx'));
+const InvoicesPage = lazy(() => import('../pages/billing/InvoicesPage.jsx'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage.jsx'));
 const IntegrationsPage = lazy(() => import('../pages/integrations/IntegrationsPage.jsx'));
 const ApiKeysPage = lazy(() => import('../pages/api-keys/ApiKeysPage.jsx'));
@@ -114,6 +115,7 @@ const NotFoundPage = lazy(() => import('../pages/errors/NotFoundPage.jsx'));
 const ErrorPage = lazy(() => import('../pages/errors/ErrorPage.jsx'));
 
 // Admin pages
+const AdminDashboardPage = lazy(() => import('../pages/admin/AdminDashboardPage.jsx'));
 const AdminUsersPage = lazy(() => import('../pages/admin/AdminUsersPage.jsx'));
 const AdminOrganizationsPage = lazy(() => import('../pages/admin/AdminOrganizationsPage.jsx'));
 const AdminOrganizationDetailPage = lazy(() => import('../pages/admin/AdminOrganizationDetailPage.jsx'));
@@ -491,6 +493,18 @@ const routes = [
       </ProtectedRoute>
     )
   },
+  {
+    path: '/invoices',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <InvoicesPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
 
   // ===========================================
   // Settings Routes
@@ -635,6 +649,18 @@ const routes = [
   // ===========================================
   // Admin Routes (Super Admin Only)
   // ===========================================
+  {
+    path: '/admin',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminDashboardPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
   {
     path: '/admin/users',
     element: (

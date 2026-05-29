@@ -12,7 +12,7 @@ const router = express.Router();
 
 // All routes require authentication and super admin role
 router.use(protect);
-router.use(restrictTo('superadmin'));
+router.use(restrictTo('super_admin'));
 
 /**
  * @route   GET /api/admin/stats

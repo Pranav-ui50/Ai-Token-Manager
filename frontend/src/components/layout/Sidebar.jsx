@@ -13,9 +13,9 @@ import { ROLE_LABELS } from '../../utils/constants.js';
 // For org_owner, organization link is computed dynamically
 const getBaseMenuItems = (userOrganizationId) => ({
   super_admin: [
-    { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-    { path: '/admin/organizations', icon: 'building', label: 'All Organizations' },
-    { path: '/admin/users', icon: 'users', label: 'All Users' },
+    { path: '/admin', icon: 'dashboard', label: 'Admin Dashboard' },
+    { path: '/admin/organizations', icon: 'building', label: 'Organizations' },
+    { path: '/admin/users', icon: 'users', label: 'Users' },
     { path: '/admin/providers', icon: 'server', label: 'Providers' },
     { path: '/admin/models', icon: 'chip', label: 'Models' },
     { path: '/audit-logs', icon: 'clipboard-list', label: 'Audit Logs' },

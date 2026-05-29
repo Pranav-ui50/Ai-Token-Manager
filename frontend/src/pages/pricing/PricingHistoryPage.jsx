@@ -36,9 +36,13 @@ function PricingHistoryPage() {
         providerApi.getAll()
       ]);
 
-      setHistory(historyData || []);
-      setStatistics(statsData);
-      setProviders(providersData || []);
+      // Extract arrays from API responses
+      const historyArray = Array.isArray(historyData) ? historyData : (historyData?.changes || historyData?.data || []);
+      const providersArray = Array.isArray(providersData) ? providersData : (providersData?.providers || []);
+
+      setHistory(historyArray);
+      setStatistics(statsData || null);
+      setProviders(providersArray);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to load pricing history');
     } finally {

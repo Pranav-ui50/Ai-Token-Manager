@@ -102,6 +102,14 @@ export const seedDemoUsers = async () => {
 
     const createdUsers = [];
     const existingUsers = [];
+    let demoOrganization = null;
+
+    // First, find or create the demo organization
+    const Organization = (await import('../models/Organization.js')).default;
+    const orgOwnerRole = await Role.findOne({ name: ROLES.ORG_OWNER });
+
+    // Check if demo organization already exists
+    demoOrganization = await Organization.findOne({ name: 'Demo Organization' });
 
     for (const demoUser of DEMO_USERS) {
       // Check if user already exists
@@ -135,10 +143,8 @@ export const seedDemoUsers = async () => {
         isActive: true
       });
 
-      // Create organization if needed
+      // Create organization if needed (for ORG_OWNER)
       if (demoUser.createOrganization) {
-        const Organization = (await import('../models/Organization.js')).default;
-
         const organization = await Organization.create({
           name: demoUser.organizationName || `${demoUser.firstName}'s Organization`,
           owner: user._id,
@@ -154,7 +160,26 @@ export const seedDemoUsers = async () => {
         user.organization = organization._id;
         await user.save();
 
+        demoOrganization = organization;
+
         logger.info(`  - Created organization: ${organization.name} for user ${demoUser.email}`);
+      } else if (demoOrganization) {
+        // Add user to the demo organization (for non-owner roles)
+        user.organization = demoOrganization._id;
+        await user.save();
+
+        // Add user as member to the organization
+        await Organization.findByIdAndUpdate(demoOrganization._id, {
+          $push: {
+            members: {
+              user: user._id,
+              role: role._id,
+              joinedAt: new Date()
+            }
+          }
+        });
+
+        logger.info(`  - Added ${demoUser.email} to organization: ${demoOrganization.name}`);
       }
 
       createdUsers.push({

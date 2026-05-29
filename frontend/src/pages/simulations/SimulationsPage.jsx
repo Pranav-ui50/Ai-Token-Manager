@@ -6,7 +6,7 @@
 
 import Loader from '../../components/common/Loader.jsx';
 import { useState, useEffect } from 'react';
-import { useOrganization } from '../../context/OrganizationContext.jsx';
+import { useAuth } from '../../hooks/useAuth.js';
 import Modal from '../../components/common/Modal.jsx';
 import simulationApi from '../../services/api/simulation.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
@@ -20,13 +20,16 @@ const SIMULATION_TYPES = [
 ];
 
 function SimulationsPage() {
-  const { currentOrganization } = useOrganization();
+  const { user, isLoading: authLoading } = useAuth();
   const { canRunSimulations, canViewSimulations } = usePermissions();
   const [simulations, setSimulations] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Get organization ID from user
+  const orgId = user?.organization?._id || user?.organization;
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -72,20 +75,24 @@ function SimulationsPage() {
   });
 
   useEffect(() => {
-    if (currentOrganization) {
+    if (orgId) {
       fetchSimulations();
     }
-  }, [currentOrganization]);
+  }, [orgId]);
 
   const fetchSimulations = async () => {
     setIsLoading(true);
     try {
       const [simulationsData, statsData] = await Promise.all([
-        simulationApi.getForOrganization(currentOrganization._id),
-        simulationApi.getStatistics(currentOrganization._id)
+        simulationApi.getForOrganization(orgId),
+        simulationApi.getStatistics(orgId)
       ]);
-      setSimulations(simulationsData || []);
-      setStatistics(statsData);
+      // Extract array from API response
+      const simulationsArray = Array.isArray(simulationsData)
+        ? simulationsData
+        : (simulationsData?.simulations || simulationsData?.data || []);
+      setSimulations(simulationsArray);
+      setStatistics(statsData || null);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to load simulations');
     } finally {
@@ -99,7 +106,7 @@ function SimulationsPage() {
 
     try {
       const simulation = await simulationApi.create({
-        organizationId: currentOrganization._id,
+        organizationId: orgId,
         ...formData
       });
       setSimulations(prev => [simulation, ...prev]);
@@ -223,12 +230,27 @@ function SimulationsPage() {
     return SIMULATION_TYPES.find(t => t.value === type)?.label || type;
   };
 
-  if (!currentOrganization) {
+  // Loading state
+  if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization Selected</h2>
-          <p className="text-gray-500">Please select an organization to manage simulations.</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
+          <p className="mt-4 text-gray-500">Loading simulations...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!orgId) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization</h2>
+          <p className="text-gray-500">Please contact your administrator to be added to an organization.</p>
         </div>
       </div>
     );
