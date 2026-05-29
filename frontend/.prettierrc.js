@@ -1,0 +1,12 @@
+export default {
+  semi: true,
+  trailingComma: 'none',
+  singleQuote: true,
+  printWidth: 100,
+  tabWidth: 2,
+  useTabs: false,
+  bracketSpacing: true,
+  arrowParens: 'avoid',
+  endOfLine: 'lf',
+  plugins: ['prettier-plugin-tailwindcss']
+};

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two-Factor Authentication {{status}} - {{appName}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    .logo h1 {
+      color: #6366f1;
+      font-size: 24px;
+      margin-bottom: 30px;
+    }
+    .status-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .status-icon.enabled {
+      background-color: #dcfce7;
+    }
+    .status-icon.disabled {
+      background-color: #fee2e2;
+    }
+    .status-icon svg {
+      width: 40px;
+      height: 40px;
+    }
+    .status-icon.enabled svg {
+      color: #22c55e;
+    }
+    .status-icon.disabled svg {
+      color: #ef4444;
+    }
+    h2 {
+      color: #1f2937;
+      margin: 0 0 10px;
+    }
+    p {
+      color: #4b5563;
+      margin-bottom: 20px;
+    }
+    .info-box {
+      background-color: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #6b7280;
+    }
+    .info-value {
+      color: #1f2937;
+      font-weight: 500;
+    }
+    .security-tips {
+      background-color: #f0fdf4;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .security-tips h4 {
+      margin: 0 0 12px 0;
+      color: #166534;
+    }
+    .security-tips ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .security-tips li {
+      margin-bottom: 8px;
+      color: #166534;
+    }
+    .warning-box {
+      background-color: #fef3c7;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      text-align: left;
+      border-left: 4px solid #f59e0b;
+    }
+    .warning-box h4 {
+      margin: 0 0 8px 0;
+      color: #92400e;
+    }
+    .warning-box p {
+      margin: 0;
+      color: #92400e;
+      font-size: 14px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>{{appName}}</h1>
+    </div>
+
+    <div class="status-icon {{status}}">
+      {{#if isEnabled}}
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+      {{else}}
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      </svg>
+      {{/if}}
+    </div>
+
+    <h2>Two-Factor Authentication {{#if isEnabled}}Enabled{{else}}Disabled{{/if}}</h2>
+    <p>Two-factor authentication has been {{#if isEnabled}}enabled{{else}}disabled{{/if}} on your account.</p>
+
+    <div class="info-box">
+      <div class="info-row">
+        <span class="info-label">Account</span>
+        <span class="info-value">{{userEmail}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Method</span>
+        <span class="info-value">{{method}}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Changed On</span>
+        <span class="info-value">{{date changedAt}}</span>
+      </div>
+      {{#if device}}
+      <div class="info-row">
+        <span class="info-label">Device</span>
+        <span class="info-value">{{device}}</span>
+      </div>
+      {{/if}}
+      {{#if location}}
+      <div class="info-row">
+        <span class="info-label">Location</span>
+        <span class="info-value">{{location}}</span>
+      </div>
+      {{/if}}
+    </div>
+
+    {{#if isEnabled}}
+    <div class="security-tips">
+      <h4>Security Benefits</h4>
+      <ul>
+        <li>Your account is now protected with an extra layer of security</li>
+        <li>You'll need both your password and authenticator code to sign in</li>
+        <li>Backup codes are available for account recovery</li>
+      </ul>
+    </div>
+    {{else}}
+    <div class="warning-box">
+      <h4>⚠️ Security Warning</h4>
+      <p>Your account is now less secure. We strongly recommend re-enabling two-factor authentication to protect your account from unauthorized access.</p>
+    </div>
+    {{/if}}
+
+    {{#if backupCodes}}
+    <div style="background-color: #f9fafb; border-radius: 8px; padding: 16px; margin: 20px 0; text-align: left;">
+      <h4 style="margin: 0 0 12px 0; color: #1f2937;">Your Backup Codes</h4>
+      <p style="font-size: 12px; color: #6b7280; margin: 0 0 12px 0;">Store these codes securely. Each code can only be used once.</p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        {{#each backupCodes}}
+        <code style="background: #1f2937; color: #10b981; padding: 8px; border-radius: 4px; font-size: 12px; text-align: center;">{{this}}</code>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+    <a href="{{appUrl}}/settings/security" class="button">
+      Security Settings
+    </a>
+
+    <p style="font-size: 14px; color: #6b7280;">
+      If you didn't make this change, <a href="{{appUrl}}/settings/security" style="color: #6366f1;">secure your account immediately</a>.
+    </p>
+
+    <div class="footer">
+      <p>Need help? Contact <a href="mailto:{{supportEmail}}" style="color: #6366f1;">{{supportEmail}}</a></p>
+      <p>© {{year}} {{appName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

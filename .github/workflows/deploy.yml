@@ -1,0 +1,260 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '20'
+  PNPM_VERSION: '8'
+  REGISTRY: ghcr.io
+
+jobs:
+  # ===========================================
+  # Build & Push Docker Images
+  # ===========================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    outputs:
+      backend-image: ${{ steps.meta-backend.outputs.tags }}
+      frontend-image: ${{ steps.meta-frontend.outputs.tags }}
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/backend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata for frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,prefix=
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=${{ secrets.VITE_API_URL || 'http://localhost:3000/api' }}
+
+  # ===========================================
+  # Deploy to Staging
+  # ===========================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: https://staging.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/app/staging
+
+            # Pull latest images
+            docker compose pull
+
+            # Restart services
+            docker compose up -d --remove-orphans
+
+            # Run database migrations
+            docker compose exec backend pnpm run migrate
+
+            # Health check
+            sleep 10
+            curl -f https://staging.example.com/health || exit 1
+
+            # Clean up old images
+            docker image prune -f
+
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Deployed to staging environment'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()
+
+  # ===========================================
+  # Deploy to Production
+  # ===========================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    environment:
+      name: production
+      url: https://example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /opt/app/production
+
+            # Backup database
+            docker compose exec db mongodump --out /backup/$(date +%Y%m%d_%H%M%S)
+
+            # Pull latest images
+            docker compose pull
+
+            # Blue-green deployment
+            # Start new instance
+            docker compose up -d --scale backend=2 --scale frontend=2 --no-recreate
+
+            # Wait for new instances to be healthy
+            sleep 30
+            curl -f https://example.com/health || exit 1
+
+            # Switch traffic to new instances
+            docker compose exec nginx nginx -s reload
+
+            # Stop old instances
+            docker compose up -d --scale backend=1 --scale frontend=1
+
+            # Run database migrations
+            docker compose exec backend pnpm run migrate
+
+            # Health check
+            sleep 10
+            curl -f https://example.com/health || exit 1
+
+            # Clean up
+            docker image prune -f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          generate_release_notes: true
+
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Deployed to production environment'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        if: always()
+
+  # ===========================================
+  # Rollback (Manual)
+  # ===========================================
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment != ''
+
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "production" ]; then
+            echo "host=${{ secrets.PRODUCTION_HOST }}" >> $GITHUB_OUTPUT
+            echo "user=${{ secrets.PRODUCTION_USER }}" >> $GITHUB_OUTPUT
+            echo "key=${{ secrets.PRODUCTION_SSH_KEY }}" >> $GITHUB_OUTPUT
+          else
+            echo "host=${{ secrets.STAGING_HOST }}" >> $GITHUB_OUTPUT
+            echo "user=${{ secrets.STAGING_USER }}" >> $GITHUB_OUTPUT
+            echo "key=${{ secrets.STAGING_SSH_KEY }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Rollback deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.env.outputs.host }}
+          username: ${{ steps.env.outputs.user }}
+          key: ${{ steps.env.outputs.key }}
+          script: |
+            cd /opt/app/${{ github.event.inputs.environment }}
+
+            # Rollback to previous image
+            docker compose rollback
+
+            # Health check
+            sleep 10
+            curl -f https://${{ github.event.inputs.environment }}.example.com/health || exit 1
+
+      - name: Notify rollback
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'warning'
+          text: 'Rollback performed on ${{ github.event.inputs.environment }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice #{{invoiceNumber}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 30px;
+    }
+    .logo h1 {
+      color: #6366f1;
+      font-size: 24px;
+      margin: 0;
+    }
+    .invoice-info {
+      text-align: right;
+    }
+    .invoice-info h2 {
+      color: #1f2937;
+      margin: 0;
+      font-size: 20px;
+    }
+    .invoice-info p {
+      color: #6b7280;
+      margin: 5px 0 0 0;
+      font-size: 14px;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-top: 10px;
+    }
+    .status.paid {
+      background-color: #dcfce7;
+      color: #166534;
+    }
+    .status.pending {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+    .status.overdue {
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+    .billing-info {
+      display: flex;
+      justify-content: space-between;
+      margin: 30px 0;
+      gap: 20px;
+    }
+    .billing-info > div {
+      flex: 1;
+    }
+    .billing-info h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #6b7280;
+      margin: 0 0 8px 0;
+    }
+    .billing-info p {
+      margin: 0;
+      color: #1f2937;
+    }
+    .items {
+      margin: 30px 0;
+      border-top: 1px solid #e5e7eb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .items-header {
+      display: grid;
+      grid-template-columns: 1fr 80px 100px 100px;
+      padding: 15px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+    .item {
+      display: grid;
+      grid-template-columns: 1fr 80px 100px 100px;
+      padding: 15px 0;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .item:last-child {
+      border-bottom: none;
+    }
+    .item-name {
+      font-weight: 500;
+      color: #1f2937;
+    }
+    .item-detail {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .totals {
+      margin-top: 20px;
+    }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 14px;
+    }
+    .total-row.final {
+      border-top: 1px solid #e5e7eb;
+      padding-top: 15px;
+      font-weight: 600;
+      font-size: 18px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <h1>{{appName}}</h1>
+      </div>
+      <div class="invoice-info">
+        <h2>Invoice #{{invoiceNumber}}</h2>
+        <p>{{date invoiceDate}}</p>
+        <p>Due: {{date dueDate}}</p>
+        <span class="status {{status}}">{{capitalize status}}</span>
+      </div>
+    </div>
+
+    <div class="billing-info">
+      <div>
+        <h3>Bill To</h3>
+        <p><strong>{{customerName}}</strong></p>
+        <p>{{customerEmail}}</p>
+        {{#if companyName}}
+        <p>{{companyName}}</p>
+        {{/if}}
+      </div>
+      <div>
+        <h3>From</h3>
+        <p><strong>{{appName}}</strong></p>
+        <p>{{supportEmail}}</p>
+      </div>
+    </div>
+
+    <div class="items">
+      <div class="items-header">
+        <div>Description</div>
+        <div>Qty</div>
+        <div>Price</div>
+        <div>Amount</div>
+      </div>
+      {{#each items}}
+      <div class="item">
+        <div>
+          <div class="item-name">{{description}}</div>
+          {{#if detail}}
+          <div class="item-detail">{{detail}}</div>
+          {{/if}}
+        </div>
+        <div>{{quantity}}</div>
+        <div>{{currency unitPrice}}</div>
+        <div>{{currency amount}}</div>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="totals">
+      <div class="total-row">
+        <span>Subtotal</span>
+        <span>{{currency subtotal}}</span>
+      </div>
+      {{#if discount}}
+      <div class="total-row">
+        <span>Discount</span>
+        <span>-{{currency discount}}</span>
+      </div>
+      {{/if}}
+      {{#if tax}}
+      <div class="total-row">
+        <span>Tax</span>
+        <span>{{currency tax}}</span>
+      </div>
+      {{/if}}
+      <div class="total-row final">
+        <span>Total</span>
+        <span>{{currency total}} {{currency}}</span>
+      </div>
+    </div>
+
+    <div style="text-align: center;">
+      <a href="{{appUrl}}/billing/invoices/{{invoiceId}}" class="button">
+        View Invoice Details
+      </a>
+    </div>
+
+    <div class="footer">
+      <p>Thank you for your business!</p>
+      <p>Questions? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+      <p>© {{year}} {{appName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

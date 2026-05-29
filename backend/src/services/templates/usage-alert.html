@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Usage Alert - {{appName}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .logo h1 {
+      color: #6366f1;
+      font-size: 24px;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .alert-box {
+      background-color: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 20px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+    .alert-box.critical {
+      background-color: #fee2e2;
+      border-left-color: #ef4444;
+    }
+    .alert-box.warning {
+      background-color: #fef3c7;
+      border-left-color: #f59e0b;
+    }
+    .alert-box.success {
+      background-color: #dcfce7;
+      border-left-color: #22c55e;
+    }
+    .alert-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #1f2937;
+    }
+    .usage-stats {
+      background-color: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .stat-row:last-child {
+      border-bottom: none;
+    }
+    .stat-label {
+      color: #6b7280;
+    }
+    .stat-value {
+      font-weight: 600;
+      color: #1f2937;
+    }
+    .progress-bar {
+      background-color: #e5e7eb;
+      border-radius: 4px;
+      height: 8px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .progress-fill.warning {
+      background-color: #f59e0b;
+    }
+    .progress-fill.critical {
+      background-color: #ef4444;
+    }
+    .button {
+      display: inline-block;
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>{{appName}}</h1>
+    </div>
+
+    <div class="alert-box {{alertType}}">
+      <div class="alert-title">{{alertTitle}}</div>
+      <p style="margin: 0;">{{alertMessage}}</p>
+    </div>
+
+    <h2 style="color: #1f2937; margin-top: 30px;">Usage Summary</h2>
+    <p style="color: #4b5563;">Your current usage for the {{billingPeriod}} billing period:</p>
+
+    <div class="usage-stats">
+      <div class="stat-row">
+        <span class="stat-label">{{limitType}}</span>
+        <span class="stat-value">{{number currentUsage}} / {{number limit}}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Usage Percentage</span>
+        <span class="stat-value">{{percentage}}%</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Days Remaining</span>
+        <span class="stat-value">{{daysRemaining}} days</span>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill {{alertType}}" style="width: {{percentage}}%;"></div>
+      </div>
+    </div>
+
+    {{#if suggestions}}
+    <div style="margin: 20px 0;">
+      <h3 style="color: #1f2937; margin-bottom: 10px;">Recommendations</h3>
+      <ul style="color: #4b5563; padding-left: 20px;">
+        {{#each suggestions}}
+        <li style="margin-bottom: 8px;">{{this}}</li>
+        {{/each}}
+      </ul>
+    </div>
+    {{/if}}
+
+    <div style="text-align: center;">
+      <a href="{{appUrl}}/analytics" class="button">
+        View Detailed Usage
+      </a>
+    </div>
+
+    <div style="text-align: center; margin-top: 20px;">
+      <a href="{{appUrl}}/settings/notifications" style="color: #6366f1; text-decoration: none; font-size: 14px;">
+        Manage notification preferences
+      </a>
+    </div>
+
+    <div class="footer">
+      <p>Need help? Contact <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+      <p>© {{year}} {{appName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

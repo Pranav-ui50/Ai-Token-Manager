@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Failed - {{appName}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    .logo h1 {
+      color: #6366f1;
+      font-size: 24px;
+      margin-bottom: 30px;
+    }
+    .error-icon {
+      width: 80px;
+      height: 80px;
+      background-color: #fee2e2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .error-icon svg {
+      width: 40px;
+      height: 40px;
+      color: #ef4444;
+    }
+    h2 {
+      color: #1f2937;
+      margin: 0 0 10px;
+    }
+    p {
+      color: #4b5563;
+      margin-bottom: 20px;
+    }
+    .error-details {
+      background-color: #fef2f2;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+      border-left: 4px solid #ef4444;
+    }
+    .error-details h4 {
+      margin: 0 0 8px 0;
+      color: #991b1b;
+    }
+    .error-details p {
+      margin: 0;
+      color: #7f1d1d;
+      font-size: 14px;
+    }
+    .retry-steps {
+      background-color: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .retry-steps h4 {
+      margin: 0 0 12px 0;
+      color: #374151;
+    }
+    .retry-steps ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .retry-steps li {
+      margin-bottom: 12px;
+      color: #4b5563;
+    }
+    .button {
+      display: inline-block;
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      margin: 10px 5px;
+    }
+    .button.secondary {
+      background-color: #f3f4f6;
+      color: #374151;
+    }
+    .warning-box {
+      background-color: #fef3c7;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      text-align: left;
+    }
+    .warning-box h4 {
+      margin: 0 0 8px 0;
+      color: #92400e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .warning-box p {
+      margin: 0;
+      color: #92400e;
+      font-size: 14px;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>{{appName}}</h1>
+    </div>
+
+    <div class="error-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </div>
+
+    <h2>Payment Failed</h2>
+    <p>We were unable to process your payment. Please review the details below.</p>
+
+    <div class="error-details">
+      <h4>Error Details</h4>
+      <p>{{errorMessage}}</p>
+      {{#if errorCode}}
+      <p style="margin-top: 8px;"><strong>Error Code:</strong> {{errorCode}}</p>
+      {{/if}}
+    </div>
+
+    <div class="retry-steps">
+      <h4>Common Solutions:</h4>
+      <ol>
+        <li>Check that your card details are correct</li>
+        <li>Ensure you have sufficient funds available</li>
+        <li>Verify with your bank if international payments are enabled</li>
+        <li>Try using a different payment method</li>
+      </ol>
+    </div>
+
+    <div style="margin: 30px 0;">
+      <a href="{{appUrl}}/billing/retry" class="button">
+        Try Again
+      </a>
+      <a href="{{appUrl}}/billing/payment-methods" class="button secondary">
+        Update Payment Method
+      </a>
+    </div>
+
+    {{#if willRetry}}
+    <div class="warning-box">
+      <h4>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        Automatic Retry Scheduled
+      </h4>
+      <p>We'll automatically retry your payment on <strong>{{retryDate}}</strong>. Please ensure your payment details are updated before then.</p>
+    </div>
+    {{else}}
+    <div class="warning-box">
+      <h4>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        Action Required
+      </h4>
+      <p>Your subscription may be suspended if payment is not completed within <strong>{{gracePeriodDays}} days</strong>.</p>
+    </div>
+    {{/if}}
+
+    <div class="footer">
+      <p>Need help? Contact <a href="mailto:{{supportEmail}}" style="color: #6366f1;">{{supportEmail}}</a></p>
+      <p>© {{year}} {{appName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

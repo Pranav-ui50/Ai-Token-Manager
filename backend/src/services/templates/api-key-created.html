@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Key Created - {{appName}}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 40px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .logo h1 {
+      color: #6366f1;
+      margin: 0;
+      font-size: 24px;
+    }
+    h2 {
+      color: #1f2937;
+      margin: 0 0 10px;
+    }
+    .key-icon {
+      width: 60px;
+      height: 60px;
+      background-color: #dbeafe;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .key-icon svg {
+      width: 30px;
+      height: 30px;
+      color: #2563eb;
+    }
+    .key-details {
+      background-color: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    .detail-label {
+      color: #6b7280;
+    }
+    .detail-value {
+      color: #1f2937;
+      font-weight: 500;
+    }
+    .key-preview {
+      background-color: #1f2937;
+      color: #10b981;
+      padding: 16px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      word-break: break-all;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .security-notice {
+      background-color: #fef3c7;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      border-left: 4px solid #f59e0b;
+    }
+    .security-notice h4 {
+      margin: 0 0 8px 0;
+      color: #92400e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .security-notice p {
+      margin: 0;
+      color: #92400e;
+      font-size: 14px;
+    }
+    .security-notice ul {
+      margin: 12px 0 0 0;
+      padding-left: 20px;
+    }
+    .security-notice li {
+      margin-bottom: 8px;
+      color: #92400e;
+      font-size: 14px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #6366f1;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 500;
+      margin: 20px 0;
+    }
+    .footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>{{appName}}</h1>
+    </div>
+
+    <div class="key-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+      </svg>
+    </div>
+
+    <h2 style="text-align: center;">New API Key Created</h2>
+    <p style="text-align: center; color: #4b5563;">A new API key has been generated for your account.</p>
+
+    <div class="key-details">
+      <div class="detail-row">
+        <span class="detail-label">Key Name</span>
+        <span class="detail-value">{{keyName}}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Provider</span>
+        <span class="detail-value">{{provider}}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Environment</span>
+        <span class="detail-value">{{environment}}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Created</span>
+        <span class="detail-value">{{date createdAt}}</span>
+      </div>
+      {{#if expiresAt}}
+      <div class="detail-row">
+        <span class="detail-label">Expires</span>
+        <span class="detail-value">{{date expiresAt}}</span>
+      </div>
+      {{/if}}
+    </div>
+
+    <div class="key-preview">
+      {{keyPreview}}...{{keySuffix}}
+    </div>
+
+    <div class="security-notice">
+      <h4>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        Security Notice
+      </h4>
+      <p>This is the only time you'll see this key. Please store it securely!</p>
+      <ul>
+        <li>Never share your API key publicly</li>
+        <li>Use environment variables in your applications</li>
+        <li>Rotate keys regularly for security</li>
+        <li>Use separate keys for development and production</li>
+      </ul>
+    </div>
+
+    <div style="text-align: center;">
+      <a href="{{appUrl}}/settings/api-keys" class="button">
+        Manage API Keys
+      </a>
+    </div>
+
+    {{#if createdByOther}}
+    <p style="text-align: center; color: #6b7280; font-size: 14px;">
+      This key was created by <strong>{{createdBy}}</strong> ({{createdByEmail}})
+    </p>
+    {{/if}}
+
+    <div class="footer">
+      <p>Didn't create this key? <a href="{{appUrl}}/settings/api-keys" style="color: #6366f1;">Review your account security</a></p>
+      <p>© {{year}} {{appName}}. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
