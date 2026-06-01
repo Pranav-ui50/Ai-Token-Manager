@@ -42,107 +42,87 @@ class AuthService {
       throw new AppError('System configuration error. Please contact support.', 500, 'SYSTEM_ERROR');
     }
 
-    // Start a session for atomic operations
-    const session = await User.startSession();
-    session.startTransaction();
+    // Create user with org_owner role
+    // Note: Using simple create() instead of transactions for standalone MongoDB compatibility
+    const user = await User.create({
+      email: email.toLowerCase(),
+      password,
+      firstName,
+      lastName,
+      role: orgOwnerRole._id,
+      isVerified: false,
+      isActive: true
+    });
 
-    try {
-      // Create user with org_owner role
-      const user = await User.create([{
-        email: email.toLowerCase(),
-        password,
-        firstName,
-        lastName,
-        role: orgOwnerRole._id,
-        isVerified: false,
-        isActive: true
-      }], { session });
+    logger.info(`[Auth] User created: ${user._id}`);
 
-      const createdUser = user[0];
-      logger.info(`[Auth] User created: ${createdUser._id}`);
-
-      // Create organization if organizationName is provided
-      let organization = null;
-      if (organizationName) {
-        organization = await Organization.create([{
+    // Create organization if organizationName is provided
+    let organization = null;
+    if (organizationName) {
+      try {
+        organization = await Organization.create({
           name: organizationName,
-          owner: createdUser._id,
+          owner: user._id,
           members: [{
-            user: createdUser._id,
+            user: user._id,
             role: orgOwnerRole._id,
             joinedAt: new Date()
           }],
           isActive: true
-        }], { session });
+        });
 
-        const createdOrg = organization[0];
-        logger.info(`[Auth] Organization created: ${createdOrg._id}`);
+        logger.info(`[Auth] Organization created: ${organization._id}`);
 
         // Update user with organization reference
-        await User.findByIdAndUpdate(
-          createdUser._id,
-          { organization: createdOrg._id },
-          { session }
-        );
-        createdUser.organization = createdOrg._id;
+        user.organization = organization._id;
+        await user.save();
+      } catch (orgError) {
+        // If organization creation fails, delete the user to maintain consistency
+        logger.error('[Auth] Organization creation failed, cleaning up user:', orgError);
+        await User.findByIdAndDelete(user._id);
+        throw new AppError('Failed to create organization. Please try again.', 500, 'ORG_CREATION_FAILED');
       }
-
-      // Commit the transaction
-      await session.commitTransaction();
-
-      // Re-fetch the user to get the updated organization reference
-      // This is necessary because the document was created before organization was set
-      const updatedUser = await User.findById(createdUser._id)
-        .populate('role')
-        .populate('organization');
-
-      if (!updatedUser) {
-        throw new AppError('Failed to create user', 500, 'USER_CREATION_FAILED');
-      }
-
-      // Generate email verification token
-      const verificationToken = await EmailVerification.createToken(updatedUser._id, updatedUser.email);
-
-      // Generate verification URL
-      const verificationUrl = `${config.client.url}/verify-email?token=${verificationToken}`;
-
-      // Send verification email
-      try {
-        await emailService.sendVerificationEmail({
-          email: updatedUser.email,
-          verificationToken,
-          verificationUrl
-        });
-        logger.info(`[Auth] Verification email sent to: ${updatedUser.email}`);
-      } catch (error) {
-        logger.error('[Auth] Failed to send verification email:', error);
-        // Continue even if email fails - user can request resend
-      }
-
-      // Generate tokens for auto-login
-      const { accessToken, refreshToken, expiresIn } = generateTokens(updatedUser);
-
-      // Return user without password
-      const userObj = updatedUser.toObject();
-      delete userObj.password;
-
-      logger.info(`[Auth] Registration successful: ${updatedUser.email}`);
-
-      return {
-        user: userObj,
-        accessToken,
-        refreshToken,
-        expiresIn,
-        verificationToken: config.nodeEnv === 'development' ? verificationToken : undefined
-      };
-    } catch (error) {
-      // Abort transaction on error
-      await session.abortTransaction();
-      logger.error('[Auth] Registration transaction failed:', error);
-      throw error;
-    } finally {
-      session.endSession();
     }
+
+    // Populate role and organization
+    await user.populate('role');
+    await user.populate('organization');
+
+    // Generate email verification token
+    const verificationToken = await EmailVerification.createToken(user._id, user.email);
+
+    // Generate verification URL
+    const verificationUrl = `${config.client.url}/verify-email?token=${verificationToken}`;
+
+    // Send verification email
+    try {
+      await emailService.sendVerificationEmail({
+        email: user.email,
+        verificationToken,
+        verificationUrl
+      });
+      logger.info(`[Auth] Verification email sent to: ${user.email}`);
+    } catch (error) {
+      logger.error('[Auth] Failed to send verification email:', error);
+      // Continue even if email fails - user can request resend
+    }
+
+    // Generate tokens for auto-login
+    const { accessToken, refreshToken, expiresIn } = generateTokens(user);
+
+    // Return user without password
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    logger.info(`[Auth] Registration successful: ${user.email}`);
+
+    return {
+      user: userObj,
+      accessToken,
+      refreshToken,
+      expiresIn,
+      verificationToken: config.nodeEnv === 'development' ? verificationToken : undefined
+    };
   }
 
   /**
