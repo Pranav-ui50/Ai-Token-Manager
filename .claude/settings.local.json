@@ -81,7 +81,15 @@
       "Bash(tasklist *)",
       "PowerShell(Stop-Process *)",
       "PowerShell(netstat *)",
-      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:5000/health\" -UseBasicParsing | Select-Object -ExpandProperty Content)"
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:5000/health\" -UseBasicParsing | Select-Object -ExpandProperty Content)",
+      "Bash(Get-ChildItem -Path \"E:\\\\UK Valley Projects\\\\API Token Manage\" -Recurse -File)",
+      "Bash(Select-Object -First 50 FullName)",
+      "Bash(Get-ChildItem -Path \"E:\\\\UK Valley Projects\\\\API Token Manage\\\\frontend\\\\src\" -Recurse -Filter \"*simulation*\" -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Path \"E:\\\\UK Valley Projects\\\\API Token Manage\\\\frontend\" -Recurse -Include \"*.test.*\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 20 FullName)",
+      "Bash(npm test *)",
+      "Read(//e/UK Valley Projects/**)",
+      "Read(//e//**)"
     ]
   }
 }

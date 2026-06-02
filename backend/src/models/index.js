@@ -29,6 +29,7 @@ import Invoice from './Invoice.js';
 import UsageSync from './UsageSync.js';
 import Session from './Session.js';
 import ActivityLog from './ActivityLog.js';
+import LandingPageContent from './LandingPageContent.js';
 
 export {
   User,
@@ -55,7 +56,8 @@ export {
   Invoice,
   UsageSync,
   Session,
-  ActivityLog
+  ActivityLog,
+  LandingPageContent
 };
 
 // Default export
@@ -84,5 +86,6 @@ export default {
   Invoice,
   UsageSync,
   Session,
-  ActivityLog
+  ActivityLog,
+  LandingPageContent
 };

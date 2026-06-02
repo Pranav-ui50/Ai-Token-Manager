@@ -10,6 +10,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import Modal from '../../components/common/Modal.jsx';
 import simulationApi from '../../services/api/simulation.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import ForecastCharts from '../../components/simulations/ForecastCharts.jsx';
 
 const SIMULATION_TYPES = [
   { value: 'growth', label: 'User Growth Scenario', description: 'Model user growth and token usage projections' },
@@ -481,144 +482,184 @@ function SimulationsPage() {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         title="Create New Simulation"
-        size="lg"
+        size="3xl"
       >
-        <form onSubmit={handleCreateSimulation} className="space-y-6">
-          {/* Basic Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg "
-                placeholder="Simulation name"
-                required
-              />
+        <form onSubmit={handleCreateSimulation} className="space-y-5">
+          {/* Basic Information Section */}
+          <div className="bg-gray-50 rounded-xl p-4 sm:p-5">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Basic Information</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Simulation Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                  placeholder="Enter simulation name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Simulation Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors bg-white text-sm"
+                >
+                  {SIMULATION_TYPES.map((type) => (
+                    <option key={type.value} value={type.value}>{type.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type<span className="text-red-500">*</span></label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg "
-              >
-                {SIMULATION_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
-              </select>
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors resize-none text-sm"
+                placeholder="Describe this simulation scenario (optional)"
+              />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg resize-none"
-              placeholder="Describe this simulation scenario"
-            />
-          </div>
-
-          {/* Date Range */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date<span className="text-red-500">*</span></label>
-              <input
-                type="date"
-                value={formData.parameters.startDate}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  parameters: { ...formData.parameters, startDate: e.target.value }
-                })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg "
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date<span className="text-red-500">*</span></label>
-              <input
-                type="date"
-                value={formData.parameters.endDate}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  parameters: { ...formData.parameters, endDate: e.target.value }
-                })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg "
-                required
-              />
+          {/* Date Range Section */}
+          <div className="bg-gray-50 rounded-xl p-4 sm:p-5">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">Simulation Period</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Start Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.parameters.startDate}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    parameters: { ...formData.parameters, startDate: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  End Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.parameters.endDate}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    parameters: { ...formData.parameters, endDate: e.target.value }
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                  required
+                />
+              </div>
             </div>
           </div>
 
           {/* Growth Parameters */}
           {(formData.type === 'growth' || formData.type === 'custom') && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <h4 className="font-medium text-gray-900 mb-3">Growth Parameters</h4>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="bg-blue-50 rounded-xl p-4 sm:p-5 border border-blue-100">
+              <h3 className="text-sm font-semibold text-blue-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                Growth Parameters
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">User Growth Rate (%/month)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.growth.userGrowthRate}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        growth: { ...formData.parameters.growth, userGrowthRate: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">User Growth Rate</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.growth.userGrowthRate}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            growth: { ...formData.parameters.growth, userGrowthRate: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%/mo</span>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Token Usage Growth (%/month)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.growth.tokenUsageGrowthRate}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        growth: { ...formData.parameters.growth, tokenUsageGrowthRate: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Token Usage Growth</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.growth.tokenUsageGrowthRate}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            growth: { ...formData.parameters.growth, tokenUsageGrowthRate: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%/mo</span>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">New Users/Month</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">New Users Per Month</label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     value={formData.parameters.growth.newUsersPerMonth}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        growth: { ...formData.parameters.growth, newUsersPerMonth: parseInt(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setFormData({
+                        ...formData,
+                        parameters: {
+                          ...formData.parameters,
+                          growth: { ...formData.parameters.growth, newUsersPerMonth: parseInt(value) || 0 }
+                        }
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Churn Rate (%/month)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.growth.churnRate}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        growth: { ...formData.parameters.growth, churnRate: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Churn Rate</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.growth.churnRate}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            growth: { ...formData.parameters.growth, churnRate: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%/mo</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -626,72 +667,101 @@ function SimulationsPage() {
 
           {/* Revenue Parameters */}
           {(formData.type === 'revenue_forecast' || formData.type === 'custom') && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <h4 className="font-medium text-gray-900 mb-3">Revenue Parameters</h4>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="bg-green-50 rounded-xl p-4 sm:p-5 border border-green-100">
+              <h3 className="text-sm font-semibold text-green-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Revenue Parameters
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Monthly Subscription Revenue ($)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.revenueForecast.subscriptionRevenue}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        revenueForecast: { ...formData.parameters.revenueForecast, subscriptionRevenue: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.01"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Monthly Subscription Revenue</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.revenueForecast.subscriptionRevenue}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            revenueForecast: { ...formData.parameters.revenueForecast, subscriptionRevenue: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pl-7 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Revenue Growth Rate (%/year)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.revenueForecast.revenueGrowthRate}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        revenueForecast: { ...formData.parameters.revenueForecast, revenueGrowthRate: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Revenue Growth Rate</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.revenueForecast.revenueGrowthRate}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            revenueForecast: { ...formData.parameters.revenueForecast, revenueGrowthRate: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%/yr</span>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Avg Revenue Per User ($)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.revenueForecast.averageRevenuePerUser}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        revenueForecast: { ...formData.parameters.revenueForecast, averageRevenuePerUser: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.01"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Average Revenue Per User</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.revenueForecast.averageRevenuePerUser}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            revenueForecast: { ...formData.parameters.revenueForecast, averageRevenuePerUser: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pl-7 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Token Price Markup (%)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.revenueForecast.tokenPriceMarkup}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        revenueForecast: { ...formData.parameters.revenueForecast, tokenPriceMarkup: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Token Price Markup</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.revenueForecast.tokenPriceMarkup}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            revenueForecast: { ...formData.parameters.revenueForecast, tokenPriceMarkup: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -699,91 +769,123 @@ function SimulationsPage() {
 
           {/* Expense Parameters */}
           {(formData.type === 'expense_forecast' || formData.type === 'custom') && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <h4 className="font-medium text-gray-900 mb-3">Operational Expenses</h4>
-              <div className="grid grid-cols-2 gap-4">
+            <div className="bg-orange-50 rounded-xl p-4 sm:p-5 border border-orange-100">
+              <h3 className="text-sm font-semibold text-orange-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2zM10 8.5a.5.5 0 11-1 0 .5.5 0 011 0zm5 5a.5.5 0 11-1 0 .5.5 0 011 0z" />
+                </svg>
+                Operational Expenses
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Monthly Infrastructure Cost ($)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.operationalExpenses.infrastructureCost}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        operationalExpenses: { ...formData.parameters.operationalExpenses, infrastructureCost: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.01"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Monthly Infrastructure Cost</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.operationalExpenses.infrastructureCost}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            operationalExpenses: { ...formData.parameters.operationalExpenses, infrastructureCost: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pl-7 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Infrastructure Growth (%/month)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.operationalExpenses.infrastructureGrowthRate}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        operationalExpenses: { ...formData.parameters.operationalExpenses, infrastructureGrowthRate: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Infrastructure Growth Rate</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.operationalExpenses.infrastructureGrowthRate}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            operationalExpenses: { ...formData.parameters.operationalExpenses, infrastructureGrowthRate: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%/mo</span>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Monthly Labor Costs ($)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.operationalExpenses.laborCosts}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        operationalExpenses: { ...formData.parameters.operationalExpenses, laborCosts: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.01"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Monthly Labor Costs</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.operationalExpenses.laborCosts}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            operationalExpenses: { ...formData.parameters.operationalExpenses, laborCosts: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pl-7 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Cost Optimization Factor (%)</label>
-                  <input
-                    type="number"
-                    value={formData.parameters.operationalExpenses.costOptimizationFactor}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      parameters: {
-                        ...formData.parameters,
-                        operationalExpenses: { ...formData.parameters.operationalExpenses, costOptimizationFactor: parseFloat(e.target.value) || 0 }
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
-                    step="0.1"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost Optimization Factor</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={formData.parameters.operationalExpenses.costOptimizationFactor}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9.-]/g, '');
+                        setFormData({
+                          ...formData,
+                          parameters: {
+                            ...formData.parameters,
+                            operationalExpenses: { ...formData.parameters.operationalExpenses, costOptimizationFactor: parseFloat(value) || 0 }
+                          }
+                        });
+                      }}
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors text-sm"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs">%</span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(false)}
-              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors"
-            >
-              Create Simulation
-            </button>
+          {/* Form Actions - Sticky at bottom */}
+          <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 bg-white border-t border-gray-200 -mb-4 sm:-mb-5">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm order-2 sm:order-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors font-medium shadow-sm text-sm order-1 sm:order-2"
+              >
+                Create Simulation
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
@@ -793,55 +895,55 @@ function SimulationsPage() {
         isOpen={showResultsModal}
         onClose={() => setShowResultsModal(false)}
         title="Simulation Results"
-        size="lg"
+        size="3xl"
       >
         {selectedSimulation?.results && (
-          <div className="space-y-6">
-            {/* Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-gray-50 rounded-lg p-4">
+          <div className="space-y-5">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-3 sm:p-4 border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Projected Revenue</p>
-                <p className="text-xl font-bold text-gray-900">
+                <p className="text-lg sm:text-xl font-bold text-gray-900">
                   {formatCurrency(selectedSimulation.results.summary?.totalProjectedRevenue || 0)}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4">
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-3 sm:p-4 border border-gray-200">
                 <p className="text-xs text-gray-500 mb-1">Projected Costs</p>
-                <p className="text-xl font-bold text-gray-900">
+                <p className="text-lg sm:text-xl font-bold text-gray-900">
                   {formatCurrency(selectedSimulation.results.summary?.totalProjectedCost || 0)}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-500 mb-1">Net Profit</p>
-                <p className="text-xl font-bold text-green-600">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 sm:p-4 border border-green-200">
+                <p className="text-xs text-green-600 mb-1">Net Profit</p>
+                <p className="text-lg sm:text-xl font-bold text-green-700">
                   {formatCurrency(selectedSimulation.results.summary?.totalProjectedProfit || 0)}
                 </p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-500 mb-1">Profit Margin</p>
-                <p className="text-xl font-bold text-blue-600">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 sm:p-4 border border-blue-200">
+                <p className="text-xs text-blue-600 mb-1">Profit Margin</p>
+                <p className="text-lg sm:text-xl font-bold text-blue-700">
                   {(selectedSimulation.results.summary?.profitMargin || 0).toFixed(1)}%
                 </p>
               </div>
             </div>
 
             {/* Additional Metrics */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="border border-gray-200 rounded-lg p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
                 <p className="text-xs text-gray-500 mb-1">Total Users (End)</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-base sm:text-lg font-semibold text-gray-900">
                   {(selectedSimulation.results.summary?.totalProjectedUsers || 0).toLocaleString()}
                 </p>
               </div>
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
                 <p className="text-xs text-gray-500 mb-1">Break-Even Users</p>
-                <p className="text-lg font-semibold text-gray-900">
+                <p className="text-base sm:text-lg font-semibold text-gray-900">
                   {(selectedSimulation.results.summary?.breakEvenUsers || 0).toLocaleString()}
                 </p>
               </div>
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
                 <p className="text-xs text-gray-500 mb-1">ROI</p>
-                <p className={`text-lg font-semibold ${selectedSimulation.results.summary?.roi >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-base sm:text-lg font-semibold ${selectedSimulation.results.summary?.roi >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                   {formatPercent(selectedSimulation.results.summary?.roi || 0)}
                 </p>
               </div>
@@ -849,24 +951,24 @@ function SimulationsPage() {
 
             {/* Comparison */}
             {selectedSimulation.results.comparison && (
-              <div className="border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 sm:p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Change vs Baseline</h4>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="text-center sm:text-left">
                     <p className="text-xs text-gray-500">Cost Change</p>
-                    <p className={`text-lg font-semibold ${selectedSimulation.results.comparison.costChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <p className={`text-base sm:text-lg font-semibold ${selectedSimulation.results.comparison.costChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {formatPercent(selectedSimulation.results.comparison.costChange)}
                     </p>
                   </div>
-                  <div>
+                  <div className="text-center sm:text-left">
                     <p className="text-xs text-gray-500">Revenue Change</p>
-                    <p className={`text-lg font-semibold ${selectedSimulation.results.comparison.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-base sm:text-lg font-semibold ${selectedSimulation.results.comparison.revenueChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatPercent(selectedSimulation.results.comparison.revenueChange)}
                     </p>
                   </div>
-                  <div>
+                  <div className="text-center sm:text-left">
                     <p className="text-xs text-gray-500">User Growth</p>
-                    <p className="text-lg font-semibold text-blue-600">
+                    <p className="text-base sm:text-lg font-semibold text-blue-600">
                       {formatPercent(selectedSimulation.results.comparison.userGrowthAchieved)}
                     </p>
                   </div>
@@ -875,48 +977,58 @@ function SimulationsPage() {
             )}
 
             {/* Monthly Projections Table */}
-            {selectedSimulation.results.monthlyProjections && (
+            {selectedSimulation.results.monthlyProjections && selectedSimulation.results.monthlyProjections.length > 0 && (
               <div>
                 <h4 className="font-medium text-gray-900 mb-3">Monthly Projections</h4>
-                <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Month</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Users</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Tokens</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Revenue</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Cost</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Profit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {selectedSimulation.results.monthlyProjections.map((month, idx) => (
-                        <tr key={idx}>
-                          <td className="px-3 py-2">{month.month}/{month.year}</td>
-                          <td className="px-3 py-2 text-right">{month.users?.total?.toLocaleString() || '-'}</td>
-                          <td className="px-3 py-2 text-right">{month.tokens?.total?.toLocaleString() || '-'}</td>
-                          <td className="px-3 py-2 text-right">{formatCurrency(month.revenue?.total || 0)}</td>
-                          <td className="px-3 py-2 text-right">{formatCurrency(month.costs?.totalCost || 0)}</td>
-                          <td className={`px-3 py-2 text-right font-medium ${month.profit?.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(month.profit?.net || 0)}
-                          </td>
+                <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                  <div className="min-w-[600px]">
+                    <table className="w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Users</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Tokens</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Profit</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {selectedSimulation.results.monthlyProjections.map((month, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 whitespace-nowrap">{month.month}/{month.year}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">{month.users?.total?.toLocaleString() || '-'}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">{month.tokens?.total?.toLocaleString() || '-'}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">{formatCurrency(month.revenue?.total || 0)}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">{formatCurrency(month.costs?.totalCost || 0)}</td>
+                            <td className={`px-3 py-2 text-right whitespace-nowrap font-medium ${month.profit?.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {formatCurrency(month.profit?.net || 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
 
-            <div className="flex justify-end pt-4 border-t">
+            {/* Close Button */}
+            <div className="flex justify-end pt-4 border-t border-gray-200">
               <button
                 onClick={() => setShowResultsModal(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
               >
                 Close
               </button>
             </div>
+
+            {/* Forecast Charts */}
+            {selectedSimulation.results?.monthlyProjections && selectedSimulation.results.monthlyProjections.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <ForecastCharts data={selectedSimulation.results} type="simulation" />
+              </div>
+            )}
           </div>
         )}
       </Modal>

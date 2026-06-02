@@ -14,7 +14,7 @@ import Avatar from '../common/Avatar.jsx';
 import roleApi from '../../services/api/role.api.js';
 
 function MembersTab({ organization, organizationId }) {
-  const { addMember, removeMember, updateMemberRole, transferOwnership, leaveOrganization, getOrganization } = useOrganization();
+  const { addMember, removeMember, updateMemberRole, transferOwnership, leaveOrganization, getOrganization, clearError } = useOrganization();
   const [members, setMembers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -28,10 +28,17 @@ function MembersTab({ organization, organizationId }) {
   // Current user info
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const currentUserId = currentUser._id || currentUser.id;
+  const currentUserRole = currentUser.role?.name || currentUser.role || '';
 
   // Check if current user is owner - handle both populated and unpopulated owner
   const ownerId = organization.owner?._id || organization.owner;
   const isOwner = ownerId?.toString() === currentUserId?.toString();
+
+  // Check if current user is super_admin (can manage all organizations)
+  const isSuperAdmin = currentUserRole === 'super_admin';
+
+  // Check if current user can manage members (owner or super_admin)
+  const canManage = isOwner || isSuperAdmin;
 
   // Check if member is the owner
   const isMemberOwner = (member) => {
@@ -113,17 +120,37 @@ function MembersTab({ organization, organizationId }) {
 
     setIsLoading(true);
     setError('');
+    clearError?.();
 
     try {
       await addMember(organizationId, inviteForm);
+      // Clear form and close modal on success
       setShowInviteModal(false);
       setInviteForm({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
+      setInviteErrors({});
+      setError('');
+      clearError?.();
       // Refresh organization data to show new member
       if (getOrganization) {
         getOrganization(organizationId);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add member');
+      // Get error details from response
+      const errorData = err.response?.data?.error || err.response?.data || {};
+      const errorCode = errorData.code;
+      const errorMessage = errorData.message;
+
+      // Show user-friendly error messages based on error code
+      if (errorCode === 'ALREADY_MEMBER') {
+        setError('This user is already a member of this organization.');
+      } else if (errorCode === 'INVITATION_EXISTS') {
+        setError('An invitation has already been sent to this email address.');
+      } else if (errorMessage) {
+        // Use the server's error message if available
+        setError(errorMessage);
+      } else {
+        setError('Failed to add member. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -195,22 +222,17 @@ function MembersTab({ organization, organizationId }) {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium text-gray-900">Members</h3>
-        {isOwner && (
-          <Button onClick={() => setShowInviteModal(true)}>
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Member
-          </Button>
-        )}
+        <Button onClick={() => {
+          setError('');
+          clearError?.();
+          setShowInviteModal(true);
+        }}>
+          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Member
+        </Button>
       </div>
-
-      {/* Error */}
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
-      )}
 
       {/* Members list */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -265,69 +287,53 @@ function MembersTab({ organization, organizationId }) {
                   {new Date(member.joinedAt).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex items-center justify-end gap-2">
-                    {/* Owner can manage all members */}
-                    {isOwner && !isCurrentUser(member) && (
+                  <div className="flex items-center justify-end gap-1">
+                    {/* Organization Owner member - show owner badge */}
+                    {isMemberOwner(member) && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 rounded-full border border-amber-200">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                        Owner
+                      </span>
+                    )}
+                    {/* Non-owner members - show action buttons */}
+                    {!isMemberOwner(member) && (
                       <>
                         <button
                           onClick={() => {
                             setSelectedMember(member);
                             setShowRoleModal(true);
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
-                          title="Change Role"
+                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit Role"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
-                          Edit
                         </button>
                         <button
                           onClick={() => {
                             setSelectedMember(member);
                             setShowTransferModal(true);
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                          className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                           title="Transfer Ownership"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                           </svg>
-                          Transfer
                         </button>
                         <button
                           onClick={() => handleRemoveMember(member.user._id || member.user)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 transition-colors"
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Remove Member"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                          Delete
                         </button>
                       </>
-                    )}
-                    {/* Owner viewing themselves - show owner badge */}
-                    {isOwner && isCurrentUser(member) && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-yellow-700 bg-yellow-50 rounded-full border border-yellow-200">
-                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                        Owner
-                      </span>
-                    )}
-                    {/* Non-owner viewing themselves */}
-                    {!isOwner && isCurrentUser(member) && (
-                      <button
-                        onClick={() => setShowLeaveModal(true)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 transition-colors"
-                        title="Leave Organization"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        Leave
-                      </button>
                     )}
                   </div>
                 </td>
@@ -344,10 +350,19 @@ function MembersTab({ organization, organizationId }) {
           setShowInviteModal(false);
           setInviteForm({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
           setInviteErrors({});
+          setError('');
+          clearError?.();
         }}
         title="Add Team Member"
       >
         <form onSubmit={handleInvite} className="space-y-4">
+          {/* Error message inside modal */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"

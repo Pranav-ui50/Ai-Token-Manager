@@ -65,6 +65,25 @@ const GuestRoute = ({ children }) => {
   return children;
 };
 
+// Landing page route - shows landing for guests, redirects authenticated users to dashboard
+const LandingRoute = ({ children }) => {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (isAuthenticated) {
+    // Redirect super_admin to admin dashboard, others to regular dashboard
+    if (user?.role === 'super_admin') {
+      return <Navigate to="/admin" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+};
+
 // Wrapper component for error boundary with suspense
 const PageWrapper = ({ children }) => (
   <ErrorBoundary fallback={<PageErrorFallback />}>
@@ -75,6 +94,7 @@ const PageWrapper = ({ children }) => (
 );
 
 // Lazy load pages
+const LandingPage = lazy(() => import('../pages/landing/LandingPage.jsx'));
 const LoginPage = lazy(() => import('../pages/auth/LoginPage.jsx'));
 const RegisterPage = lazy(() => import('../pages/auth/RegisterPage.jsx'));
 const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage.jsx'));
@@ -94,11 +114,14 @@ const FeatureDetailPage = lazy(() => import('../pages/features/FeatureDetailPage
 const FeatureEditPage = lazy(() => import('../pages/features/FeatureEditPage.jsx'));
 const PlansPage = lazy(() => import('../pages/plans/PlansPage.jsx'));
 const PlanDetailPage = lazy(() => import('../pages/plans/PlanDetailPage.jsx'));
+const PlanCreatePage = lazy(() => import('../pages/plans/PlanCreatePage.jsx'));
+const PlanEditPage = lazy(() => import('../pages/plans/PlanEditPage.jsx'));
 const ProjectsPage = lazy(() => import('../pages/projects/ProjectsPage.jsx'));
 const ProjectDetailPage = lazy(() => import('../pages/projects/ProjectDetailPage.jsx'));
 const AnalyticsPage = lazy(() => import('../pages/analytics/AnalyticsPage.jsx'));
 const PricingHistoryPage = lazy(() => import('../pages/pricing/PricingHistoryPage.jsx'));
 const SimulationsPage = lazy(() => import('../pages/simulations/SimulationsPage.jsx'));
+const ScenarioComparisonPage = lazy(() => import('../pages/simulations/ScenarioComparisonPage.jsx'));
 const TeamPage = lazy(() => import('../pages/team/TeamPage.jsx'));
 const BillingPage = lazy(() => import('../pages/billing/BillingPage.jsx'));
 const InvoicesPage = lazy(() => import('../pages/billing/InvoicesPage.jsx'));
@@ -374,6 +397,30 @@ const routes = [
     )
   },
   {
+    path: '/plans/new',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <PlanCreatePage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/plans/:id/edit',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <PlanEditPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: '/plans/:id',
     element: (
       <ProtectedRoute>
@@ -456,6 +503,18 @@ const routes = [
         <DashboardLayout>
           <PageWrapper>
             <SimulationsPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/simulations/compare',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <ScenarioComparisonPage />
           </PageWrapper>
         </DashboardLayout>
       </ProtectedRoute>
@@ -763,11 +822,21 @@ const routes = [
   },
 
   // ===========================================
-  // Default Route
+  // Landing Page (Public)
   // ===========================================
   {
     path: '/',
-    element: <Navigate to="/login" replace />
+    element: (
+      <LandingRoute>
+        <PageWrapper>
+          <LandingPage />
+        </PageWrapper>
+      </LandingRoute>
+    )
+  },
+  {
+    path: '/pricing',
+    element: <Navigate to="/#pricing" replace />
   }
 ];
 

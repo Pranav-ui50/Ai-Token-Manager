@@ -194,6 +194,26 @@ function ProjectsPage() {
     }).format(amount);
   };
 
+  // Currency symbols map
+  const getCurrencySymbol = (currency) => {
+    const symbols = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      INR: '₹',
+      CAD: 'C$',
+      AUD: 'A$'
+    };
+    return symbols[currency] || '$';
+  };
+
+  // Get padding class based on currency symbol length
+  const getCurrencyPadding = (currency) => {
+    const symbol = getCurrencySymbol(currency);
+    // Longer symbols need more padding
+    return symbol.length > 1 ? 'pl-10' : 'pl-7';
+  };
+
   if (orgLoading) {
     return <Loader fullPage text="Loading..." />;
   }
@@ -639,18 +659,25 @@ function ProjectsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Infrastructure Cost/Month
             </label>
-            <input
-              type="number"
-              value={formData.settings.infrastructureCostPerMonth}
-              onChange={(e) => setFormData({
-                ...formData,
-                settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(e.target.value) || 0 }
-              })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                {getCurrencySymbol(formData.settings.currency)}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formData.settings.infrastructureCostPerMonth}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.-]/g, '');
+                  setFormData({
+                    ...formData,
+                    settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(value) || 0 }
+                  });
+                }}
+                className={`w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${getCurrencyPadding(formData.settings.currency)}`}
+                placeholder="0.00"
+              />
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -768,18 +795,25 @@ function ProjectsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Infrastructure Cost/Month
             </label>
-            <input
-              type="number"
-              value={formData.settings.infrastructureCostPerMonth}
-              onChange={(e) => setFormData({
-                ...formData,
-                settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(e.target.value) || 0 }
-              })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                {getCurrencySymbol(formData.settings.currency)}
+              </span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formData.settings.infrastructureCostPerMonth}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.-]/g, '');
+                  setFormData({
+                    ...formData,
+                    settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(value) || 0 }
+                  });
+                }}
+                className={`w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${getCurrencyPadding(formData.settings.currency)}`}
+                placeholder="0.00"
+              />
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">

@@ -525,102 +525,132 @@ function WebhooksPage() {
       )}
 
       {/* Create Modal */}
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create Webhook" size="lg">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              placeholder="Production Webhook"
-              required
-            />
-          </div>
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create Webhook" size="3xl">
+        <form onSubmit={handleCreate} className="space-y-5">
+          {/* Basic Information Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2">Basic Information</h3>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">URL<span className="text-red-500">*</span></label>
-            <input
-              type="url"
-              value={formData.url}
-              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              placeholder="https://your-server.com/webhook"
-              required
-            />
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  placeholder="e.g., Production Webhook"
+                  required
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              rows={2}
-              placeholder="Webhook description..."
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  URL <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  placeholder="https://your-server.com/webhook"
+                  required
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Events<span className="text-red-500">*</span></label>
-            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 space-y-3">
-              {Object.entries(getEventsByCategory()).map(([category, events]) => (
-                <div key={category}>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">{category}</div>
-                  <div className="space-y-1">
-                    {events.map(event => (
-                      <label key={event.value} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.events.includes(event.value)}
-                          onChange={() => handleEventToggle(event.value)}
-                          className="rounded border-gray-300 text-[#DC2626] "
-                        />
-                        <span className="text-sm text-gray-700">{event.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none"
+                rows={2}
+                placeholder="Describe the purpose of this webhook..."
+              />
             </div>
           </div>
 
+          {/* Events Section */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Custom Headers</label>
-            <div className="flex gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">
+              Events <span className="text-red-500">*</span>
+            </h3>
+            <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(getEventsByCategory()).map(([category, events]) => (
+                  <div key={category} className="space-y-1.5">
+                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide bg-white px-2 py-1 rounded border border-gray-200">
+                      {category}
+                    </div>
+                    <div className="space-y-1.5 pl-1">
+                      {events.map(event => (
+                        <label key={event.value} className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={formData.events.includes(event.value)}
+                            onChange={() => handleEventToggle(event.value)}
+                            className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-red-500 focus:ring-offset-0"
+                          />
+                          <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">
+                            {event.label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {formData.events.length === 0 && (
+              <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Select at least one event to trigger the webhook
+              </p>
+            )}
+          </div>
+
+          {/* Custom Headers Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">Custom Headers</h3>
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
                 type="text"
                 value={headerKey}
                 onChange={(e) => setHeaderKey(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-                placeholder="Header name"
+                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                placeholder="Header name (e.g., X-Custom-Header)"
               />
               <input
                 type="text"
                 value={headerValue}
                 onChange={(e) => setHeaderValue(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
+                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
                 placeholder="Header value"
               />
               <button
                 type="button"
                 onClick={handleAddHeader}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                disabled={!headerKey || !headerValue}
+                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium whitespace-nowrap"
               >
-                Add
+                Add Header
               </button>
             </div>
             {Object.keys(formData.headers).length > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {Object.entries(formData.headers).map(([key, value]) => (
-                  <div key={key} className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded">
-                    <span className="text-sm font-medium text-gray-700">{key}:</span>
-                    <span className="text-sm text-gray-500">{value}</span>
+                  <div key={key} className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 group">
+                    <span className="text-sm font-medium text-gray-800">{key}:</span>
+                    <span className="text-sm text-gray-600 flex-1 truncate">{value}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveHeader(key)}
-                      className="ml-auto text-gray-400 hover:text-red-500"
+                      className="text-gray-400 hover:text-red-500 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -632,68 +662,85 @@ function WebhooksPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Retries</label>
-              <input
-                type="number"
-                value={formData.retryConfig.maxRetries}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  retryConfig: { ...formData.retryConfig, maxRetries: parseInt(e.target.value) || 0 }
-                })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-                min={0}
-                max={10}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Retry Delay (ms)</label>
-              <input
-                type="number"
-                value={formData.retryConfig.retryDelay}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  retryConfig: { ...formData.retryConfig, retryDelay: parseInt(e.target.value) || 1000 }
-                })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-                min={100}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Timeout (ms)</label>
-              <input
-                type="number"
-                value={formData.timeout}
-                onChange={(e) => setFormData({ ...formData, timeout: parseInt(e.target.value) || 30000 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-                min={1000}
-              />
+          {/* Advanced Settings Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">Advanced Settings</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Retries</label>
+                <input
+                  type="number"
+                  value={formData.retryConfig.maxRetries}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    retryConfig: { ...formData.retryConfig, maxRetries: parseInt(e.target.value) || 0 }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={0}
+                  max={10}
+                />
+                <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Retry Delay (ms)</label>
+                <input
+                  type="number"
+                  value={formData.retryConfig.retryDelay}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    retryConfig: { ...formData.retryConfig, retryDelay: parseInt(e.target.value) || 1000 }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={100}
+                  step={100}
+                />
+                <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Timeout (ms)</label>
+                <input
+                  type="number"
+                  value={formData.timeout}
+                  onChange={(e) => setFormData({ ...formData, timeout: parseInt(e.target.value) || 30000 })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={1000}
+                  step={1000}
+                />
+                <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Status Toggle */}
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <input
               type="checkbox"
               id="active"
               checked={formData.active}
               onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-              className="rounded border-gray-300 text-[#DC2626] "
+              className="w-5 h-5 rounded border-gray-300 text-[#DC2626] focus:ring-red-500 focus:ring-offset-0"
             />
-            <label htmlFor="active" className="text-sm text-gray-700">Active</label>
+            <div>
+              <label htmlFor="active" className="text-sm font-medium text-gray-900 cursor-pointer">
+                Active
+              </label>
+              <p className="text-xs text-gray-500">Webhook will receive events when active</p>
+            </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          {/* Action Buttons - Sticky at bottom */}
+          <div className="sticky bottom-0 -mx-6 -mb-4 px-6 py-4 bg-white border-t border-gray-200 flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={() => setShowCreateModal(false)}
-              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-all order-2 sm:order-1"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"
+              disabled={!formData.name || !formData.url || formData.events.length === 0}
+              className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2"
             >
               Create Webhook
             </button>
@@ -702,86 +749,162 @@ function WebhooksPage() {
       </Modal>
 
       {/* Edit Modal */}
-      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Webhook" size="lg">
-        <form onSubmit={handleUpdate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              required
-            />
-          </div>
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Webhook" size="3xl">
+        <form onSubmit={handleUpdate} className="space-y-5">
+          {/* Basic Information Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2">Basic Information</h3>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">URL<span className="text-red-500">*</span></label>
-            <input
-              type="url"
-              value={formData.url}
-              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              required
-            />
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  required
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              rows={2}
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  URL <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  required
+                />
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Events<span className="text-red-500">*</span></label>
-            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 space-y-3">
-              {Object.entries(getEventsByCategory()).map(([category, events]) => (
-                <div key={category}>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">{category}</div>
-                  <div className="space-y-1">
-                    {events.map(event => (
-                      <label key={event.value} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.events.includes(event.value)}
-                          onChange={() => handleEventToggle(event.value)}
-                          className="rounded border-gray-300 text-[#DC2626] "
-                        />
-                        <span className="text-sm text-gray-700">{event.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none"
+                rows={2}
+              />
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Events Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">
+              Events <span className="text-red-500">*</span>
+            </h3>
+            <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Object.entries(getEventsByCategory()).map(([category, events]) => (
+                  <div key={category} className="space-y-1.5">
+                    <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide bg-white px-2 py-1 rounded border border-gray-200">
+                      {category}
+                    </div>
+                    <div className="space-y-1.5 pl-1">
+                      {events.map(event => (
+                        <label key={event.value} className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={formData.events.includes(event.value)}
+                            onChange={() => handleEventToggle(event.value)}
+                            className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-red-500 focus:ring-offset-0"
+                          />
+                          <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">
+                            {event.label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Advanced Settings Section */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">Advanced Settings</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Retries</label>
+                <input
+                  type="number"
+                  value={formData.retryConfig.maxRetries}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    retryConfig: { ...formData.retryConfig, maxRetries: parseInt(e.target.value) || 0 }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={0}
+                  max={10}
+                />
+                <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Retry Delay (ms)</label>
+                <input
+                  type="number"
+                  value={formData.retryConfig.retryDelay}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    retryConfig: { ...formData.retryConfig, retryDelay: parseInt(e.target.value) || 1000 }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={100}
+                  step={100}
+                />
+                <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Timeout (ms)</label>
+                <input
+                  type="number"
+                  value={formData.timeout}
+                  onChange={(e) => setFormData({ ...formData, timeout: parseInt(e.target.value) || 30000 })}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  min={1000}
+                  step={1000}
+                />
+                <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Toggle */}
+          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <input
               type="checkbox"
               id="editActive"
               checked={formData.active}
               onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-              className="rounded border-gray-300 text-[#DC2626] "
+              className="w-5 h-5 rounded border-gray-300 text-[#DC2626] focus:ring-red-500 focus:ring-offset-0"
             />
-            <label htmlFor="editActive" className="text-sm text-gray-700">Active</label>
+            <div>
+              <label htmlFor="editActive" className="text-sm font-medium text-gray-900 cursor-pointer">
+                Active
+              </label>
+              <p className="text-xs text-gray-500">Webhook will receive events when active</p>
+            </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          {/* Action Buttons - Sticky at bottom */}
+          <div className="sticky bottom-0 -mx-6 -mb-4 px-6 py-4 bg-white border-t border-gray-200 flex flex-col sm:flex-row gap-3">
             <button
               type="button"
               onClick={() => setShowEditModal(false)}
-              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+              className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 font-medium transition-all order-2 sm:order-1"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"
+              className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] font-medium transition-all order-1 sm:order-2"
             >
               Save Changes
             </button>

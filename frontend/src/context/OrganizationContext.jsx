@@ -207,7 +207,9 @@ export function OrganizationProvider({ children }) {
       await getOrganization(orgId);
       return result;
     } catch (error) {
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      // Use the server's error message if available
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
       throw error;
     }
   }, [getOrganization]);
@@ -220,7 +222,8 @@ export function OrganizationProvider({ children }) {
       // Refresh organization to get updated members
       await getOrganization(orgId);
     } catch (error) {
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
       throw error;
     }
   }, [getOrganization]);
@@ -233,7 +236,8 @@ export function OrganizationProvider({ children }) {
       // Refresh organization to get updated members
       await getOrganization(orgId);
     } catch (error) {
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
       throw error;
     }
   }, [getOrganization]);
@@ -246,7 +250,8 @@ export function OrganizationProvider({ children }) {
       // Refresh organization to get updated owner
       await getOrganization(orgId);
     } catch (error) {
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
       throw error;
     }
   }, [getOrganization]);
@@ -258,7 +263,8 @@ export function OrganizationProvider({ children }) {
       await organizationApi.leaveOrganization(orgId);
       dispatch({ type: ACTIONS.REMOVE_ORGANIZATION, payload: orgId });
     } catch (error) {
-      dispatch({ type: ACTIONS.SET_ERROR, payload: error.message });
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
+      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
       throw error;
     }
   }, []);

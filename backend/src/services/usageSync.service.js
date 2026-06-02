@@ -908,26 +908,51 @@ class UsageSyncService {
   }
 
   /**
+   * Get a valid 32-byte encryption key from environment
+   * @returns {Buffer|null} 32-byte key buffer or null
+   */
+  _getEncryptionKey() {
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      return null;
+    }
+
+    // If the key is a 64-character hex string, convert it directly
+    if (/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
+      return Buffer.from(encryptionKey, 'hex');
+    }
+
+    // Otherwise, derive a 32-byte key using SHA-256
+    return crypto.createHash('sha256').update(encryptionKey).digest();
+  }
+
+  /**
    * Decrypt credentials
    */
   _decryptCredentials(encryptedCredentials) {
-    const encryptionKey = process.env.ENCRYPTION_KEY;
-    if (!encryptionKey) {
+    const key = this._getEncryptionKey();
+    if (!key) {
       return encryptedCredentials || {};
     }
 
     const decrypted = {};
-    for (const [key, value] of Object.entries(encryptedCredentials || {})) {
+    for (const [keyName, value] of Object.entries(encryptedCredentials || {})) {
       if (value) {
         try {
-          const decipher = crypto.createDecipheriv(
-            'aes-256-cbc',
-            Buffer.from(encryptionKey, 'hex'),
-            Buffer.alloc(16, 0)
-          );
-          decrypted[key] = decipher.update(value, 'hex', 'utf8') + decipher.final('utf8');
-        } catch {
-          decrypted[key] = value;
+          // Check if it's the new format (IV:ciphertext) or old format
+          if (value.includes(':')) {
+            const [ivHex, encrypted] = value.split(':');
+            const iv = Buffer.from(ivHex, 'hex');
+            const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+            decrypted[keyName] = decipher.update(encrypted, 'hex', 'utf8') + decipher.final('utf8');
+          } else {
+            // Old format with fixed IV (for backward compatibility)
+            const decipher = crypto.createDecipheriv('aes-256-cbc', key, Buffer.alloc(16, 0));
+            decrypted[keyName] = decipher.update(value, 'hex', 'utf8') + decipher.final('utf8');
+          }
+        } catch (err) {
+          logger.warn(`[UsageSyncService] Failed to decrypt ${keyName}: ${err.message}`);
+          decrypted[keyName] = value;
         }
       }
     }

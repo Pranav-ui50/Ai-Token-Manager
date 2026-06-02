@@ -168,18 +168,7 @@ function OrganizationDetailPage() {
       {/* Error message */}
       {(error || localError) && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-red-600">{error || localError}</p>
-            <button
-              onClick={() => {
-                setLocalError('');
-                if (id) getOrganization(id);
-              }}
-              className="text-sm text-red-600 hover:text-red-800 underline"
-            >
-              Retry
-            </button>
-          </div>
+          <p className="text-sm text-red-600">{error || localError}</p>
         </div>
       )}
 

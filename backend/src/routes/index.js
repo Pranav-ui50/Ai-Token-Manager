@@ -34,6 +34,7 @@ router.get('/', (req, res) => {
     version: 'v1',
     endpoints: {
       health: '/health',
+      public: '/api/public',
       auth: '/api/auth',
       organizations: '/api/organizations',
       providers: '/api/providers',
@@ -53,6 +54,13 @@ router.get('/', (req, res) => {
     }
   });
 });
+
+// ===========================================
+// Public Routes (No Authentication Required)
+// ===========================================
+
+import publicRoutes from './public.routes.js';
+router.use('/public', publicRoutes);
 
 // ===========================================
 // Authentication Routes
@@ -227,6 +235,13 @@ router.use('/breakeven', breakevenRoutes);
 
 import creditRoutes from './credit.routes.js';
 router.use('/credits', creditRoutes);
+
+// ===========================================
+// Landing Page Content Routes
+// ===========================================
+
+import landingPageContentRoutes from './landingPageContent.routes.js';
+router.use('/', landingPageContentRoutes);
 
 // ===========================================
 // Admin Routes

@@ -739,6 +739,139 @@ export const seedModels = async () => {
 };
 
 /**
+ * Default Subscription Plans
+ */
+const DEFAULT_PLANS = [
+  {
+    name: 'Free',
+    slug: 'free',
+    tier: 'free',
+    description: 'Perfect for getting started with AI cost management',
+    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
+    pricingModel: { type: 'flat' },
+    credits: { includedCredits: 10000, creditType: 'token' },
+    limits: { maxUsers: 1, maxApiCalls: 1000, maxTokens: 100000 },
+    isPopular: false,
+    displayOrder: 1
+  },
+  {
+    name: 'Starter',
+    slug: 'starter',
+    tier: 'starter',
+    description: 'Great for small teams exploring AI APIs',
+    billing: { price: 29, currency: 'USD', interval: 'month', trialDays: 14 },
+    pricingModel: { type: 'usage-based', usageBased: { includedTokens: 500000, includedRequests: 5000 } },
+    credits: { includedCredits: 500000, creditType: 'token' },
+    limits: { maxUsers: 3, maxApiCalls: 10000, maxTokens: 500000 },
+    isPopular: false,
+    displayOrder: 2
+  },
+  {
+    name: 'Professional',
+    slug: 'professional',
+    tier: 'professional',
+    description: 'Ideal for growing teams with advanced AI needs',
+    billing: { price: 99, currency: 'USD', interval: 'month', trialDays: 14 },
+    pricingModel: { type: 'usage-based', usageBased: { includedTokens: 2000000, includedRequests: 20000 } },
+    credits: { includedCredits: 2000000, creditType: 'token' },
+    limits: { maxUsers: 10, maxApiCalls: 50000, maxTokens: 2000000 },
+    isPopular: true,
+    displayOrder: 3
+  },
+  {
+    name: 'Business',
+    slug: 'business',
+    tier: 'business',
+    description: 'For organizations with heavy AI API usage',
+    billing: { price: 299, currency: 'USD', interval: 'month', trialDays: 14 },
+    pricingModel: { type: 'usage-based', usageBased: { includedTokens: 10000000, includedRequests: 100000 } },
+    credits: { includedCredits: 10000000, creditType: 'token' },
+    limits: { maxUsers: 50, maxApiCalls: 200000, maxTokens: 10000000 },
+    isPopular: false,
+    displayOrder: 4
+  },
+  {
+    name: 'Enterprise',
+    slug: 'enterprise',
+    tier: 'enterprise',
+    description: 'Custom solutions for large-scale deployments',
+    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
+    pricingModel: { type: 'flat' },
+    credits: { includedCredits: 0, creditType: 'token' },
+    limits: { maxUsers: null, maxApiCalls: null, maxTokens: null },
+    isPopular: false,
+    displayOrder: 5
+  }
+];
+
+/**
+ * Seed default subscription plans
+ */
+export const seedPlans = async () => {
+  try {
+    const Plan = (await import('../models/Plan.js')).default;
+    const Organization = (await import('../models/Organization.js')).default;
+
+    const plansCount = await Plan.countDocuments();
+
+    if (plansCount > 0) {
+      logger.info(`Plans already exist (${plansCount} plans found)`);
+      return await Plan.find({}).sort({ displayOrder: 1 });
+    }
+
+    // Get the demo organization (or create one if it doesn't exist)
+    let organization = await Organization.findOne({ name: 'Demo Organization' });
+
+    if (!organization) {
+      // Create a default organization for public plans
+      const superAdmin = await User.findOne({ email: 'superadmin@apitokenmanager.com' });
+
+      if (superAdmin) {
+        organization = await Organization.create({
+          name: 'Demo Organization',
+          owner: superAdmin._id,
+          members: [{
+            user: superAdmin._id,
+            role: superAdmin.role,
+            joinedAt: new Date()
+          }],
+          isActive: true
+        });
+        logger.info('  - Created default organization for plans');
+      } else {
+        logger.warn('No organization found for seeding plans. Skipping plan seeding.');
+        return [];
+      }
+    }
+
+    logger.info('Seeding default subscription plans...');
+
+    const createdPlans = [];
+    for (const planData of DEFAULT_PLANS) {
+      const plan = await Plan.create({
+        organization: organization._id,
+        ...planData,
+        status: 'active',
+        settings: {
+          isPublic: true,
+          isDefault: planData.tier === 'free',
+          allowUpgrade: true,
+          allowDowngrade: true
+        }
+      });
+      createdPlans.push(plan);
+      logger.info(`  - Created plan: ${plan.name} ($${plan.billing.price}/month)`);
+    }
+
+    logger.info(`Successfully seeded ${createdPlans.length} plans`);
+    return createdPlans;
+  } catch (error) {
+    logger.error('Error seeding plans:', error);
+    throw error;
+  }
+};
+
+/**
  * Seed all initial data
  */
 export const seedDatabase = async () => {
@@ -757,6 +890,9 @@ export const seedDatabase = async () => {
     // Seed AI models
     await seedModels();
 
+    // Seed subscription plans
+    await seedPlans();
+
     logger.info('Database seeding completed successfully');
   } catch (error) {
     logger.error('Database seeding failed:', error);
@@ -771,5 +907,6 @@ export default {
   seedTestUser,
   seedProviders,
   seedModels,
+  seedPlans,
   seedDatabase
 };
