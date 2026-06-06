@@ -11,6 +11,7 @@ import Razorpay from 'razorpay';
 import Organization from '../models/Organization.js';
 import Invoice from '../models/Invoice.js';
 import AuditLog from '../models/AuditLog.js';
+import Plan from '../models/Plan.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 import crypto from 'crypto';
@@ -19,13 +20,14 @@ import crypto from 'crypto';
 let stripe = null;
 let razorpay = null;
 
-// Subscription plans configuration
-const SUBSCRIPTION_PLANS = {
+// Default subscription plans configuration (fallback if database plans not found)
+const DEFAULT_SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
     name: 'Free',
     displayName: 'Free Plan',
     price: 0,
+    yearlyPrice: 0,
     currency: 'USD',
     billingCycle: 'monthly'
   },
@@ -34,6 +36,7 @@ const SUBSCRIPTION_PLANS = {
     name: 'Starter',
     displayName: 'Starter Plan',
     price: 29,
+    yearlyPrice: 278.4, // 29 * 12 * 0.8 (20% discount)
     currency: 'USD',
     stripePriceId: process.env.STRIPE_STARTER_PRICE_ID,
     razorpayPlanId: process.env.RAZORPAY_STARTER_PLAN_ID,
@@ -45,6 +48,7 @@ const SUBSCRIPTION_PLANS = {
     name: 'Professional',
     displayName: 'Professional Plan',
     price: 99,
+    yearlyPrice: 950.4, // 99 * 12 * 0.8 (20% discount)
     currency: 'USD',
     stripePriceId: process.env.STRIPE_PROFESSIONAL_PRICE_ID,
     razorpayPlanId: process.env.RAZORPAY_PROFESSIONAL_PLAN_ID,
@@ -64,6 +68,61 @@ const SUBSCRIPTION_PLANS = {
 class PaymentService {
   constructor() {
     this._providersInitialized = false;
+  }
+
+  /**
+   * Get plan by ID or slug
+   * @param {string} planId - Plan ID (MongoDB ObjectId) or slug
+   * @returns {Object} Plan configuration
+   */
+  async getPlan(planId) {
+    logger.info(`[PaymentService] Getting plan: ${planId}`);
+
+    // First, try to find by MongoDB ObjectId
+    if (/^[a-fA-F0-9]{24}$/.test(planId)) {
+      try {
+        const dbPlan = await Plan.findById(planId);
+        if (dbPlan) {
+          const monthlyPrice = dbPlan.billing?.price || 0;
+          const yearlyDiscount = 0.2; // Default 20% yearly discount
+          // Calculate yearly price if not explicitly set (12 months with 20% discount)
+          const yearlyPrice = dbPlan.billing?.yearlyPrice || (monthlyPrice > 0 ? monthlyPrice * 12 * (1 - yearlyDiscount) : 0);
+
+          logger.info(`[PaymentService] Found plan in database: ${dbPlan.name}, price: ${monthlyPrice}, yearlyPrice: ${yearlyPrice}`);
+          return {
+            id: dbPlan._id.toString(),
+            name: dbPlan.name,
+            displayName: dbPlan.displayName || dbPlan.name,
+            slug: dbPlan.slug,
+            price: monthlyPrice,
+            yearlyPrice: yearlyPrice,
+            currency: dbPlan.billing?.currency || 'USD',
+            billingCycle: dbPlan.billing?.interval === 'year' ? 'yearly' : 'monthly',
+            yearlyDiscount: yearlyDiscount,
+            stripePriceId: dbPlan.stripePriceId,
+            razorpayPlanId: dbPlan.razorpayPlanId,
+            features: dbPlan.features || [],
+            limits: dbPlan.limits || {},
+            fromDatabase: true
+          };
+        } else {
+          logger.warn(`[PaymentService] Plan not found in database: ${planId}`);
+        }
+      } catch (error) {
+        logger.warn(`[PaymentService] Failed to fetch plan from database: ${error.message}`);
+      }
+    }
+
+    // Fallback to default plans by slug
+    const slug = planId.toLowerCase();
+    if (DEFAULT_SUBSCRIPTION_PLANS[slug]) {
+      logger.info(`[PaymentService] Using default plan: ${slug}`);
+      return DEFAULT_SUBSCRIPTION_PLANS[slug];
+    }
+
+    // If not found, throw error
+    logger.error(`[PaymentService] Plan not found: ${planId}`);
+    throw new AppError(`Plan not found: ${planId}`, 400, 'PLAN_NOT_FOUND');
   }
 
   /**
@@ -185,12 +244,13 @@ class PaymentService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    // Get plan from database or default
+    const plan = await this.getPlan(planId);
     if (!plan) {
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
     }
 
-    if (plan.price === 'custom') {
+    if (plan.price === 'custom' || plan.price === 0) {
       throw new AppError('Please contact sales for enterprise pricing', 400, 'CONTACT_SALES');
     }
 
@@ -199,7 +259,9 @@ class PaymentService {
 
     // Calculate price
     let price = plan.price;
-    if (billingCycle === 'yearly' && plan.yearlyDiscount) {
+    if (billingCycle === 'yearly' && plan.yearlyPrice) {
+      price = plan.yearlyPrice;
+    } else if (billingCycle === 'yearly' && plan.yearlyDiscount) {
       price = plan.price * 12 * (1 - plan.yearlyDiscount);
     }
 
@@ -330,7 +392,8 @@ class PaymentService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    // Get plan from database or default
+    const plan = await this.getPlan(planId);
     if (!plan) {
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
     }
@@ -763,6 +826,8 @@ class PaymentService {
     }
 
     try {
+      logger.info(`[Razorpay] Creating customer for org: ${organizationId}, email: ${email}, name: ${name}`);
+
       const customer = await razorpay.customers.create({
         name,
         email,
@@ -772,11 +837,13 @@ class PaymentService {
         }
       });
 
-      logger.info(`Razorpay customer created: ${customer.id} for organization ${organizationId}`);
+      logger.info(`[Razorpay] Customer created: ${customer.id} for organization ${organizationId}`);
       return customer;
     } catch (error) {
-      logger.error('Failed to create Razorpay customer:', error);
-      throw new AppError('Failed to create Razorpay customer', 500, 'RAZORPAY_CUSTOMER_FAILED');
+      const errorDetails = error.error || error;
+      const errorMessage = errorDetails?.description || errorDetails?.message || error.message || JSON.stringify(error);
+      logger.error(`[Razorpay] Failed to create customer: ${errorMessage}`, { error, errorDetails });
+      throw new AppError(`Failed to create Razorpay customer: ${errorMessage}`, 500, 'RAZORPAY_CUSTOMER_FAILED');
     }
   }
 
@@ -790,30 +857,43 @@ class PaymentService {
       throw new AppError('Razorpay is not configured', 500, 'RAZORPAY_NOT_CONFIGURED');
     }
 
+    logger.info(`[Razorpay] Getting/creating customer for organization: ${organization._id}`);
+
     // Check if customer already exists
     if (organization.subscription?.razorpayCustomerId) {
       try {
         const customer = await razorpay.customers.fetch(organization.subscription.razorpayCustomerId);
+        logger.info(`[Razorpay] Found existing customer: ${customer.id}`);
         return customer;
       } catch (error) {
+        const errorMsg = error.error?.description || error.message || JSON.stringify(error);
+        logger.warn(`[Razorpay] Customer fetch failed, creating new: ${errorMsg}`);
         // Customer doesn't exist, create new one
       }
     }
 
+    // Determine email for customer
+    const customerEmail = organization.owner?.email ||
+      (organization.name ? `${organization.name.toLowerCase().replace(/\s+/g, '')}@example.com` : `customer-${organization._id}@example.com`);
+
+    logger.info(`[Razorpay] Creating new customer with email: ${customerEmail}`);
+
     // Create new customer
     const customer = await this.createRazorpayCustomer(
       organization._id.toString(),
-      organization.owner?.email || `${organization.name.toLowerCase().replace(/\s+/g, '')}@example.com`,
-      organization.name
+      customerEmail,
+      organization.name || 'Organization'
     );
 
     // Update organization with Razorpay customer ID
+    const existingSubscription = organization.subscription?.toObject?.() || organization.subscription || {};
     organization.subscription = {
-      ...organization.subscription?.toObject(),
+      ...existingSubscription,
       razorpayCustomerId: customer.id
     };
     await organization.save();
 
+    logger.info(`[Razorpay] Customer created and saved: ${customer.id}`);
     return customer;
   }
 
@@ -823,60 +903,146 @@ class PaymentService {
   async createRazorpayOrder(organizationId, planId, billingCycle) {
     await this.ensureProvidersInitialized();
 
+    logger.info(`[Razorpay] Creating order for org: ${organizationId}, plan: ${planId}, billing: ${billingCycle}`);
+
     if (!razorpay) {
+      logger.error('[Razorpay] Razorpay instance is null or undefined');
       throw new AppError('Razorpay is not configured', 500, 'RAZORPAY_NOT_CONFIGURED');
     }
 
+    logger.info(`[Razorpay] Razorpay instance verified, key_id: ${process.env.RAZORPAY_KEY_ID ? 'present' : 'missing'}`);
+
     const organization = await Organization.findById(organizationId).populate('owner');
     if (!organization) {
+      logger.error(`[Razorpay] Organization not found: ${organizationId}`);
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    logger.info(`[Razorpay] Found organization: ${organization.name || organization._id}, owner: ${organization.owner?._id || 'none'}`);
+
+    // Get plan from database or default
+    const plan = await this.getPlan(planId);
+    logger.info(`[Razorpay] Plan lookup result:`, { planId, plan: plan ? { name: plan.name, price: plan.price, currency: plan.currency } : null });
+
     if (!plan) {
+      logger.error(`[Razorpay] Invalid plan: ${planId}`);
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
     }
 
+    // For custom pricing, redirect to sales
     if (plan.price === 'custom') {
+      logger.error(`[Razorpay] Plan price is custom: ${plan.price}`);
       throw new AppError('Please contact sales for enterprise pricing', 400, 'CONTACT_SALES');
     }
 
-    // Get or create customer
-    const customer = await this.getOrCreateRazorpayCustomer(organization);
-
-    // Calculate price
+    // Calculate price (allow 0 for free plans/trials)
     let price = plan.price;
-    if (billingCycle === 'yearly' && plan.yearlyDiscount) {
-      price = plan.price * 12 * (1 - plan.yearlyDiscount);
+    const planCurrency = plan.currency || 'USD';
+
+    // Apply yearly discount if applicable
+    if (billingCycle === 'yearly') {
+      // Check for yearlyPrice in plan data
+      if (plan.yearlyPrice) {
+        price = plan.yearlyPrice;
+      } else {
+        // Apply 20% yearly discount (industry standard)
+        const yearlyDiscount = plan.yearlyDiscount || 0.2;
+        price = plan.price * 12 * (1 - yearlyDiscount);
+      }
     }
 
-    // Convert to INR if needed (Razorpay primarily supports INR)
-    const amountInPaise = Math.round(price * 100);
+    // Currency conversion rates (approximate, should be updated regularly or use API)
+    // For production, consider using a currency conversion API
+    const CURRENCY_RATES = {
+      USD_TO_INR: 83.5, // Approximate rate: 1 USD = 83.5 INR
+      EUR_TO_INR: 90.5,
+      GBP_TO_INR: 105.5
+    };
+
+    // Convert price to INR if plan currency is not INR
+    let priceInINR = price;
+    if (planCurrency === 'USD') {
+      priceInINR = price * CURRENCY_RATES.USD_TO_INR;
+    } else if (planCurrency === 'EUR') {
+      priceInINR = price * CURRENCY_RATES.EUR_TO_INR;
+    } else if (planCurrency === 'GBP') {
+      priceInINR = price * CURRENCY_RATES.GBP_TO_INR;
+    }
+
+    // If price is 0, create a minimal order for free plan (Razorpay minimum is 100 paise = ₹1)
+    // For free plans, we'll use a minimal amount and handle it as a free subscription
+    const amountInPaise = priceInINR > 0 ? Math.round(priceInINR * 100) : 100; // Minimum 100 paise (₹1) for Razorpay
+
+    // Razorpay requires INR for Indian merchants
+    const currency = 'INR';
+
+    logger.info(`[Razorpay] Creating order with amount: ${amountInPaise} paise (${amountInPaise/100} ${currency}) for plan: ${plan.name}`);
+
+    // Get or create customer
+    let customer;
+    try {
+      customer = await this.getOrCreateRazorpayCustomer(organization);
+      logger.info(`[Razorpay] Customer ready: ${customer.id}`);
+    } catch (customerError) {
+      logger.error(`[Razorpay] Failed to create customer: ${customerError.message}`, { stack: customerError.stack });
+      throw new AppError(`Failed to create payment customer: ${customerError.message}`, 500, 'CUSTOMER_CREATION_FAILED');
+    }
 
     // Create order
-    const order = await razorpay.orders.create({
-      amount: amountInPaise,
-      currency: plan.currency || 'INR',
-      receipt: `sub_${organization._id}_${Date.now()}`,
-      notes: {
-        organizationId: organization._id.toString(),
-        planId,
-        billingCycle,
-        customerId: customer.id
-      }
-    });
+    let order;
+    try {
+      // Razorpay receipt field has a maximum of 40 characters
+      // Use short prefix + last 8 chars of org ID + short timestamp
+      const shortOrgId = organization._id.toString().slice(-8);
+      const shortTimestamp = Date.now().toString().slice(-8);
+      const receiptId = `ord_${shortOrgId}_${shortTimestamp}`; // ~21 chars, well under 40 limit
+
+      const orderData = {
+        amount: amountInPaise,
+        currency: currency,
+        receipt: receiptId,
+        notes: {
+          organizationId: organization._id.toString(),
+          planId,
+          billingCycle,
+          customerId: customer.id,
+          isFreePlan: price === 0 ? 'true' : 'false'
+        }
+      };
+
+      logger.info(`[Razorpay] Calling orders.create with:`, JSON.stringify(orderData));
+
+      order = await razorpay.orders.create(orderData);
+      logger.info(`[Razorpay] Order created successfully: ${order.id}`);
+    } catch (orderError) {
+      // Razorpay errors can have different structures
+      const errorDetails = orderError.error || orderError;
+      const errorMessage = errorDetails?.description || errorDetails?.message || orderError.message || JSON.stringify(orderError);
+      logger.error(`[Razorpay] Failed to create order: ${errorMessage}`, {
+        error: orderError,
+        errorDetails,
+        statusCode: orderError.statusCode
+      });
+      throw new AppError(`Failed to create Razorpay order: ${errorMessage}`, 500, 'ORDER_CREATION_FAILED');
+    }
 
     // Update organization with order ID
-    organization.subscription = {
-      ...organization.subscription?.toObject(),
-      razorpayOrderId: order.id
-    };
-    await organization.save();
+    try {
+      const existingSubscription = organization.subscription?.toObject?.() || organization.subscription || {};
+      organization.subscription = {
+        ...existingSubscription,
+        razorpayOrderId: order.id
+      };
+      await organization.save();
+    } catch (saveError) {
+      logger.warn(`[Razorpay] Failed to update organization: ${saveError.message}`);
+      // Continue anyway, the order is created
+    }
 
     logger.info(`Razorpay order created: ${order.id} for organization ${organizationId}`);
 
-    // Log audit
-    await AuditLog.log({
+    // Log audit (non-blocking)
+    AuditLog.log({
       organization: organizationId,
       user: organization.owner?._id,
       action: 'order_created',
@@ -891,7 +1057,7 @@ class PaymentService {
         billingCycle,
         amount: amountInPaise
       }
-    });
+    }).catch(err => logger.warn('[Razorpay] Failed to log audit:', err.message));
 
     return {
       orderId: order.id,
@@ -899,7 +1065,12 @@ class PaymentService {
       currency: order.currency,
       customerId: customer.id,
       keyId: process.env.RAZORPAY_KEY_ID,
-      notes: order.notes
+      notes: order.notes,
+      // Include original plan info for frontend display
+      planName: plan.displayName || plan.name,
+      originalPrice: price,
+      originalCurrency: planCurrency,
+      billingCycle: billingCycle
     };
   }
 
@@ -918,7 +1089,8 @@ class PaymentService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const plan = SUBSCRIPTION_PLANS[planId];
+    // Get plan from database or default
+    const plan = await this.getPlan(planId);
     if (!plan) {
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
     }
@@ -978,8 +1150,9 @@ class PaymentService {
     });
 
     // Update organization
+    const existingSub = organization.subscription?.toObject?.() || organization.subscription || {};
     organization.subscription = {
-      ...organization.subscription?.toObject(),
+      ...existingSub,
       plan: planId,
       status: 'trial',
       billingCycle,
@@ -1024,13 +1197,27 @@ class PaymentService {
    * Verify Razorpay payment signature
    */
   verifyRazorpayPayment(orderId, paymentId, signature) {
+    logger.info(`[Razorpay] Verifying payment signature for order: ${orderId}, payment: ${paymentId}`);
+
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      logger.error('[Razorpay] RAZORPAY_KEY_SECRET is not configured');
+      throw new AppError('Razorpay key secret not configured', 500, 'CONFIG_ERROR');
+    }
+
     const body = orderId + '|' + paymentId;
     const expectedSignature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
       .update(body)
       .digest('hex');
 
-    return expectedSignature === signature;
+    logger.info(`[Razorpay] Signature comparison - received: ${signature?.substring(0, 10)}..., expected: ${expectedSignature?.substring(0, 10)}...`);
+
+    const isValid = expectedSignature === signature;
+    if (!isValid) {
+      logger.error(`[Razorpay] Signature mismatch for order ${orderId}`);
+    }
+
+    return isValid;
   }
 
   /**
@@ -1038,6 +1225,8 @@ class PaymentService {
    */
   async verifyAndProcessRazorpayPayment(organizationId, orderId, paymentId, signature) {
     await this.ensureProvidersInitialized();
+
+    logger.info(`[Razorpay] Verifying payment for organization ${organizationId}, order ${orderId}`);
 
     const organization = await Organization.findById(organizationId).populate('owner');
     if (!organization) {
@@ -1052,18 +1241,50 @@ class PaymentService {
 
     // Fetch payment details
     const payment = await razorpay.payments.fetch(paymentId);
+    logger.info(`[Razorpay] Payment status: ${payment.status}, amount: ${payment.amount}`);
 
     if (payment.status !== 'captured') {
       throw new AppError('Payment not captured', 400, 'PAYMENT_NOT_CAPTURED');
     }
 
-    // Update organization subscription
-    const planId = organization.subscription?.plan || 'starter';
-    const billingCycle = organization.subscription?.billingCycle || 'monthly';
+    // Fetch order details to get plan info from notes
+    let planId = 'starter';
+    let billingCycle = 'monthly';
+    try {
+      const order = await razorpay.orders.fetch(orderId);
+      logger.info(`[Razorpay] Order fetched: ${order.id}, notes: ${JSON.stringify(order.notes)}`);
+      if (order.notes?.planId) {
+        planId = order.notes.planId;
+      }
+      if (order.notes?.billingCycle) {
+        billingCycle = order.notes.billingCycle;
+      }
+    } catch (orderFetchError) {
+      logger.warn(`[Razorpay] Could not fetch order details, using defaults: ${orderFetchError.message}`);
+    }
 
+    // Get plan details before updating subscription
+    let planDisplayName = 'Subscription';
+    let planName = 'Unknown';
+    let planSlug = null;
+    try {
+      const planDetails = await this.getPlan(planId);
+      planDisplayName = planDetails?.displayName || 'Subscription';
+      planName = planDetails?.name || 'Unknown';
+      planSlug = planDetails?.slug || null;
+    } catch (e) {
+      // Use default name if plan not found
+    }
+
+    // Update organization subscription
     organization.subscription = {
-      ...organization.subscription?.toObject(),
+      ...(organization.subscription?.toObject?.() || organization.subscription || {}),
       status: 'active',
+      planId: planId,
+      plan: planSlug, // Store the plan slug for backward compatibility
+      planName: planName,
+      billingCycle: billingCycle,
+      razorpayOrderId: orderId,
       razorpayPaymentId: paymentId,
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000),
@@ -1071,9 +1292,10 @@ class PaymentService {
     };
     await organization.save();
 
+    logger.info(`[Razorpay] Organization subscription updated: ${organization._id}, plan: ${planId}, status: active`);
+
     // Create invoice
     const invoiceNumber = await Invoice.generateInvoiceNumber(organization._id);
-    const plan = SUBSCRIPTION_PLANS[planId];
     const amount = payment.amount / 100;
 
     const invoice = await Invoice.create({
@@ -1085,12 +1307,13 @@ class PaymentService {
       subtotal: amount,
       total: amount,
       currency: payment.currency.toUpperCase(),
+      dueDate: new Date(), // Payment already captured, due date is now
       billingPeriod: {
         start: new Date(),
         end: organization.subscription.currentPeriodEnd
       },
       items: [{
-        description: `${plan?.displayName || 'Subscription'} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+        description: `${planDisplayName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
         type: 'subscription',
         quantity: 1,
         unitPrice: amount,
@@ -1104,7 +1327,7 @@ class PaymentService {
       },
       subscription: {
         planId,
-        planName: plan?.name || 'Unknown',
+        planName: planName,
         billingCycle
       },
       billingAddress: organization.billingDetails,
@@ -1121,7 +1344,7 @@ class PaymentService {
       resourceType: 'payment',
       resourceId: paymentId,
       resourceName: 'Razorpay Payment',
-      description: `Razorpay payment verified for ${plan?.displayName || 'subscription'}`,
+      description: `Razorpay payment verified for ${planDisplayName}`,
       metadata: {
         provider: 'razorpay',
         orderId,
@@ -1394,6 +1617,68 @@ class PaymentService {
   async getPaymentConfig() {
     await this.ensureProvidersInitialized();
 
+    // Try to get plans from database
+    let plans = [];
+    try {
+      const dbPlans = await Plan.find({ status: 'active' }).sort({ 'billing.price': 1 });
+      plans = dbPlans.map(plan => {
+        const monthlyPrice = plan.billing?.price || 0;
+        const yearlyDiscount = 0.2; // 20% yearly discount
+        // Calculate yearly price if not explicitly set
+        const yearlyPrice = plan.billing?.yearlyPrice || (monthlyPrice > 0 ? monthlyPrice * 12 * (1 - yearlyDiscount) : 0);
+
+        return {
+          id: plan._id.toString(),
+          slug: plan.slug,
+          name: plan.name,
+          displayName: plan.displayName || plan.name,
+          price: monthlyPrice,
+          yearlyPrice: yearlyPrice,
+          currency: plan.billing?.currency || 'USD',
+          billingCycle: plan.billing?.interval === 'year' ? 'yearly' : 'monthly',
+          yearlyDiscount: yearlyDiscount
+        };
+      });
+      logger.info(`[PaymentService] Found ${plans.length} active plans in database`);
+    } catch (error) {
+      logger.warn('Failed to fetch plans from database, using defaults:', error.message);
+    }
+
+    // Fallback to default plans if no database plans
+    if (plans.length === 0) {
+      plans = Object.entries(DEFAULT_SUBSCRIPTION_PLANS).map(([key, plan]) => ({
+        id: key,
+        name: plan.name,
+        displayName: plan.displayName,
+        price: plan.price,
+        yearlyPrice: plan.yearlyPrice,
+        currency: plan.currency,
+        billingCycle: plan.billingCycle,
+        yearlyDiscount: plan.yearlyDiscount
+      }));
+    }
+
+    // Build available providers list
+    const providers = [
+      ...(stripe ? ['stripe'] : []),
+      ...(razorpay ? ['razorpay'] : [])
+    ];
+
+    // Determine default provider
+    let defaultProvider = process.env.DEFAULT_PAYMENT_PROVIDER || 'stripe';
+
+    // If default provider is not available, use first available provider
+    if (providers.length > 0 && !providers.includes(defaultProvider)) {
+      defaultProvider = providers[0];
+    }
+
+    // If no providers available, default to stripe (will show error)
+    if (providers.length === 0) {
+      defaultProvider = 'stripe';
+    }
+
+    logger.info(`Payment config: providers=${providers.join(',')}, default=${defaultProvider}`);
+
     return {
       stripe: {
         enabled: !!stripe,
@@ -1403,23 +1688,45 @@ class PaymentService {
         enabled: !!razorpay,
         keyId: process.env.RAZORPAY_KEY_ID || null
       },
-      plans: Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => ({
-        id: key,
-        name: plan.name,
-        displayName: plan.displayName,
-        price: plan.price,
-        currency: plan.currency,
-        billingCycle: plan.billingCycle,
-        yearlyDiscount: plan.yearlyDiscount
-      }))
+      plans,
+      defaultProvider,
+      providers
     };
   }
 
   /**
    * Get available subscription plans
    */
-  getPlans() {
-    return Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => ({
+  async getPlans() {
+    // Try to get plans from database
+    try {
+      const dbPlans = await Plan.find({ status: 'active' }).sort({ 'billing.price': 1 });
+      if (dbPlans.length > 0) {
+        return dbPlans.map(plan => {
+          const monthlyPrice = plan.billing?.price || 0;
+          const yearlyDiscount = 0.2; // 20% yearly discount
+          const yearlyPrice = plan.billing?.yearlyPrice || (monthlyPrice > 0 ? monthlyPrice * 12 * (1 - yearlyDiscount) : 0);
+
+          return {
+            id: plan._id.toString(),
+            slug: plan.slug,
+            name: plan.name,
+            displayName: plan.displayName || plan.name,
+            price: monthlyPrice,
+            yearlyPrice: yearlyPrice,
+            currency: plan.billing?.currency || 'USD',
+            billingCycle: plan.billing?.interval === 'year' ? 'yearly' : 'monthly',
+            features: plan.features || [],
+            limits: plan.limits || {}
+          };
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch plans from database, using defaults:', error.message);
+    }
+
+    // Fallback to default plans
+    return Object.entries(DEFAULT_SUBSCRIPTION_PLANS).map(([key, plan]) => ({
       id: key,
       ...plan
     }));

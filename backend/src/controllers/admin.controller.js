@@ -10,6 +10,8 @@ import Project from '../models/Project.js';
 import Feature from '../models/Feature.js';
 import AIModel from '../models/AIModel.js';
 import Provider from '../models/Provider.js';
+import Plan from '../models/Plan.js';
+import PricingHistory from '../models/PricingHistory.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -753,15 +755,54 @@ class AdminController {
       delete updates._id;
       delete updates.createdAt;
 
+      // Fetch current model to check for pricing changes
+      const currentModel = await AIModel.findById(id);
+      if (!currentModel) {
+        throw new AppError('Model not found', 404, 'MODEL_NOT_FOUND');
+      }
+
+      // Check if pricing is being updated - record history
+      if (updates.pricing && (
+        updates.pricing.inputPrice !== currentModel.pricing.inputPrice ||
+        updates.pricing.outputPrice !== currentModel.pricing.outputPrice ||
+        updates.pricing.unit !== currentModel.pricing.unit ||
+        updates.pricing.pricePerUnit !== currentModel.pricing.pricePerUnit
+      )) {
+        const previousPricing = {
+          inputPrice: currentModel.pricing.inputPrice,
+          outputPrice: currentModel.pricing.outputPrice,
+          currency: currentModel.pricing.currency,
+          unit: currentModel.pricing.unit,
+          pricePerUnit: currentModel.pricing.pricePerUnit
+        };
+
+        const newPricing = {
+          inputPrice: updates.pricing.inputPrice ?? currentModel.pricing.inputPrice,
+          outputPrice: updates.pricing.outputPrice ?? currentModel.pricing.outputPrice,
+          currency: updates.pricing.currency ?? currentModel.pricing.currency,
+          unit: updates.pricing.unit ?? currentModel.pricing.unit,
+          pricePerUnit: updates.pricing.pricePerUnit ?? currentModel.pricing.pricePerUnit
+        };
+
+        await PricingHistory.recordChange({
+          modelId: currentModel._id,
+          providerId: currentModel.provider,
+          previousPricing,
+          newPricing,
+          changedBy: req.user.id || req.user.userId,
+          reason: 'manual_adjustment',
+          notes: 'Updated via Super Admin Dashboard',
+          source: 'official'
+        });
+
+        logger.info(`Pricing history recorded for model ${currentModel._id}: input ${previousPricing.inputPrice} -> ${newPricing.inputPrice}`);
+      }
+
       const model = await AIModel.findByIdAndUpdate(
         id,
         { $set: updates },
         { new: true, runValidators: true }
       ).populate('provider', 'name displayName logo');
-
-      if (!model) {
-        throw new AppError('Model not found', 404, 'MODEL_NOT_FOUND');
-      }
 
       logger.info(`Admin updated model: ${model.name}`);
 
@@ -901,6 +942,325 @@ class AdminController {
           recentOrganizations,
           recentModels
         }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ===========================================
+  // PLAN MANAGEMENT (Platform-wide)
+  // ===========================================
+
+  /**
+   * Get all plans (platform-wide)
+   * @route GET /api/admin/plans
+   */
+  async getPlans(req, res, next) {
+    try {
+      const { page = 1, limit = 20, status, tier, public: isPublic } = req.query;
+
+      const query = {};
+
+      if (status) {
+        query.status = status;
+      }
+
+      if (tier) {
+        query.tier = tier;
+      }
+
+      if (isPublic !== undefined) {
+        query['settings.isPublic'] = isPublic === 'true';
+      }
+
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const plans = await Plan.find(query)
+        .populate('organization', 'name slug')
+        .populate('features.feature', 'name slug category')
+        .sort({ displayOrder: 1, createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit));
+
+      const total = await Plan.countDocuments(query);
+
+      res.json({
+        success: true,
+        data: {
+          plans,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            pages: Math.ceil(total / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get plan by ID
+   * @route GET /api/admin/plans/:id
+   */
+  async getPlanById(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const plan = await Plan.findById(id)
+        .populate('organization', 'name slug')
+        .populate('features.feature', 'name slug category tokenEstimates');
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      res.json({
+        success: true,
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Create new plan (platform-wide)
+   * @route POST /api/admin/plans
+   */
+  async createPlan(req, res, next) {
+    try {
+      const planData = req.body;
+
+      // Get the first organization or create one
+      let organization = await Organization.findOne().sort({ createdAt: 1 });
+
+      if (!organization) {
+        // Create a default organization if none exists
+        const superAdmin = await User.findOne({ role: { name: 'super_admin' } });
+        organization = await Organization.create({
+          name: 'Platform Plans',
+          owner: superAdmin?._id,
+          isActive: true
+        });
+      }
+
+      // Auto-generate slug from name
+      if (!planData.slug && planData.name) {
+        planData.slug = planData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      }
+
+      const plan = await Plan.create({
+        ...planData,
+        organization: organization._id
+      });
+
+      await plan.populate('features.feature', 'name slug category');
+
+      logger.info(`Admin created plan: ${plan.name}`);
+
+      res.status(201).json({
+        success: true,
+        message: 'Plan created successfully',
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update plan (platform-wide)
+   * @route PUT /api/admin/plans/:id
+   */
+  async updatePlan(req, res, next) {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+
+      // Remove fields that shouldn't be updated directly
+      delete updates._id;
+      delete updates.organization;
+      delete updates.createdAt;
+
+      // Auto-generate slug from name if name changed
+      if (updates.name && !updates.slug) {
+        updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      }
+
+      const plan = await Plan.findByIdAndUpdate(
+        id,
+        { $set: updates },
+        { new: true, runValidators: true }
+      ).populate('features.feature', 'name slug category tokenEstimates');
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      logger.info(`Admin updated plan: ${plan.name}`);
+
+      res.json({
+        success: true,
+        message: 'Plan updated successfully',
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Delete plan (platform-wide)
+   * @route DELETE /api/admin/plans/:id
+   */
+  async deletePlan(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const plan = await Plan.findByIdAndDelete(id);
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      logger.info(`Admin deleted plan: ${plan.name}`);
+
+      res.json({
+        success: true,
+        message: 'Plan deleted successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Toggle plan status (activate/deactivate)
+   * @route PATCH /api/admin/plans/:id/status
+   */
+  async togglePlanStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['draft', 'active', 'archived', 'deprecated'].includes(status)) {
+        throw new AppError('Invalid status', 400, 'INVALID_STATUS');
+      }
+
+      const plan = await Plan.findByIdAndUpdate(
+        id,
+        { status },
+        { new: true }
+      ).populate('features.feature', 'name slug category');
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      logger.info(`Admin changed plan ${plan.name} status to ${status}`);
+
+      res.json({
+        success: true,
+        message: `Plan status changed to ${status}`,
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Toggle plan public visibility
+   * @route PATCH /api/admin/plans/:id/visibility
+   */
+  async togglePlanVisibility(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { isPublic } = req.body;
+
+      const plan = await Plan.findByIdAndUpdate(
+        id,
+        { 'settings.isPublic': isPublic },
+        { new: true }
+      ).populate('features.feature', 'name slug category');
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      logger.info(`Admin ${isPublic ? 'published' : 'unpublished'} plan: ${plan.name}`);
+
+      res.json({
+        success: true,
+        message: `Plan ${isPublic ? 'published' : 'unpublished'} successfully`,
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Set plan as default
+   * @route PATCH /api/admin/plans/:id/default
+   */
+  async setDefaultPlan(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      // Remove default from all other plans
+      await Plan.updateMany({}, { 'settings.isDefault': false });
+
+      // Set this plan as default
+      const plan = await Plan.findByIdAndUpdate(
+        id,
+        { 'settings.isDefault': true },
+        { new: true }
+      ).populate('features.feature', 'name slug category');
+
+      if (!plan) {
+        throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+      }
+
+      logger.info(`Admin set default plan: ${plan.name}`);
+
+      res.json({
+        success: true,
+        message: 'Default plan updated',
+        data: { plan }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Reorder plans
+   * @route PATCH /api/admin/plans/reorder
+   */
+  async reorderPlans(req, res, next) {
+    try {
+      const { planOrders } = req.body; // Array of { id, displayOrder }
+
+      if (!planOrders || !Array.isArray(planOrders)) {
+        throw new AppError('Plan orders are required', 400, 'INVALID_REQUEST');
+      }
+
+      const updates = planOrders.map(({ id, displayOrder }) =>
+        Plan.findByIdAndUpdate(id, { displayOrder }, { new: true })
+      );
+
+      await Promise.all(updates);
+
+      logger.info(`Admin reordered plans`);
+
+      res.json({
+        success: true,
+        message: 'Plans reordered successfully'
       });
     } catch (error) {
       next(error);

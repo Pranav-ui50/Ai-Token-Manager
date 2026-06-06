@@ -412,11 +412,25 @@ class AnalyticsService {
 
     // Cost by model
     const costByModel = {};
+    const topModels = [];
     for (const feature of features) {
       const modelName = feature.model?.displayName || feature.model?.name || 'Unknown';
       const cost = (feature.stats?.totalCost || 0) + this._calculateInfrastructureCost(feature);
       costByModel[modelName] = (costByModel[modelName] || 0) + cost;
+      if (cost > 0) {
+        topModels.push({
+          name: modelName,
+          model: feature.model?._id,
+          cost: cost,
+          tokens: feature.stats?.totalTokens || 0,
+          requests: feature.stats?.totalRequests || 0,
+          provider: feature.provider?.name || 'Unknown'
+        });
+      }
     }
+
+    // Sort top models by cost
+    topModels.sort((a, b) => b.cost - a.cost);
 
     // Recent activity (features with recent usage)
     const recentFeatures = features
@@ -432,8 +446,67 @@ class AnalyticsService {
     // Cost trend (last 7 days)
     const costTrend = await this._getCostTrend(organizationId, 7);
 
+    // Calculate projected cost (based on current month's daily average * remaining days)
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    const remainingDays = daysInMonth - currentDay;
+
+    // Get month-to-date cost from usage history
+    const monthStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    let mtdCost = 0;
+    for (const feature of features) {
+      if (feature.usageHistory && Array.isArray(feature.usageHistory)) {
+        for (const usage of feature.usageHistory) {
+          const usageDate = new Date(usage.date);
+          if (usageDate >= monthStartDate && usageDate <= now) {
+            mtdCost += usage.cost || 0;
+          }
+        }
+      }
+    }
+    // If no usage history, use total cost as MTD
+    if (mtdCost === 0 && totalCost > 0) {
+      mtdCost = totalCost;
+    }
+
+    const dailyAverage = currentDay > 0 ? mtdCost / currentDay : 0;
+    const projectedCost = mtdCost + (dailyAverage * remainingDays);
+
+    // Calculate savings (compare current costs to baseline - using subscription plan value)
+    const planPricing = {
+      free: { value: 0, baseline: 50 },
+      starter: { value: 29, baseline: 100 },
+      professional: { value: 99, baseline: 300 },
+      enterprise: { value: 299, baseline: 1000 }
+    };
+    const currentPlan = organization?.subscription?.plan || 'free';
+    const planInfo = planPricing[currentPlan] || planPricing.free;
+
+    // Calculate potential savings (baseline expected cost - actual cost)
+    // If actual cost is less than baseline, that's savings
+    const baselineMonthlyCost = planInfo.baseline;
+    const savings = Math.max(0, baselineMonthlyCost - mtdCost);
+
+    // Get active subscriptions count (from organization subscription and any additional plans)
+    let activeSubscriptions = 0;
+    if (organization?.subscription?.status === 'active' || organization?.subscription?.status === 'trial') {
+      activeSubscriptions = 1;
+    }
+    // Also count active features as "active plans" for display
+    const activePlansCount = activeFeatures.length;
+
     return {
       summary: {
+        // Primary fields expected by Finance Dashboard
+        totalCost: totalCost,           // Total Spend
+        projectedCost: projectedCost,   // Projected Cost
+        savings: savings,               // Savings
+        activeSubscriptions: activeSubscriptions, // Active Subscriptions
+        activePlans: activePlansCount,  // Active Plans (features)
+        monthlySpend: mtdCost,          // Month-to-date spend
+
+        // Additional summary data
         organization: {
           name: organization?.name,
           plan: organization?.subscription?.plan
@@ -461,6 +534,7 @@ class AnalyticsService {
           totalRequests
         }
       },
+      topModels: topModels.slice(0, 5),  // Top 5 models by cost
       recentActivity: recentFeatures,
       costTrend,
       generatedAt: new Date().toISOString()

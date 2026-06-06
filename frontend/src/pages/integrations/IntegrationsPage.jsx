@@ -63,15 +63,24 @@ function IntegrationsPage() {
     }
   });
 
+  // Get organization ID for API calls
+  const orgId = currentOrganization?._id || currentOrganization || null;
+  const showNoOrgState = !orgId;
+
   useEffect(() => {
-    if (currentOrganization) {
-      fetchIntegrations();
-    }
-  }, [currentOrganization, filters]);
+    fetchIntegrations();
+  }, [orgId, filters]);
 
   const fetchIntegrations = async () => {
     setIsLoading(true);
     try {
+      // If no organization, show empty state
+      if (!orgId) {
+        setIntegrations([]);
+        setIsLoading(false);
+        return;
+      }
+
       const params = {};
       if (filters.status) params.status = filters.status;
       if (filters.type) params.type = filters.type;
@@ -90,9 +99,14 @@ function IntegrationsPage() {
     e.preventDefault();
     setError('');
 
+    if (!orgId) {
+      setError('Organization required to create integrations');
+      return;
+    }
+
     try {
       const response = await integrationApi.create({
-        organizationId: currentOrganization._id,
+        organizationId: orgId,
         ...formData
       });
       setIntegrations(prev => [response.data, ...prev]);
@@ -224,20 +238,6 @@ function IntegrationsPage() {
     );
   }
 
-  if (!currentOrganization) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-96">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization Selected</h2>
-          <p className="text-gray-500 mb-4">Please select an organization to manage integrations.</p>
-          <a href="/organizations" className="px-4 py-2 bg-[#DC2626] text-white rounded-lg">
-            Go to Organizations
-          </a>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -246,7 +246,7 @@ function IntegrationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
           <p className="text-sm text-gray-500">Manage third-party integrations and API connections</p>
         </div>
-        {canManageIntegrations() && (
+        {canManageIntegrations() && !showNoOrgState && (
           <button
             onClick={() => { resetForm(); setShowCreateModal(true); }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"
@@ -258,6 +258,23 @@ function IntegrationsPage() {
           </button>
         )}
       </div>
+
+      {/* No Organization State */}
+      {showNoOrgState && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 className="font-medium text-blue-900">No Organization</h3>
+              <p className="text-sm text-blue-700">
+                You need to be part of an organization to manage integrations. Contact your administrator or create an organization to get started.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
@@ -322,8 +339,12 @@ function IntegrationsPage() {
             </svg>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No integrations yet</h3>
-          <p className="text-gray-500 mb-4">Connect third-party services to enhance your workflow</p>
-          {canManageIntegrations() && (
+          <p className="text-gray-500 mb-4">
+            {showNoOrgState
+              ? 'Join an organization to start managing integrations'
+              : 'Connect third-party services to enhance your workflow'}
+          </p>
+          {canManageIntegrations() && !showNoOrgState && (
             <button
               onClick={() => { resetForm(); setShowCreateModal(true); }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"

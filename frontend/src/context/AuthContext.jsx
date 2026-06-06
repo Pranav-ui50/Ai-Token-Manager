@@ -240,7 +240,7 @@ export const AuthProvider = ({ children }) => {
       console.log('[Auth] Register response:', response);
 
       if (response.success) {
-        const { user, accessToken, refreshToken } = response.data;
+        const { user, accessToken, refreshToken, requiresPayment, planId, billingCycle } = response.data;
 
         // Store tokens and user (auto-login after registration)
         storage.set(AUTH_KEYS.TOKEN, accessToken);
@@ -252,7 +252,14 @@ export const AuthProvider = ({ children }) => {
           payload: { user, accessToken, refreshToken }
         });
 
-        return { success: true, user };
+        // Return with payment info for paid plans
+        return {
+          success: true,
+          user,
+          requiresPayment: requiresPayment || false,
+          planId: planId || 'free',
+          billingCycle: billingCycle || 'monthly'
+        };
       }
 
       const errorMessage = response.error?.message || 'Registration failed';

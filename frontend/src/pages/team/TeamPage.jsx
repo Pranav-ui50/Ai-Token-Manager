@@ -50,7 +50,6 @@ function TeamPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditRoleModal, setShowEditRoleModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
-  const [showTransferOwnershipModal, setShowTransferOwnershipModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
 
   // Form states
@@ -173,29 +172,6 @@ function TeamPage() {
       await fetchMembers();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to remove member');
-    }
-  };
-
-  const handleTransferOwnership = async (newOwnerId) => {
-    setError('');
-    setSuccess('');
-
-    if (!confirm('Are you sure you want to transfer ownership? This action cannot be undone.')) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await organizationApi.transferOwnership(organizationId, newOwnerId);
-      setSuccess('Ownership transferred successfully');
-      setShowTransferOwnershipModal(false);
-      setSelectedMember(null);
-      await fetchMembers();
-      await refreshOrganization();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to transfer ownership');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -504,21 +480,6 @@ function TeamPage() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
                                   </Button>
-                                  {member.role?.name !== 'org_owner' && member.role !== 'org_owner' && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setSelectedMember(member);
-                                        setShowTransferOwnershipModal(true);
-                                      }}
-                                      title="Transfer Ownership"
-                                    >
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                      </svg>
-                                    </Button>
-                                  )}
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -749,82 +710,6 @@ function TeamPage() {
             </Button>
           </div>
         </div>
-      </Modal>
-
-      {/* Transfer Ownership Modal */}
-      <Modal
-        isOpen={showTransferOwnershipModal}
-        onClose={() => {
-          setShowTransferOwnershipModal(false);
-          setSelectedMember(null);
-        }}
-        title="Transfer Ownership"
-        size="md"
-      >
-        {selectedMember && (
-          <div className="p-6 space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex">
-                <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-700">
-                    This action will transfer full ownership of the organization to <strong>{selectedMember.user?.firstName} {selectedMember.user?.lastName}</strong> ({selectedMember.email}).
-                  </p>
-                  <p className="text-sm text-yellow-700 mt-2">
-                    You will become an Organization Owner with the same level of access as other owners.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-2">New owner will gain:</p>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Full administrative access
-                </li>
-                <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Billing management privileges
-                </li>
-                <li className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Ability to add/remove members
-                </li>
-              </ul>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowTransferOwnershipModal(false);
-                  setSelectedMember(null);
-                }}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => handleTransferOwnership(selectedMember.user?._id || selectedMember.user)}
-                disabled={isSubmitting}
-                className="flex-1"
-              >
-                {isSubmitting ? 'Transferring...' : 'Transfer Ownership'}
-              </Button>
-            </div>
-          </div>
-        )}
       </Modal>
     </div>
   );

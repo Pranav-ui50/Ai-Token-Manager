@@ -579,19 +579,6 @@ function SettingsPage() {
               <p className="text-sm text-gray-500">Irreversible and destructive actions</p>
             </div>
 
-            {/* Transfer Ownership */}
-            <div className="bg-gray-50 rounded-xl p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-gray-900">Transfer Ownership</h4>
-                  <p className="text-sm text-gray-500">Transfer organization ownership to another member</p>
-                </div>
-                <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
-                  Transfer
-                </button>
-              </div>
-            </div>
-
             {/* Leave Organization */}
             <div className="bg-gray-50 rounded-xl p-5">
               <div className="flex items-center justify-between">

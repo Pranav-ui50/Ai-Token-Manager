@@ -6,17 +6,17 @@
  */
 
 import { Navigate, Outlet } from 'react-router-dom';
-
-// TODO: Import auth context/store when implemented
-// import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const PublicRoute = () => {
-  // TODO: Check authentication status
-  // const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  // Placeholder: Not authenticated for now
-  const isAuthenticated = false;
+  // Show nothing while checking auth status
+  if (isLoading) {
+    return null;
+  }
 
+  // Redirect authenticated users to dashboard
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }

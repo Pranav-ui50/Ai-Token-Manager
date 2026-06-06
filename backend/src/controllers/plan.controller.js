@@ -15,6 +15,11 @@ class PlanController {
   async createPlan(req, res, next) {
     try {
       const organizationId = req.user.organization;
+
+      if (!organizationId) {
+        throw new AppError('Organization is required. Please select an organization.', 400, 'ORGANIZATION_REQUIRED');
+      }
+
       const planData = {
         ...req.body,
         organization: organizationId

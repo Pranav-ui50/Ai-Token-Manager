@@ -54,6 +54,26 @@ const featureSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AIModel'
   },
+  // Dynamic model identifier (for models fetched from provider API)
+  modelIdentifier: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  // Model display name (cached for dynamic models)
+  modelDisplayName: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  // Model capabilities (cached for dynamic models)
+  modelCapabilities: {
+    contextWindow: Number,
+    maxOutputTokens: Number,
+    supportsVision: { type: Boolean, default: false },
+    supportsFunctionCalling: { type: Boolean, default: true },
+    supportsStreaming: { type: Boolean, default: true }
+  },
   provider: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Provider'

@@ -36,6 +36,9 @@ function ModelsPage() {
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [liveModels, setLiveModels] = useState([]);
+  const [isLoadingLive, setIsLoadingLive] = useState(false);
+  const [showLiveModels, setShowLiveModels] = useState(false);
 
   // Filters
   const [selectedProvider, setSelectedProvider] = useState(searchParams.get('provider') || '');
@@ -75,6 +78,38 @@ function ModelsPage() {
       setError(err.response?.data?.message || 'Failed to fetch models');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Fetch live models from provider's API
+  const fetchLiveModels = async () => {
+    if (!selectedProvider) {
+      alert('Please select a provider first');
+      return;
+    }
+
+    try {
+      setIsLoadingLive(true);
+      setShowLiveModels(true);
+      const response = await providerApi.getDynamicModels(selectedProvider, { forceRefresh: true });
+      const liveModelsData = response.models || [];
+
+      // Process live models
+      const processed = liveModelsData.map(model => ({
+        ...model,
+        _id: model._id || model.id,
+        displayName: model.displayName || model.name,
+        isLiveModel: !model._id,
+        source: model.source || 'api'
+      }));
+
+      setLiveModels(processed);
+    } catch (err) {
+      console.error('Failed to fetch live models:', err);
+      alert('Failed to fetch live models from provider API. Please check if the provider has API credentials configured.');
+      setShowLiveModels(false);
+    } finally {
+      setIsLoadingLive(false);
     }
   };
 
@@ -156,7 +191,11 @@ function ModelsPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Provider</label>
               <select
                 value={selectedProvider}
-                onChange={(e) => handleFilterChange('provider', e.target.value)}
+                onChange={(e) => {
+                  handleFilterChange('provider', e.target.value);
+                  setShowLiveModels(false);
+                  setLiveModels([]);
+                }}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent text-sm"
               >
                 <option value="">All Providers</option>
@@ -178,6 +217,31 @@ function ModelsPage() {
                 ))}
               </select>
             </div>
+            {/* Sync Live Models Button */}
+            {selectedProvider && (
+              <button
+                onClick={fetchLiveModels}
+                disabled={isLoadingLive}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:from-blue-600 hover:to-purple-600 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingLive ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Sync Live Models
+                  </>
+                )}
+              </button>
+            )}
             {(selectedProvider || selectedType) && (
               <button
                 onClick={clearFilters}
@@ -191,6 +255,68 @@ function ModelsPage() {
             )}
           </div>
         </div>
+
+        {/* Live Models Section */}
+        {showLiveModels && liveModels.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border border-blue-200 p-4 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Live Models from API</h3>
+                  <p className="text-xs text-gray-500">Fresh models fetched from {providers.find(p => p._id === selectedProvider)?.displayName}'s API</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLiveModels(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+              {liveModels.map((model, index) => (
+                <div
+                  key={model._id || model.id || index}
+                  className="bg-white rounded-lg p-3 border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-medium text-gray-900 truncate">
+                          {model.displayName || model.name}
+                        </h4>
+                        {model.source === 'api' && (
+                          <span className="px-1.5 py-0.5 text-xs bg-green-100 text-green-700 rounded">Live</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{model.name}</p>
+                      {model.pricing && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          ${model.pricing.inputPrice?.toFixed(2) || '0'}/$
+                          {model.pricing.outputPrice?.toFixed(2) || '0'} per 1M
+                        </p>
+                      )}
+                    </div>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      model.type === 'chat' ? 'bg-blue-100 text-blue-700' :
+                      model.type === 'embedding' ? 'bg-purple-100 text-purple-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {model.type || 'chat'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (

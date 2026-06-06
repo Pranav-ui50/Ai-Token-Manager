@@ -181,12 +181,14 @@ pricingHistorySchema.statics.recordChange = async function (data) {
   const inputPriceChange = (newPricing.inputPrice || 0) - (previousPricing.inputPrice || 0);
   const outputPriceChange = (newPricing.outputPrice || 0) - (previousPricing.outputPrice || 0);
 
+  // Calculate percentage changes
+  // If previous price was 0, treat as 100% change (new pricing)
   const inputPriceChangePercent = previousPricing.inputPrice
     ? ((newPricing.inputPrice - previousPricing.inputPrice) / previousPricing.inputPrice) * 100
-    : 0;
+    : (newPricing.inputPrice ? 100 : 0); // New price = 100% increase from 0
   const outputPriceChangePercent = previousPricing.outputPrice
     ? ((newPricing.outputPrice - previousPricing.outputPrice) / previousPricing.outputPrice) * 100
-    : 0;
+    : (newPricing.outputPrice ? 100 : 0); // New price = 100% increase from 0
 
   const history = await this.create({
     model: modelId,

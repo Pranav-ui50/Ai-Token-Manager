@@ -16,14 +16,16 @@ class AuthController {
    */
   async register(req, res, next) {
     try {
-      const { email, password, firstName, lastName, organizationName } = req.body;
+      const { email, password, firstName, lastName, organizationName, planId, billingCycle } = req.body;
 
       const result = await authService.register({
         email,
         password,
         firstName,
         lastName,
-        organizationName
+        organizationName,
+        planId,
+        billingCycle
       });
 
       // In production, send verification email
@@ -36,7 +38,11 @@ class AuthController {
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
           expiresIn: result.expiresIn,
-          verificationToken: config.nodeEnv === 'development' ? result.verificationToken : undefined
+          verificationToken: config.nodeEnv === 'development' ? result.verificationToken : undefined,
+          // Payment requirement info for paid plans
+          requiresPayment: result.requiresPayment,
+          planId: result.planId,
+          billingCycle: result.billingCycle
         }
       });
     } catch (error) {

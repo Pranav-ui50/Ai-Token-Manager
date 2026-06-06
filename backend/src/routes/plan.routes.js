@@ -9,6 +9,7 @@ import planController from '../controllers/plan.controller.js';
 import { protect, restrictTo } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import { planValidators } from '../validators/plan.validators.js';
+import { ROLES } from '../utils/constants.js';
 
 const router = Router();
 
@@ -22,11 +23,11 @@ router.use(protect);
 /**
  * @route   POST /api/plans
  * @desc    Create a new plan
- * @access  Private (admin, owner, editor)
+ * @access  Private (super_admin, org_owner, product_manager, finance_admin)
  */
 router.post(
   '/',
-  restrictTo('admin', 'owner', 'editor'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER, ROLES.FINANCE_ADMIN),
   validate(planValidators.create),
   planController.createPlan
 );
@@ -75,22 +76,22 @@ router.post(
 /**
  * @route   POST /api/plans/calculate-profitability
  * @desc    Calculate profitability for all plans
- * @access  Private (admin, owner)
+ * @access  Private (super_admin, org_owner)
  */
 router.post(
   '/calculate-profitability',
-  restrictTo('admin', 'owner'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER),
   planController.calculateAllProfitability
 );
 
 /**
  * @route   PATCH /api/plans/reorder
  * @desc    Reorder plans
- * @access  Private (admin, owner, editor)
+ * @access  Private (super_admin, org_owner, product_manager, finance_admin)
  */
 router.patch(
   '/reorder',
-  restrictTo('admin', 'owner', 'editor'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER, ROLES.FINANCE_ADMIN),
   validate(planValidators.reorder),
   planController.reorderPlans
 );
@@ -108,22 +109,22 @@ router.get(
 /**
  * @route   POST /api/plans/:id/clone
  * @desc    Clone a plan
- * @access  Private (admin, owner, editor)
+ * @access  Private (super_admin, org_owner, product_manager, finance_admin)
  */
 router.post(
   '/:id/clone',
-  restrictTo('admin', 'owner', 'editor'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER, ROLES.FINANCE_ADMIN),
   planController.clonePlan
 );
 
 /**
  * @route   PATCH /api/plans/:id/set-default
  * @desc    Set plan as default
- * @access  Private (admin, owner)
+ * @access  Private (super_admin, org_owner)
  */
 router.patch(
   '/:id/set-default',
-  restrictTo('admin', 'owner'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER),
   planController.setDefaultPlan
 );
 
@@ -140,11 +141,11 @@ router.get(
 /**
  * @route   PUT /api/plans/:id
  * @desc    Update plan
- * @access  Private (admin, owner, editor)
+ * @access  Private (super_admin, org_owner, product_manager, finance_admin)
  */
 router.put(
   '/:id',
-  restrictTo('admin', 'owner', 'editor'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER, ROLES.FINANCE_ADMIN),
   validate(planValidators.update),
   planController.updatePlan
 );
@@ -152,11 +153,11 @@ router.put(
 /**
  * @route   DELETE /api/plans/:id
  * @desc    Delete plan
- * @access  Private (admin, owner)
+ * @access  Private (super_admin, org_owner)
  */
 router.delete(
   '/:id',
-  restrictTo('admin', 'owner'),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER),
   planController.deletePlan
 );
 

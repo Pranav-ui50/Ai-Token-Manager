@@ -75,13 +75,27 @@ export const getSectionContent = async (req, res) => {
  */
 export const getAllContent = async (req, res) => {
   try {
-    const content = await LandingPageContent.find({})
+    let content = await LandingPageContent.find({})
       .populate('lastUpdatedBy', 'firstName lastName email')
       .sort({ section: 1 });
 
+    // If no content exists, initialize defaults
+    if (content.length === 0) {
+      await LandingPageContent.initializeDefaults();
+      content = await LandingPageContent.find({})
+        .populate('lastUpdatedBy', 'firstName lastName email')
+        .sort({ section: 1 });
+    }
+
+    // Transform array to object keyed by section
+    const contentObj = {};
+    content.forEach(item => {
+      contentObj[item.section] = item.content;
+    });
+
     res.json({
       success: true,
-      data: content
+      data: contentObj
     });
   } catch (error) {
     console.error('Error fetching all landing page content:', error);
@@ -108,7 +122,7 @@ export const updateSectionContent = async (req, res) => {
       });
     }
 
-    const validSections = ['hero', 'features', 'howItWorks', 'testimonials', 'faq', 'stats', 'cta'];
+    const validSections = ['hero', 'features', 'howItWorks', 'testimonials', 'faq', 'stats', 'cta', 'analytics', 'providers', 'footer'];
     if (!validSections.includes(section)) {
       return res.status(400).json({
         success: false,

@@ -54,7 +54,7 @@ export const planValidators = {
       .withMessage('Features must be an array'),
 
     body('features.*.feature')
-      .if(body('features').exists())
+      .if(body('features').isArray({ min: 1 }))
       .isMongoId()
       .withMessage('Invalid feature ID'),
 
@@ -215,7 +215,7 @@ export const planValidators = {
       .withMessage('Features must be an array'),
 
     body('features.*.feature')
-      .if(body('features').exists())
+      .if(body('features').isArray({ min: 1 }))
       .isMongoId()
       .withMessage('Invalid feature ID'),
 

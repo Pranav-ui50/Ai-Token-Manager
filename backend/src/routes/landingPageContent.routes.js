@@ -13,7 +13,7 @@ import {
   resetSectionContent,
   initializeDefaults
 } from '../controllers/landingPageContent.controller.js';
-import { authenticate, authorize } from '../middlewares/auth.middleware.js';
+import { protect, restrictTo } from '../middlewares/auth.middleware.js';
 import { ROLES } from '../utils/constants.js';
 
 const router = Router();
@@ -23,65 +23,68 @@ const router = Router();
 // ===========================================
 
 /**
- * @route   GET /api/public/landing-content
+ * @route   GET /landing-content
  * @desc    Get all landing page content for public display
  * @access  Public
  */
 router.get('/landing-content', getPublicContent);
 
 /**
- * @route   GET /api/public/landing-content/:section
+ * @route   GET /landing-content/:section
  * @desc    Get specific section content
  * @access  Public
  */
 router.get('/landing-content/:section', getSectionContent);
 
+export default router;
+
 // ===========================================
 // Admin Routes (Super Admin only)
+// Separate export for admin routes
 // ===========================================
 
+export const adminLandingContentRoutes = Router();
+
 /**
- * @route   GET /api/admin/landing-content
+ * @route   GET /
  * @desc    Get all landing page content (admin view)
  * @access  Super Admin
  */
-router.get('/admin/landing-content',
-  authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+adminLandingContentRoutes.get('/',
+  protect,
+  restrictTo(ROLES.SUPER_ADMIN),
   getAllContent
 );
 
 /**
- * @route   PUT /api/admin/landing-content/:section
+ * @route   PUT /:section
  * @desc    Update specific section content
  * @access  Super Admin
  */
-router.put('/admin/landing-content/:section',
-  authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+adminLandingContentRoutes.put('/:section',
+  protect,
+  restrictTo(ROLES.SUPER_ADMIN),
   updateSectionContent
 );
 
 /**
- * @route   POST /api/admin/landing-content/:section/reset
+ * @route   POST /:section/reset
  * @desc    Reset section to default content
  * @access  Super Admin
  */
-router.post('/admin/landing-content/:section/reset',
-  authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+adminLandingContentRoutes.post('/:section/reset',
+  protect,
+  restrictTo(ROLES.SUPER_ADMIN),
   resetSectionContent
 );
 
 /**
- * @route   POST /api/admin/landing-content/initialize
+ * @route   POST /initialize
  * @desc    Initialize default content
  * @access  Super Admin
  */
-router.post('/admin/landing-content/initialize',
-  authenticate,
-  authorize(ROLES.SUPER_ADMIN),
+adminLandingContentRoutes.post('/initialize',
+  protect,
+  restrictTo(ROLES.SUPER_ADMIN),
   initializeDefaults
 );
-
-export default router;

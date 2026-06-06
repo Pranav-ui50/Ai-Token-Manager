@@ -19,6 +19,7 @@ const HeroSection = () => {
     costSaved: '$2M+',
     providers: '15+'
   });
+  const [heroContent, setHeroContent] = useState(null);
   const sectionRef = useRef(null);
 
   // Default metrics with fallback values
@@ -31,33 +32,40 @@ const HeroSection = () => {
 
   const [metrics, setMetrics] = useState(defaultMetrics);
 
-  // Fetch dynamic stats from API
+  // Fetch dynamic content from API
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchContent = async () => {
       try {
-        const response = await publicApi.getStats();
-        if (response.success && response.data) {
+        // Fetch platform stats
+        const statsResponse = await publicApi.getStats();
+        if (statsResponse.success && statsResponse.data) {
           setStats({
-            totalUsers: response.data.totalUsers || '500+',
-            totalApiCalls: response.data.totalApiCalls || '10M+',
-            costSaved: response.data.costSaved || '$2M+',
-            providers: response.data.providers || '15+'
+            totalUsers: statsResponse.data.totalUsers || '500+',
+            totalApiCalls: statsResponse.data.totalApiCalls || '10M+',
+            costSaved: statsResponse.data.costSaved || '$2M+',
+            providers: statsResponse.data.providers || '15+'
           });
 
           // Update metrics with real data if available
           setMetrics([
             { label: 'Cost Reduction', value: '40%', icon: '💰', description: 'Average savings' },
-            { label: 'API Calls Tracked', value: response.data.totalApiCalls || '10M+', icon: '📊', description: 'Monthly volume' },
-            { label: 'Providers Supported', value: response.data.providers || '15+', icon: '🔌', description: 'AI integrations' },
+            { label: 'API Calls Tracked', value: statsResponse.data.totalApiCalls || '10M+', icon: '📊', description: 'Monthly volume' },
+            { label: 'Providers Supported', value: statsResponse.data.providers || '15+', icon: '🔌', description: 'AI integrations' },
             { label: 'Uptime', value: '99.9%', icon: '⚡', description: 'Reliability' }
           ]);
         }
+
+        // Fetch hero content
+        const heroResponse = await publicApi.getLandingSection('hero');
+        if (heroResponse.success && heroResponse.data) {
+          setHeroContent(heroResponse.data);
+        }
       } catch (error) {
-        console.log('Using default stats:', error);
+        console.log('Using default content:', error);
       }
     };
 
-    fetchStats();
+    fetchContent();
   }, []);
 
   // Intersection Observer for scroll animations
@@ -111,16 +119,15 @@ const HeroSection = () => {
 
             {/* Headline */}
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              AI API Cost
+              {heroContent?.title || 'AI API Cost'}
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-red-600">
-                Management Platform
+                {heroContent?.titleHighlight || 'Management Platform'}
               </span>
             </h1>
 
             {/* Subheadline */}
             <p className="text-lg md:text-xl text-gray-300 mb-8 max-w-2xl">
-              Track token usage, optimize AI costs, and scale your infrastructure efficiently.
-              Get real-time analytics and forecasting for OpenAI, Anthropic, and 15+ AI providers.
+              {heroContent?.subtitle || 'Track token usage, optimize AI costs, and scale your infrastructure efficiently. Get real-time analytics and forecasting for OpenAI, Anthropic, and 15+ AI providers.'}
             </p>
 
             {/* CTA Buttons */}
@@ -129,7 +136,7 @@ const HeroSection = () => {
                 onClick={() => navigate('/register')}
                 className="px-8 py-4 bg-[#DC2626] text-white font-semibold rounded-xl hover:bg-[#B91C1C] transition-all transform hover:scale-105 shadow-lg shadow-red-500/25"
               >
-                Start Free Trial
+                {heroContent?.ctaButton || 'Start Free Trial'}
                 <svg className="inline-block w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
@@ -143,7 +150,7 @@ const HeroSection = () => {
                 }}
                 className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl hover:bg-white/20 transition-all border border-white/20"
               >
-                View Pricing
+                {heroContent?.secondaryCta || 'View Pricing'}
               </button>
             </div>
 

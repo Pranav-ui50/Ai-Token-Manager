@@ -104,13 +104,42 @@ function ReportDetailPage() {
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!date) return 'N/A';
+    try {
+      return new Date(date).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'N/A';
+    }
+  };
+
+  // Helper to safely get entries from Map or Object
+  const getEntries = (data) => {
+    if (!data) return [];
+    if (data instanceof Map) {
+      return Array.from(data.entries());
+    }
+    if (typeof data === 'object') {
+      return Object.entries(data);
+    }
+    return [];
+  };
+
+  // Helper to safely get values from Map or Object
+  const getValues = (data) => {
+    if (!data) return [];
+    if (data instanceof Map) {
+      return Array.from(data.values());
+    }
+    if (typeof data === 'object') {
+      return Object.values(data);
+    }
+    return [];
   };
 
   if (loading) {
@@ -204,7 +233,7 @@ function ReportDetailPage() {
           <div>
             <p className="text-sm text-gray-500">Date Range</p>
             <p className="font-medium">
-              {formatDate(report.parameters.dateRange.start)} - {formatDate(report.parameters.dateRange.end)}
+              {formatDate(report.parameters?.dateRange?.start)} - {formatDate(report.parameters?.dateRange?.end)}
             </p>
           </div>
           <div>
@@ -265,11 +294,11 @@ function ReportDetailPage() {
       {report.status === 'completed' && report.data && (
         <>
           {/* Summary */}
-          {report.data.summary && (
+          {report.data.summary && Object.keys(report.data.summary).length > 0 && (
             <div className="bg-white rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold mb-4">Summary</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {Array.from(report.data.summary.entries()).map(([key, value]) => (
+                {getEntries(report.data.summary).map(([key, value]) => (
                   <div key={key} className="bg-gray-50 rounded-lg p-4">
                     <p className="text-sm text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
                     <p className="text-xl font-semibold mt-1">{value}</p>
@@ -289,7 +318,7 @@ function ReportDetailPage() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subcategory</th>
-                      {report.data.breakdown[0]?.metrics && Array.from(report.data.breakdown[0].metrics.keys()).map((key) => (
+                      {report.data.breakdown[0]?.metrics && getEntries(report.data.breakdown[0].metrics).map(([key]) => (
                         <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           {key.replace(/([A-Z])/g, ' $1').trim()}
                         </th>
@@ -301,7 +330,7 @@ function ReportDetailPage() {
                       <tr key={index}>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.category}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{item.subcategory}</td>
-                        {item.metrics && Array.from(item.metrics.values()).map((value, idx) => (
+                        {item.metrics && getValues(item.metrics).map((value, idx) => (
                           <td key={idx} className="px-4 py-3 text-sm text-gray-900">{value}</td>
                         ))}
                       </tr>
@@ -322,7 +351,7 @@ function ReportDetailPage() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Period</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      {report.data.timeSeries[0]?.metrics && Array.from(report.data.timeSeries[0].metrics.keys()).map((key) => (
+                      {report.data.timeSeries[0]?.metrics && getEntries(report.data.timeSeries[0].metrics).map(([key]) => (
                         <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           {key.replace(/([A-Z])/g, ' $1').trim()}
                         </th>
@@ -336,7 +365,7 @@ function ReportDetailPage() {
                         <td className="px-4 py-3 text-sm text-gray-900">
                           {new Date(item.date).toLocaleDateString()}
                         </td>
-                        {item.metrics && Array.from(item.metrics.values()).map((value, idx) => (
+                        {item.metrics && getValues(item.metrics).map((value, idx) => (
                           <td key={idx} className="px-4 py-3 text-sm text-gray-900">{value}</td>
                         ))}
                       </tr>

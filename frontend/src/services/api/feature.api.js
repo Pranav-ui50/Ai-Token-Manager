@@ -109,6 +109,28 @@ const featureApi = {
   calculateCost: async (id, options = {}) => {
     const response = await api.post(`/features/${id}/calculate-cost`, options);
     return response.data;
+  },
+
+  /**
+   * Record usage for a feature
+   * @param {string} id - Feature ID
+   * @param {Object} usageData - Usage data
+   * @returns {Promise<Object>} Updated stats
+   */
+  recordUsage: async (id, usageData) => {
+    const response = await api.post(`/features/${id}/usage`, usageData);
+    return response.data;
+  },
+
+  /**
+   * Get usage history for a feature
+   * @param {string} id - Feature ID
+   * @param {Object} params - Query parameters (startDate, endDate)
+   * @returns {Promise<Object>} Usage history
+   */
+  getUsageHistory: async (id, params = {}) => {
+    const response = await api.get(`/features/${id}/usage`, { params });
+    return response.data;
   }
 };
 

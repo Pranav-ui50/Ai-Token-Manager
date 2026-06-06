@@ -61,6 +61,25 @@ const publicApi = {
   getFeatures: async () => {
     const response = await api.get('/public/features');
     return response.data;
+  },
+
+  /**
+   * Get all landing page content
+   * @returns {Promise} Landing page content
+   */
+  getLandingContent: async () => {
+    const response = await api.get('/public/landing-content');
+    return response.data;
+  },
+
+  /**
+   * Get specific landing page section content
+   * @param {string} section - Section name (hero, howItWorks, testimonials, faq, cta)
+   * @returns {Promise} Section content
+   */
+  getLandingSection: async (section) => {
+    const response = await api.get(`/public/landing-content/${section}`);
+    return response.data;
   }
 };
 

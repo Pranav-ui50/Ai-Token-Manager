@@ -26,7 +26,7 @@ const pricingHistoryApi = {
    */
   getByProvider: async (providerId, params = {}) => {
     const response = await api.get(`/pricing-history/provider/${providerId}`, { params });
-    return response.data.data;
+    return response.data.data || response.data;
   },
 
   /**

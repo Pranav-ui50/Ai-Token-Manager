@@ -76,6 +76,8 @@ function ProjectDetailPage() {
   const [models, setModels] = useState([]);
   const [providers, setProviders] = useState([]);
   const [filteredModels, setFilteredModels] = useState([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [modelsSource, setModelsSource] = useState(null); // 'api', 'database', or 'hybrid'
 
   useEffect(() => {
     fetchProject();
@@ -88,9 +90,10 @@ function ProjectDetailPage() {
       const fetchModelsAndProviders = async () => {
         try {
           const [modelsRes, providersRes] = await Promise.all([
-            modelApi.getAll(),
-            providerApi.getAll()
+            modelApi.getAll({ limit: 200, activeOnly: false }),  // Increased limit to get ALL models
+            providerApi.getAll({ limit: 100, activeOnly: false })
           ]);
+
 
           if (modelsRes.data) {
             setModels(modelsRes.data);
@@ -1045,13 +1048,49 @@ function ProjectDetailPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
                   <select
                     value={featureForm.provider}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const providerId = e.target.value;
-                      const filtered = providerId
-                        ? models.filter(m => m.provider?._id === providerId || m.provider === providerId)
-                        : models;
-                      setFilteredModels(filtered);
+
+                      if (!providerId) {
+                        setFilteredModels([]);
+                        setModelsSource(null);
+                        setFeatureForm({ ...featureForm, provider: '', model: '' });
+                        return;
+                      }
+
+                      // Set loading state
+                      setIsLoadingModels(true);
                       setFeatureForm({ ...featureForm, provider: providerId, model: '' });
+                      setFilteredModels([]);
+                      setModelsSource(null);
+
+                      try {
+                        // Fetch models from the provider's live API (force refresh to get latest)
+                        const response = await providerApi.getDynamicModels(providerId, { forceRefresh: true });
+                        const liveModels = response.models || [];
+
+                        // Process models for the dropdown
+                        const processedModels = liveModels.map(model => ({
+                          ...model,
+                          _id: model._id || model.id,
+                          displayName: model.displayName || model.name,
+                          isLiveModel: !model._id,
+                          source: model.source || (model._id ? 'database' : 'api')
+                        }));
+
+                        setFilteredModels(processedModels);
+                        setModelsSource(response.meta?.source || 'api');
+                      } catch (err) {
+                        console.error('Failed to fetch live models:', err);
+                        // Fallback to database models for this provider
+                        const dbModels = models.filter(m =>
+                          m.provider?._id === providerId || m.provider === providerId
+                        );
+                        setFilteredModels(dbModels);
+                        setModelsSource('database');
+                      } finally {
+                        setIsLoadingModels(false);
+                      }
                     }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
@@ -1073,22 +1112,45 @@ function ProjectDetailPage() {
                   <select
                     value={featureForm.model}
                     onChange={(e) => setFeatureForm({ ...featureForm, model: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    disabled={!featureForm.provider}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    disabled={!featureForm.provider || isLoadingModels}
                   >
-                    <option value="">Select Model</option>
+                    <option value="">
+                      {isLoadingModels ? 'Loading models from API...' : 'Select Model'}
+                    </option>
                     {filteredModels.map(model => (
-                      <option key={model._id} value={model._id}>
-                        {model.displayName || model.name} {model.pricing ? `($${model.pricing.inputPrice}/$${model.pricing.outputPrice}/1M)` : ''}
+                      <option key={model._id || model.id} value={model._id || model.id}>
+                        {model.displayName || model.name} {model.pricing?.inputPrice ? `($${model.pricing.inputPrice}/$${model.pricing.outputPrice || 0}/1M)` : ''}
                       </option>
                     ))}
                   </select>
-                  {!featureForm.provider && (
+                  {isLoadingModels && (
+                    <div className="mt-1 flex items-center gap-2 text-xs text-blue-600">
+                      <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Fetching live models from {providers.find(p => p._id === featureForm.provider)?.displayName || 'provider'}...</span>
+                    </div>
+                  )}
+                  {!featureForm.provider && !isLoadingModels && (
                     <p className="mt-1 text-xs text-gray-500">Select a provider first</p>
                   )}
-                  {featureForm.provider && filteredModels.length === 0 && (
+                  {featureForm.provider && !isLoadingModels && filteredModels.length === 0 && (
                     <p className="mt-1 text-xs text-amber-600">
-                      No models for this provider. <RouterLink to="/models" className="underline">Create one</RouterLink>
+                      No models found for this provider. <RouterLink to="/models" className="underline">Create one</RouterLink>
+                    </p>
+                  )}
+                  {featureForm.provider && !isLoadingModels && filteredModels.length > 0 && (
+                    <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                      {filteredModels.length} models loaded
+                      {modelsSource === 'api' && ' from live API'}
+                      {modelsSource === 'database' && ' from database'}
+                      {modelsSource === 'hybrid' && ' (live API + database)'}
+                      {modelsSource === 'database_fallback' && ' from database (API unavailable)'}
                     </p>
                   )}
                 </div>

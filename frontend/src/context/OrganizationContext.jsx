@@ -242,20 +242,6 @@ export function OrganizationProvider({ children }) {
     }
   }, [getOrganization]);
 
-  // Transfer ownership
-  const transferOwnership = useCallback(async (orgId, newOwnerId) => {
-    try {
-      dispatch({ type: ACTIONS.SET_LOADING, payload: true });
-      await organizationApi.transferOwnership(orgId, newOwnerId);
-      // Refresh organization to get updated owner
-      await getOrganization(orgId);
-    } catch (error) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
-      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
-      throw error;
-    }
-  }, [getOrganization]);
-
   // Leave organization
   const leaveOrganization = useCallback(async (orgId) => {
     try {
@@ -290,7 +276,6 @@ export function OrganizationProvider({ children }) {
     addMember,
     removeMember,
     updateMemberRole,
-    transferOwnership,
     leaveOrganization,
     clearError,
     setCurrentOrganization

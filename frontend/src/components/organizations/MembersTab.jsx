@@ -14,12 +14,11 @@ import Avatar from '../common/Avatar.jsx';
 import roleApi from '../../services/api/role.api.js';
 
 function MembersTab({ organization, organizationId }) {
-  const { addMember, removeMember, updateMemberRole, transferOwnership, leaveOrganization, getOrganization, clearError } = useOrganization();
+  const { addMember, removeMember, updateMemberRole, leaveOrganization, getOrganization, clearError } = useOrganization();
   const [members, setMembers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -174,24 +173,6 @@ function MembersTab({ organization, organizationId }) {
     }
   };
 
-  const handleTransferOwnership = async (e) => {
-    e.preventDefault();
-    if (!selectedMember) return;
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      await transferOwnership(organizationId, selectedMember.user._id);
-      setShowTransferModal(false);
-      setSelectedMember(null);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to transfer ownership');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleRemoveMember = async (memberId) => {
     if (!window.confirm('Are you sure you want to remove this member?')) return;
 
@@ -310,18 +291,6 @@ function MembersTab({ organization, organizationId }) {
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedMember(member);
-                            setShowTransferModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Transfer Ownership"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                           </svg>
                         </button>
                         <button
@@ -464,34 +433,6 @@ function MembersTab({ organization, organizationId }) {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      {/* Transfer Ownership Modal */}
-      <Modal
-        isOpen={showTransferModal}
-        onClose={() => {
-          setShowTransferModal(false);
-          setSelectedMember(null);
-        }}
-        title="Transfer Ownership"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Are you sure you want to transfer ownership to <strong>{selectedMember?.user?.firstName} {selectedMember?.user?.lastName}</strong>?
-          </p>
-          <p className="text-sm text-yellow-600 bg-yellow-50 p-3 rounded-md">
-            Warning: This action cannot be undone. You will become a regular member and the new owner will have full control over the organization.
-          </p>
-
-          <div className="flex justify-end space-x-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowTransferModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={handleTransferOwnership} isLoading={isLoading}>
-              Transfer Ownership
-            </Button>
-          </div>
-        </div>
       </Modal>
 
       {/* Leave Organization Modal */}

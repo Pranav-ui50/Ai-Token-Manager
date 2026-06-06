@@ -86,6 +86,15 @@ const ACTION_TYPES = [
   'bulk_update',
   'bulk_delete',
 
+  // Payment actions
+  'payment_created',
+  'payment_verified',
+  'payment_failed',
+  'payment_refunded',
+  'subscription_created',
+  'subscription_updated',
+  'subscription_cancelled',
+
   // System actions
   'system_error',
   'system_warning',
@@ -110,7 +119,10 @@ const RESOURCE_TYPES = [
   'role',
   'invitation',
   'settings',
-  'auth'
+  'auth',
+  'payment',
+  'invoice',
+  'subscription'
 ];
 
 const SEVERITY_LEVELS = ['info', 'warning', 'error', 'critical'];
@@ -147,7 +159,7 @@ const auditLogSchema = new mongoose.Schema({
   },
 
   resourceId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     index: true
   },
 

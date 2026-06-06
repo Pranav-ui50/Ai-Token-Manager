@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import simulationController from '../controllers/simulation.controller.js';
-import { protect, requirePermissions } from '../middlewares/auth.middleware.js';
+import { protect } from '../middlewares/auth.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import { body, param, query } from 'express-validator';
 
@@ -18,20 +18,18 @@ router.use(protect);
 /**
  * @route   GET /api/simulations/templates
  * @desc    Get simulation templates
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.get('/templates',
-  requirePermissions('run_simulations'),
   simulationController.getTemplates
 );
 
 /**
  * @route   GET /api/simulations/statistics/:organizationId
  * @desc    Get simulation statistics
- * @access  Private (requires view_simulations permission)
+ * @access  Private
  */
 router.get('/statistics/:organizationId',
-  requirePermissions('view_simulations'),
   [
     param('organizationId').isMongoId().withMessage('Invalid organization ID'),
     validate
@@ -42,10 +40,9 @@ router.get('/statistics/:organizationId',
 /**
  * @route   GET /api/simulations/organization/:organizationId
  * @desc    Get simulations for organization
- * @access  Private (requires view_simulations permission)
+ * @access  Private
  */
 router.get('/organization/:organizationId',
-  requirePermissions('view_simulations'),
   [
     param('organizationId').isMongoId().withMessage('Invalid organization ID'),
     query('status').optional().isIn(['draft', 'running', 'completed', 'failed', 'archived']),
@@ -58,10 +55,9 @@ router.get('/organization/:organizationId',
 /**
  * @route   POST /api/simulations/compare
  * @desc    Compare multiple simulations
- * @access  Private (requires view_simulations permission)
+ * @access  Private
  */
 router.post('/compare',
-  requirePermissions('view_simulations'),
   [
     body('simulationIds')
       .isArray({ min: 2, max: 5 })
@@ -77,10 +73,9 @@ router.post('/compare',
 /**
  * @route   POST /api/simulations
  * @desc    Create a new simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/',
-  requirePermissions('run_simulations'),
   [
     body('organizationId')
       .isMongoId()
@@ -111,10 +106,9 @@ router.post('/',
 /**
  * @route   GET /api/simulations/:id
  * @desc    Get simulation by ID
- * @access  Private (requires view_simulations permission)
+ * @access  Private
  */
 router.get('/:id',
-  requirePermissions('view_simulations'),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     validate
@@ -125,10 +119,9 @@ router.get('/:id',
 /**
  * @route   PUT /api/simulations/:id
  * @desc    Update simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.put('/:id',
-  requirePermissions('run_simulations'),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     body('name')
@@ -146,10 +139,9 @@ router.put('/:id',
 /**
  * @route   DELETE /api/simulations/:id
  * @desc    Delete simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.delete('/:id',
-  requirePermissions('run_simulations'),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     validate
@@ -160,10 +152,9 @@ router.delete('/:id',
 /**
  * @route   POST /api/simulations/:id/run
  * @desc    Run simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/:id/run',
-  requirePermissions('run_simulations'),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     validate
@@ -174,10 +165,9 @@ router.post('/:id/run',
 /**
  * @route   POST /api/simulations/:id/duplicate
  * @desc    Duplicate simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/:id/duplicate',
-  requirePermissions('run_simulations'),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     validate
@@ -188,10 +178,9 @@ router.post('/:id/duplicate',
 /**
  * @route   POST /api/simulations/scenario-comparison
  * @desc    Run scenario comparison
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/scenario-comparison',
-  requirePermissions('run_simulations'),
   [
     body('organizationId')
       .isMongoId()
@@ -207,10 +196,9 @@ router.post('/scenario-comparison',
 /**
  * @route   POST /api/simulations/sensitivity-analysis
  * @desc    Run sensitivity analysis
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/sensitivity-analysis',
-  requirePermissions('run_simulations'),
   [
     body('organizationId')
       .isMongoId()
@@ -229,10 +217,9 @@ router.post('/sensitivity-analysis',
 /**
  * @route   POST /api/simulations/monte-carlo
  * @desc    Run Monte Carlo simulation
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/monte-carlo',
-  requirePermissions('run_simulations'),
   [
     body('organizationId')
       .isMongoId()
@@ -255,10 +242,9 @@ router.post('/monte-carlo',
 /**
  * @route   POST /api/simulations/revenue-forecast
  * @desc    Generate revenue forecast with scenarios
- * @access  Private (requires run_simulations permission)
+ * @access  Private
  */
 router.post('/revenue-forecast',
-  requirePermissions('run_simulations'),
   [
     body('organizationId')
       .isMongoId()

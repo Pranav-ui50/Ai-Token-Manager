@@ -23,11 +23,11 @@ router.use(protect);
 /**
  * @route   POST /api/models
  * @desc    Create a new model
- * @access  Private (Admin only)
+ * @access  Private (Admin/Org Owner)
  */
 router.post(
   '/',
-  restrictTo('super_admin'),
+  restrictTo('super_admin', 'org_owner'),
   validateCreate,
   modelController.create
 );
@@ -45,11 +45,11 @@ router.get(
 /**
  * @route   POST /api/models/bulk-pricing
  * @desc    Bulk update model pricing
- * @access  Private (Admin only)
+ * @access  Private (Admin/Org Owner)
  */
 router.post(
   '/bulk-pricing',
-  restrictTo('super_admin'),
+  restrictTo('super_admin', 'org_owner'),
   validateBulkPricing,
   modelController.bulkUpdatePricing
 );
@@ -78,11 +78,11 @@ router.get(
 /**
  * @route   PUT /api/models/:id
  * @desc    Update model
- * @access  Private (Admin only)
+ * @access  Private (Admin/Org Owner)
  */
 router.put(
   '/:id',
-  restrictTo('super_admin'),
+  restrictTo('super_admin', 'org_owner'),
   validateUpdate,
   modelController.update
 );
@@ -90,11 +90,11 @@ router.put(
 /**
  * @route   DELETE /api/models/:id
  * @desc    Delete model
- * @access  Private (Admin only)
+ * @access  Private (Admin/Org Owner)
  */
 router.delete(
   '/:id',
-  restrictTo('super_admin'),
+  restrictTo('super_admin', 'org_owner'),
   validateModelId,
   modelController.delete
 );

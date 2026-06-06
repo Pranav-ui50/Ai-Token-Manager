@@ -86,6 +86,26 @@ router.post(
 );
 
 /**
+ * @route   POST /api/features/:id/usage
+ * @desc    Record usage for a feature
+ * @access  Private
+ */
+router.post(
+  '/:id/usage',
+  featureController.recordUsage
+);
+
+/**
+ * @route   GET /api/features/:id/usage
+ * @desc    Get usage history for a feature
+ * @access  Private
+ */
+router.get(
+  '/:id/usage',
+  featureController.getUsageHistory
+);
+
+/**
  * @route   GET /api/features/:id
  * @desc    Get feature by ID
  * @access  Private

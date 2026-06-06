@@ -240,8 +240,8 @@ router.use('/credits', creditRoutes);
 // Landing Page Content Routes
 // ===========================================
 
-import landingPageContentRoutes from './landingPageContent.routes.js';
-router.use('/', landingPageContentRoutes);
+import landingPageContentRoutes, { adminLandingContentRoutes } from './landingPageContent.routes.js';
+router.use('/public', landingPageContentRoutes);
 
 // ===========================================
 // Admin Routes
@@ -249,5 +249,6 @@ router.use('/', landingPageContentRoutes);
 
 import adminRoutes from './admin.routes.js';
 router.use('/admin', adminRoutes);
+router.use('/admin/landing-content', adminLandingContentRoutes);
 
 export default router;

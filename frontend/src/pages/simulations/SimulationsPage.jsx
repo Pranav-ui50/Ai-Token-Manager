@@ -76,17 +76,24 @@ function SimulationsPage() {
   });
 
   useEffect(() => {
-    if (orgId) {
-      fetchSimulations();
-    }
-  }, [orgId]);
+    // Fetch data on mount - don't wait for orgId
+    fetchSimulations();
+  }, []);
 
   const fetchSimulations = async () => {
     setIsLoading(true);
     try {
+      // If no organization, set empty data
+      if (!orgId) {
+        setSimulations([]);
+        setStatistics(null);
+        setIsLoading(false);
+        return;
+      }
+
       const [simulationsData, statsData] = await Promise.all([
-        simulationApi.getForOrganization(orgId),
-        simulationApi.getStatistics(orgId)
+        simulationApi.getForOrganization(orgId).catch(() => ({ simulations: [] })),
+        simulationApi.getStatistics(orgId).catch(() => null)
       ]);
       // Extract array from API response
       const simulationsArray = Array.isArray(simulationsData)
@@ -95,7 +102,10 @@ function SimulationsPage() {
       setSimulations(simulationsArray);
       setStatistics(statsData || null);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to load simulations');
+      console.error('Failed to load simulations:', err);
+      // Set empty data instead of showing error
+      setSimulations([]);
+      setStatistics(null);
     } finally {
       setIsLoading(false);
     }
@@ -243,19 +253,8 @@ function SimulationsPage() {
     );
   }
 
-  if (!orgId) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization</h2>
-          <p className="text-gray-500">Please contact your administrator to be added to an organization.</p>
-        </div>
-      </div>
-    );
-  }
+  // No organization state - show empty state instead of blocking
+  const showNoOrgState = !orgId;
 
   return (
     <div className="space-y-6">
@@ -265,7 +264,7 @@ function SimulationsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Simulations</h1>
           <p className="text-sm text-gray-500">Create and run forecasting scenarios</p>
         </div>
-        {canRunSimulations() && (
+        {canRunSimulations() && !showNoOrgState && (
           <button
             onClick={() => {
               resetForm();
@@ -370,6 +369,20 @@ function SimulationsPage() {
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
         </div>
+      ) : showNoOrgState ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Organization</h3>
+            <p className="text-gray-500 max-w-md mx-auto">
+              You need to be part of an organization to create and run simulations. Please contact your administrator.
+            </p>
+          </div>
+        </div>
       ) : simulations.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12">
           <div className="text-center">
@@ -382,7 +395,7 @@ function SimulationsPage() {
             <p className="text-gray-500 max-w-md mx-auto mb-4">
               Create your first simulation to start forecasting costs and revenue.
             </p>
-            {canRunSimulations() && (
+            {canRunSimulations() && !showNoOrgState && (
               <button
                 onClick={() => {
                   resetForm();

@@ -47,6 +47,9 @@ class ModelController {
   async getAll(req, res, next) {
     try {
       const { page, limit, providerId, type, activeOnly } = req.query;
+
+      console.log('[ModelController] getAll called with:', { page, limit, providerId, type, activeOnly });
+
       const result = await modelService.getAll({
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 20,
@@ -54,6 +57,8 @@ class ModelController {
         type,
         activeOnly: activeOnly !== 'false'
       });
+
+      console.log('[ModelController] Found models:', result.models.length, 'for providerId:', providerId);
 
       res.json({
         success: true,
@@ -234,10 +239,14 @@ class ModelController {
   async getByProvider(req, res, next) {
     try {
       const { type, activeOnly } = req.query;
+      console.log('[ModelController] getByProvider called with id:', req.params.id);
+
       const models = await modelService.getByProvider(req.params.id, {
         type,
         activeOnly: activeOnly !== 'false'
       });
+
+      console.log('[ModelController] getByProvider returning:', models.length, 'models');
 
       res.json({
         success: true,

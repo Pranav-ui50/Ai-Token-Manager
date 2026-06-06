@@ -2,75 +2,95 @@
  * Testimonials Section
  *
  * Customer testimonials with ratings.
+ * Dynamic content fetched from API.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import publicApi from '../../../services/api/public.api.js';
+
+// Default testimonials as fallback
+const defaultTestimonials = [
+  {
+    id: 1,
+    name: 'Sarah Chen',
+    role: 'CTO',
+    company: 'TechStartup Inc.',
+    image: null,
+    rating: 5,
+    quote: "TokenManager helped us reduce our AI costs by 45% in the first month. The real-time analytics and forecasting features are exactly what we needed to scale efficiently.",
+    highlight: '45% cost reduction'
+  },
+  {
+    id: 2,
+    name: 'Michael Rodriguez',
+    role: 'VP of Engineering',
+    company: 'DataDriven Co.',
+    image: null,
+    rating: 5,
+    quote: "The platform's ability to track usage across multiple AI providers in one dashboard is a game-changer. We went from spending hours on manual reports to having everything automated.",
+    highlight: 'Hours saved daily'
+  },
+  {
+    id: 3,
+    name: 'Emily Watson',
+    role: 'Product Manager',
+    company: 'AI Solutions Ltd.',
+    image: null,
+    rating: 5,
+    quote: "The scenario simulation feature helped us model different pricing strategies before implementation. It's saved us from making costly mistakes.",
+    highlight: 'Risk mitigation'
+  }
+];
 
 const TestimonialsSection = () => {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [testimonials, setTestimonials] = useState(defaultTestimonials);
+  const [title, setTitle] = useState('Trusted by Teams Worldwide');
+  const [subtitle, setSubtitle] = useState('See what our customers are saying about their experience with TokenManager.');
+  const [stats, setStats] = useState([
+    { label: 'Active Teams', value: '500+' },
+    { label: 'Costs Saved', value: '$2M+' },
+    { label: 'API Calls Tracked', value: '15M+' },
+    { label: 'Customer Rating', value: '4.9/5' }
+  ]);
 
-  const testimonials = [
-    {
-      id: 1,
-      name: 'Sarah Chen',
-      role: 'CTO',
-      company: 'TechStartup Inc.',
-      image: null,
-      rating: 5,
-      quote: "TokenManager helped us reduce our AI costs by 45% in the first month. The real-time analytics and forecasting features are exactly what we needed to scale efficiently.",
-      highlight: '45% cost reduction'
-    },
-    {
-      id: 2,
-      name: 'Michael Rodriguez',
-      role: 'VP of Engineering',
-      company: 'DataDriven Co.',
-      image: null,
-      rating: 5,
-      quote: "The platform's ability to track usage across multiple AI providers in one dashboard is a game-changer. We went from spending hours on manual reports to having everything automated.",
-      highlight: 'Hours saved daily'
-    },
-    {
-      id: 3,
-      name: 'Emily Watson',
-      role: 'Product Manager',
-      company: 'AI Solutions Ltd.',
-      image: null,
-      rating: 5,
-      quote: "The scenario simulation feature helped us model different pricing strategies before implementation. It's saved us from making costly mistakes.",
-      highlight: 'Risk mitigation'
-    },
-    {
-      id: 4,
-      name: 'David Kim',
-      role: 'Founder',
-      company: 'ScaleAI Startup',
-      image: null,
-      rating: 4,
-      quote: "As a startup, every dollar counts. TokenManager's break-even analysis helped us understand exactly when our AI investment would become profitable.",
-      highlight: 'Clear ROI visibility'
-    },
-    {
-      id: 5,
-      name: 'Lisa Thompson',
-      role: 'Finance Director',
-      company: 'Enterprise Corp',
-      image: null,
-      rating: 5,
-      quote: "The team management features and role-based access control make it easy for our entire organization to collaborate while maintaining proper oversight.",
-      highlight: 'Team collaboration'
-    },
-    {
-      id: 6,
-      name: 'James Miller',
-      role: 'DevOps Lead',
-      company: 'CloudFirst Technologies',
-      image: null,
-      rating: 5,
-      quote: "Integration was seamless. We connected all our AI providers within minutes and had complete visibility into our token usage immediately.",
-      highlight: 'Quick integration'
-    }
-  ];
+  // Fetch dynamic content from API
+  useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        const response = await publicApi.getLandingSection('testimonials');
+        if (response.success && response.data) {
+          if (response.data.items && response.data.items.length > 0) {
+            // Map API response to expected format
+            const mappedItems = response.data.items.map(item => ({
+              id: item.id || item._id || Math.random().toString(),
+              name: item.name || item.author || 'Anonymous',
+              role: item.role || 'User',
+              company: item.company || 'Company',
+              image: item.image || item.avatar || null,
+              rating: item.rating || 5,
+              quote: item.quote || item.testimonial || '',
+              highlight: item.highlight || 'Verified User'
+            }));
+            setTestimonials(mappedItems);
+          }
+          if (response.data.title) {
+            setTitle(response.data.title);
+          }
+          if (response.data.subtitle) {
+            setSubtitle(response.data.subtitle);
+          }
+          if (response.data.stats) {
+            setStats(response.data.stats);
+          }
+        }
+      } catch (error) {
+        console.log('Using default testimonials:', error);
+      }
+    };
+
+    fetchContent();
+  }, []);
 
   const renderStars = (rating) => {
     return (
@@ -89,16 +109,24 @@ const TestimonialsSection = () => {
     );
   };
 
+  // Safety check for testimonials
+  const currentTestimonial = testimonials[activeIndex] || testimonials[0];
+
+  // If no testimonials, don't render the section
+  if (testimonials.length === 0) {
+    return null;
+  }
+
   return (
     <section className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Trusted by Teams Worldwide
+            {title}
           </h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            See what our customers are saying about their experience with TokenManager.
+            {subtitle}
           </p>
         </div>
 
@@ -107,26 +135,28 @@ const TestimonialsSection = () => {
           <div className="flex flex-col md:flex-row gap-8 items-center">
             <div className="flex-shrink-0">
               <div className="w-24 h-24 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-full flex items-center justify-center text-white text-3xl font-bold">
-                {testimonials[activeIndex].name.charAt(0)}
+                {currentTestimonial?.name?.charAt(0) || 'A'}
               </div>
             </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex justify-center md:justify-start mb-4">
-                {renderStars(testimonials[activeIndex].rating)}
+                {renderStars(currentTestimonial?.rating || 5)}
               </div>
               <blockquote className="text-xl md:text-2xl text-gray-700 mb-4 leading-relaxed">
-                "{testimonials[activeIndex].quote}"
+                "{currentTestimonial?.quote || ''}"
               </blockquote>
               <div className="flex flex-col md:flex-row md:items-center gap-2">
-                <span className="font-semibold text-gray-900">{testimonials[activeIndex].name}</span>
+                <span className="font-semibold text-gray-900">{currentTestimonial?.name || 'Anonymous'}</span>
                 <span className="hidden md:inline text-gray-400">•</span>
-                <span className="text-gray-600">{testimonials[activeIndex].role}</span>
+                <span className="text-gray-600">{currentTestimonial?.role || 'User'}</span>
                 <span className="hidden md:inline text-gray-400">•</span>
-                <span className="text-[#DC2626] font-medium">{testimonials[activeIndex].company}</span>
+                <span className="text-[#DC2626] font-medium">{currentTestimonial?.company || 'Company'}</span>
               </div>
-              <div className="mt-3 inline-block px-4 py-1 bg-green-100 text-green-700 text-sm font-medium rounded-full">
-                {testimonials[activeIndex].highlight}
-              </div>
+              {currentTestimonial?.highlight && (
+                <div className="mt-3 inline-block px-4 py-1 bg-green-100 text-green-700 text-sm font-medium rounded-full">
+                  {currentTestimonial.highlight}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -135,7 +165,7 @@ const TestimonialsSection = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {testimonials.map((testimonial, index) => (
             <div
-              key={testimonial.id}
+              key={testimonial.id || index}
               onClick={() => setActiveIndex(index)}
               className={`bg-white rounded-xl p-6 border-2 cursor-pointer transition-all ${
                 activeIndex === index
@@ -145,18 +175,18 @@ const TestimonialsSection = () => {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center text-gray-600 font-semibold">
-                  {testimonial.name.charAt(0)}
+                  {testimonial?.name?.charAt(0) || 'A'}
                 </div>
                 <div>
-                  <div className="font-semibold text-gray-900">{testimonial.name}</div>
-                  <div className="text-sm text-gray-500">{testimonial.role}</div>
+                  <div className="font-semibold text-gray-900">{testimonial?.name || 'Anonymous'}</div>
+                  <div className="text-sm text-gray-500">{testimonial?.role || 'User'}</div>
                 </div>
               </div>
               <div className="mb-3">
-                {renderStars(testimonial.rating)}
+                {renderStars(testimonial?.rating || 5)}
               </div>
               <p className="text-sm text-gray-600 line-clamp-3">
-                "{testimonial.quote}"
+                "{testimonial?.quote || ''}"
               </p>
             </div>
           ))}
@@ -164,22 +194,12 @@ const TestimonialsSection = () => {
 
         {/* Stats */}
         <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl p-6 text-center">
-            <div className="text-3xl font-bold text-gray-900">500+</div>
-            <div className="text-sm text-gray-500">Active Teams</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 text-center">
-            <div className="text-3xl font-bold text-gray-900">$2M+</div>
-            <div className="text-sm text-gray-500">Costs Saved</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 text-center">
-            <div className="text-3xl font-bold text-gray-900">15M+</div>
-            <div className="text-sm text-gray-500">API Calls Tracked</div>
-          </div>
-          <div className="bg-white rounded-xl p-6 text-center">
-            <div className="text-3xl font-bold text-gray-900">4.9/5</div>
-            <div className="text-sm text-gray-500">Customer Rating</div>
-          </div>
+          {stats.map((stat, index) => (
+            <div key={index} className="bg-white rounded-xl p-6 text-center">
+              <div className="text-3xl font-bold text-gray-900">{stat.value}</div>
+              <div className="text-sm text-gray-500">{stat.label}</div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

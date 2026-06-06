@@ -251,6 +251,225 @@ class ProviderService {
       return models;
     }, 1800); // 30 min cache
   }
+
+  /**
+   * Toggle provider status (activate/deactivate)
+   * @param {string} providerId - Provider ID
+   * @param {boolean} isActive - New status
+   * @param {string} userId - User ID
+   * @returns {Object} Updated provider
+   */
+  async toggleStatus(providerId, isActive, userId) {
+    const provider = await Provider.findById(providerId);
+
+    if (!provider) {
+      throw new AppError('Provider not found', 404, 'NOT_FOUND');
+    }
+
+    // Check if trying to deactivate a provider with active models
+    if (isActive === false) {
+      const activeModelCount = await AIModel.countDocuments({
+        provider: providerId,
+        isActive: true
+      });
+
+      if (activeModelCount > 0) {
+        throw new AppError(
+          `Cannot deactivate provider with ${activeModelCount} active models. Deactivate models first.`,
+          400,
+          'HAS_ACTIVE_MODELS'
+        );
+      }
+    }
+
+    provider.isActive = isActive;
+    await provider.save();
+
+    logger.info(`Provider ${providerId} ${isActive ? 'activated' : 'deactivated'} by user ${userId}`);
+
+    // Invalidate cache
+    await Promise.all([
+      cacheService.del(this.cacheKeys.byId(providerId)),
+      cacheService.del(this.cacheKeys.bySlug(provider.slug)),
+      cacheService.del(this.cacheKeys.list)
+    ]);
+
+    return provider;
+  }
+
+  /**
+   * Get provider status with health check
+   * @param {string} providerId - Provider ID
+   * @returns {Object} Provider status
+   */
+  async getProviderStatus(providerId) {
+    const provider = await Provider.findById(providerId);
+
+    if (!provider) {
+      throw new AppError('Provider not found', 404, 'NOT_FOUND');
+    }
+
+    // Get model statistics
+    const totalModels = await AIModel.countDocuments({ provider: providerId });
+    const activeModels = await AIModel.countDocuments({ provider: providerId, isActive: true });
+    const deprecatedModels = await AIModel.countDocuments({
+      provider: providerId,
+      'deprecated.isDeprecated': true
+    });
+
+    // Get pricing update statistics
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const PricingHistory = (await import('../models/PricingHistory.js')).default;
+    const recentPricingUpdates = await PricingHistory.countDocuments({
+      provider: providerId,
+      createdAt: { $gte: thirtyDaysAgo }
+    });
+
+    // Determine health status
+    let healthStatus = 'healthy';
+    let healthIssues = [];
+
+    if (!provider.isActive) {
+      healthStatus = 'inactive';
+      healthIssues.push('Provider is inactive');
+    } else if (activeModels === 0 && totalModels > 0) {
+      healthStatus = 'warning';
+      healthIssues.push('No active models available');
+    }
+
+    if (deprecatedModels > 0 && deprecatedModels === activeModels) {
+      healthStatus = 'warning';
+      healthIssues.push('All active models are deprecated');
+    }
+
+    return {
+      provider: {
+        id: provider._id,
+        name: provider.name,
+        displayName: provider.displayName,
+        isActive: provider.isActive
+      },
+      status: {
+        health: healthStatus,
+        issues: healthIssues,
+        lastChecked: new Date()
+      },
+      statistics: {
+        totalModels,
+        activeModels,
+        deprecatedModels,
+        recentPricingUpdates
+      },
+      configuration: {
+        apiEndpoint: provider.apiEndpoint,
+        authType: provider.authType,
+        supportsStreaming: provider.settings?.supportsStreaming || false,
+        supportsVision: provider.settings?.supportsVision || false,
+        supportsFunctionCalling: provider.settings?.supportsFunctionCalling || false
+      }
+    };
+  }
+
+  /**
+   * Test provider API connectivity
+   * @param {string} providerId - Provider ID
+   * @returns {Object} Connectivity test result
+   */
+  async testConnectivity(providerId) {
+    const provider = await Provider.findById(providerId);
+
+    if (!provider) {
+      throw new AppError('Provider not found', 404, 'NOT_FOUND');
+    }
+
+    const result = {
+      provider: {
+        id: provider._id,
+        name: provider.name,
+        displayName: provider.displayName
+      },
+      timestamp: new Date(),
+      tests: []
+    };
+
+    // Test 1: API endpoint configuration
+    const hasApiEndpoint = !!provider.apiEndpoint;
+    result.tests.push({
+      name: 'API Endpoint Configuration',
+      status: hasApiEndpoint ? 'pass' : 'warning',
+      message: hasApiEndpoint
+        ? `Endpoint configured: ${provider.apiEndpoint}`
+        : 'No API endpoint configured'
+    });
+
+    // Test 2: Authentication configuration
+    const hasAuthConfig = provider.authType && provider.authConfig;
+    result.tests.push({
+      name: 'Authentication Configuration',
+      status: hasAuthConfig ? 'pass' : 'warning',
+      message: hasAuthConfig
+        ? `Auth type: ${provider.authType}`
+        : 'No authentication configured'
+    });
+
+    // Test 3: Active models available
+    const activeModels = await AIModel.countDocuments({
+      provider: providerId,
+      isActive: true
+    });
+    result.tests.push({
+      name: 'Active Models',
+      status: activeModels > 0 ? 'pass' : 'warning',
+      message: `${activeModels} active model(s) available`
+    });
+
+    // Test 4: Provider is active
+    result.tests.push({
+      name: 'Provider Status',
+      status: provider.isActive ? 'pass' : 'fail',
+      message: provider.isActive
+        ? 'Provider is active'
+        : 'Provider is inactive'
+    });
+
+    // Calculate overall status
+    const hasFail = result.tests.some(t => t.status === 'fail');
+    const hasWarning = result.tests.some(t => t.status === 'warning');
+    result.overallStatus = hasFail ? 'fail' : hasWarning ? 'warning' : 'pass';
+    result.isHealthy = !hasFail;
+
+    return result;
+  }
+
+  /**
+   * Get all provider statuses
+   * @returns {Array} All provider statuses
+   */
+  async getAllProviderStatuses() {
+    const providers = await Provider.find({}).sort({ name: 1 });
+
+    const statuses = await Promise.all(
+      providers.map(async (provider) => {
+        const activeModels = await AIModel.countDocuments({
+          provider: provider._id,
+          isActive: true
+        });
+
+        return {
+          id: provider._id,
+          name: provider.name,
+          displayName: provider.displayName,
+          isActive: provider.isActive,
+          activeModels,
+          hasApiEndpoint: !!provider.apiEndpoint
+        };
+      })
+    );
+
+    return statuses;
+  }
 }
 
 export default new ProviderService();

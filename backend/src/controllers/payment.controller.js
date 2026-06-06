@@ -20,11 +20,16 @@ class PaymentController {
    */
   async createStripeCheckout(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { planId, billingCycle, successUrl, cancelUrl } = req.body;
 
       if (!planId) {
         throw new AppError('Plan ID is required', 400, 'PLAN_REQUIRED');
+      }
+
+      if (!organizationId) {
+        throw new AppError('Organization ID is required', 400, 'ORGANIZATION_REQUIRED');
       }
 
       const result = await paymentService.createStripeCheckoutSession(
@@ -52,7 +57,8 @@ class PaymentController {
    */
   async createStripePaymentIntent(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { amount, currency, metadata } = req.body;
 
       if (!amount || amount <= 0) {
@@ -83,7 +89,8 @@ class PaymentController {
    */
   async createStripeSubscription(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { planId, billingCycle, paymentMethodId } = req.body;
 
       if (!planId) {
@@ -114,7 +121,8 @@ class PaymentController {
    */
   async cancelStripeSubscription(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { immediately } = req.body;
 
       const result = await paymentService.cancelStripeSubscription(organizationId, immediately);
@@ -194,11 +202,23 @@ class PaymentController {
    */
   async createRazorpayOrder(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { planId, billingCycle } = req.body;
+
+      logger.info(`[PaymentController] Razorpay order request:`, {
+        organizationId,
+        planId,
+        billingCycle,
+        userOrg: req.user.organization
+      });
 
       if (!planId) {
         throw new AppError('Plan ID is required', 400, 'PLAN_REQUIRED');
+      }
+
+      if (!organizationId) {
+        throw new AppError('Organization ID is required. Please ensure you are logged in and have an organization.', 400, 'ORGANIZATION_REQUIRED');
       }
 
       const result = await paymentService.createRazorpayOrder(
@@ -213,7 +233,7 @@ class PaymentController {
         message: 'Order created successfully'
       });
     } catch (error) {
-      logger.error(`[PaymentController] Razorpay order error: ${error.message}`);
+      logger.error(`[PaymentController] Razorpay order error: ${error.message}`, { stack: error.stack });
       next(error);
     }
   }
@@ -224,7 +244,8 @@ class PaymentController {
    */
   async createRazorpaySubscription(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { planId, billingCycle } = req.body;
 
       if (!planId) {
@@ -254,11 +275,26 @@ class PaymentController {
    */
   async verifyRazorpayPayment(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user?.organization;
       const { orderId, paymentId, signature } = req.body;
 
+      logger.info('[PaymentController] Verify request received:', {
+        organizationId,
+        orderId,
+        paymentId,
+        hasSignature: !!signature,
+        userOrg: req.user?.organization
+      });
+
       if (!orderId || !paymentId || !signature) {
+        logger.error('[PaymentController] Missing required params:', { orderId, paymentId, hasSignature: !!signature });
         throw new AppError('Order ID, payment ID, and signature are required', 400, 'MISSING_PARAMS');
+      }
+
+      if (!organizationId) {
+        logger.error('[PaymentController] Missing organizationId');
+        throw new AppError('Organization ID is required', 400, 'MISSING_ORG_ID');
       }
 
       const result = await paymentService.verifyAndProcessRazorpayPayment(
@@ -285,7 +321,8 @@ class PaymentController {
    */
   async cancelRazorpaySubscription(req, res, next) {
     try {
-      const organizationId = req.user.organization;
+      // Use organizationId from request body, fallback to user's organization
+      const organizationId = req.body.organizationId || req.user.organization;
       const { cancelAtPeriodEnd } = req.body;
 
       const result = await paymentService.cancelRazorpaySubscription(
@@ -380,7 +417,7 @@ class PaymentController {
    */
   async getPlans(req, res, next) {
     try {
-      const plans = paymentService.getPlans();
+      const plans = await paymentService.getPlans();
 
       res.status(200).json({
         success: true,

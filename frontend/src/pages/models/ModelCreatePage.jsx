@@ -111,7 +111,7 @@ function ModelCreatePage() {
         name: formData.name.trim(),
         displayName: formData.displayName.trim() || formData.name.trim(),
         description: formData.description.trim() || undefined,
-        provider: formData.provider,
+        providerId: formData.provider, // Backend expects providerId, not provider
         type: formData.type,
         capabilities: {
           contextWindow: Number(formData.contextWindow) || 4096,

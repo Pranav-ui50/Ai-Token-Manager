@@ -5,17 +5,21 @@
  */
 
 import { Navigate, Outlet } from 'react-router-dom';
-
-// TODO: Import auth context/store when implemented
-// import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const PrivateRoute = () => {
-  // TODO: Check authentication status
-  // const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
-  // Placeholder: Always authenticated for now
-  const isAuthenticated = true;
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
 
+  // Redirect unauthenticated users to login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }

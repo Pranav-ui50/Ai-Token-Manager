@@ -72,7 +72,7 @@ const providerApi = {
   },
 
   /**
-   * Get provider models
+   * Get provider models (from database)
    * @param {string} providerId - Provider ID
    * @param {Object} params - Query parameters
    * @returns {Promise} Models
@@ -80,6 +80,47 @@ const providerApi = {
   getModels: async (providerId, params = {}) => {
     const response = await api.get(`/providers/${providerId}/models`, { params });
     return response.data.data;
+  },
+
+  /**
+   * Get dynamic models from provider API
+   * Fetches models directly from provider's API if supported,
+   * falls back to database models otherwise
+   * @param {string} providerId - Provider ID
+   * @param {Object} options - Options
+   * @returns {Promise} Dynamic models with metadata
+   */
+  getDynamicModels: async (providerId, options = {}) => {
+    const { forceRefresh = false, mergePricing = true } = options;
+    const params = {
+      forceRefresh: forceRefresh ? 'true' : 'false',
+      mergePricing: mergePricing ? 'true' : 'false'
+    };
+
+    const response = await api.get(`/providers/${providerId}/dynamic-models`, { params });
+    return {
+      models: response.data.data || [],
+      meta: response.data.meta || {}
+    };
+  },
+
+  /**
+   * Get supported providers for dynamic model discovery
+   * @returns {Promise} List of supported providers
+   */
+  getSupportedProviders: async () => {
+    const response = await api.get('/providers/supported/dynamic');
+    return response.data.data || [];
+  },
+
+  /**
+   * Clear dynamic models cache for a provider
+   * @param {string} providerId - Provider ID
+   * @returns {Promise}
+   */
+  clearModelsCache: async (providerId) => {
+    const response = await api.delete(`/providers/${providerId}/dynamic-models/cache`);
+    return response.data;
   }
 };
 

@@ -7,27 +7,67 @@
 import { body, param, query } from 'express-validator';
 import { validate } from '../middlewares/validation.middleware.js';
 
+// Helper to validate plan ID (can be slug or MongoDB ObjectId)
+const isValidPlanId = (value) => {
+  // Check if it's a valid slug (starter, professional, enterprise)
+  const validSlugs = ['starter', 'professional', 'enterprise', 'free'];
+  if (validSlugs.includes(value)) {
+    return true;
+  }
+  // Check if it's a valid MongoDB ObjectId (24 character hex string)
+  if (/^[a-fA-F0-9]{24}$/.test(value)) {
+    return true;
+  }
+  return false;
+};
+
 /**
  * Validate Stripe checkout session creation
  */
 export const validateStripeCheckout = validate([
+  body('organizationId')
+    .optional()
+    .custom((value) => {
+      if (value && !/^[a-fA-F0-9]{24}$/.test(value)) {
+        throw new Error('Organization ID must be a valid MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('planId')
     .notEmpty()
     .withMessage('Plan ID is required')
-    .isIn(['starter', 'professional', 'enterprise'])
-    .withMessage('Plan must be starter, professional, or enterprise'),
+    .custom((value) => {
+      if (!isValidPlanId(value)) {
+        throw new Error('Plan ID must be a valid plan slug or MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('billingCycle')
     .optional()
     .isIn(['monthly', 'yearly'])
     .withMessage('Billing cycle must be monthly or yearly'),
   body('successUrl')
     .optional()
-    .isURL()
-    .withMessage('Success URL must be a valid URL'),
+    .custom((value) => {
+      if (value && typeof value === 'string' && value.length > 0) {
+        // Accept any non-empty string that looks like a URL
+        if (!value.startsWith('http://') && !value.startsWith('https://')) {
+          throw new Error('Success URL must start with http:// or https://');
+        }
+      }
+      return true;
+    }),
   body('cancelUrl')
     .optional()
-    .isURL()
-    .withMessage('Cancel URL must be a valid URL')
+    .custom((value) => {
+      if (value && typeof value === 'string' && value.length > 0) {
+        // Accept any non-empty string that looks like a URL
+        if (!value.startsWith('http://') && !value.startsWith('https://')) {
+          throw new Error('Cancel URL must start with http:// or https://');
+        }
+      }
+      return true;
+    })
 ]);
 
 /**
@@ -53,11 +93,23 @@ export const validateStripePaymentIntent = validate([
  * Validate Stripe subscription creation
  */
 export const validateStripeSubscription = validate([
+  body('organizationId')
+    .optional()
+    .custom((value) => {
+      if (value && !/^[a-fA-F0-9]{24}$/.test(value)) {
+        throw new Error('Organization ID must be a valid MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('planId')
     .notEmpty()
     .withMessage('Plan ID is required')
-    .isIn(['starter', 'professional', 'enterprise'])
-    .withMessage('Plan must be starter, professional, or enterprise'),
+    .custom((value) => {
+      if (!isValidPlanId(value)) {
+        throw new Error('Plan ID must be a valid plan slug or MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('billingCycle')
     .optional()
     .isIn(['monthly', 'yearly'])
@@ -72,11 +124,23 @@ export const validateStripeSubscription = validate([
  * Validate Razorpay order creation
  */
 export const validateRazorpayOrder = validate([
+  body('organizationId')
+    .optional()
+    .custom((value) => {
+      if (value && !/^[a-fA-F0-9]{24}$/.test(value)) {
+        throw new Error('Organization ID must be a valid MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('planId')
     .notEmpty()
     .withMessage('Plan ID is required')
-    .isIn(['starter', 'professional', 'enterprise'])
-    .withMessage('Plan must be starter, professional, or enterprise'),
+    .custom((value) => {
+      if (!isValidPlanId(value)) {
+        throw new Error('Plan ID must be a valid plan slug or MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('billingCycle')
     .optional()
     .isIn(['monthly', 'yearly'])
@@ -87,21 +151,23 @@ export const validateRazorpayOrder = validate([
  * Validate Razorpay payment verification
  */
 export const validateRazorpayVerify = validate([
+  body('organizationId')
+    .optional()
+    .custom((value) => {
+      if (value && !/^[a-fA-F0-9]{24}$/.test(value)) {
+        throw new Error('Organization ID must be a valid MongoDB ObjectId');
+      }
+      return true;
+    }),
   body('orderId')
     .notEmpty()
-    .withMessage('Order ID is required')
-    .matches(/^order_[a-zA-Z0-9]+$/)
-    .withMessage('Invalid Razorpay order ID format'),
+    .withMessage('Order ID is required'),
   body('paymentId')
     .notEmpty()
-    .withMessage('Payment ID is required')
-    .matches(/^pay_[a-zA-Z0-9]+$/)
-    .withMessage('Invalid Razorpay payment ID format'),
+    .withMessage('Payment ID is required'),
   body('signature')
     .notEmpty()
     .withMessage('Signature is required')
-    .isLength({ min: 64, max: 64 })
-    .withMessage('Signature must be 64 characters')
 ]);
 
 /**

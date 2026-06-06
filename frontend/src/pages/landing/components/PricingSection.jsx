@@ -8,12 +8,73 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import publicApi from '../../../services/api/public.api.js';
 
+// Default plans as fallback
+const DEFAULT_PLANS = [
+  {
+    id: 'free',
+    name: 'Free',
+    tier: 'free',
+    description: 'Perfect for getting started with AI cost management',
+    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
+    credits: { includedCredits: 10000, creditType: 'token' },
+    limits: { maxUsers: 1, maxApiCalls: 1000 },
+    isPopular: false
+  },
+  {
+    id: 'starter',
+    name: 'Starter',
+    tier: 'starter',
+    description: 'Great for small teams exploring AI APIs',
+    billing: { price: 29, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 500000, creditType: 'token' },
+    limits: { maxUsers: 3, maxApiCalls: 10000 },
+    isPopular: false
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    tier: 'professional',
+    description: 'Ideal for growing teams with advanced AI needs',
+    billing: { price: 99, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 2000000, creditType: 'token' },
+    limits: { maxUsers: 10, maxApiCalls: 50000 },
+    isPopular: true
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    tier: 'business',
+    description: 'For organizations with heavy AI API usage',
+    billing: { price: 299, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 10000000, creditType: 'token' },
+    limits: { maxUsers: 50, maxApiCalls: 200000 },
+    isPopular: false
+  }
+];
+
 const PricingSection = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState([]);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [billingInterval, setBillingInterval] = useState('month');
+  const [currency, setCurrency] = useState('USD');
+
+  // Currency conversion rates (approximate)
+  const conversionRates = {
+    USD: 1,
+    INR: 83.5, // Approximate USD to INR rate
+    EUR: 0.92,
+    GBP: 0.79
+  };
+
+  // Currency symbols
+  const currencySymbols = {
+    USD: '$',
+    INR: '₹',
+    EUR: '€',
+    GBP: '£'
+  };
 
   useEffect(() => {
     fetchPlans();
@@ -23,24 +84,27 @@ const PricingSection = () => {
     try {
       setLoading(true);
       const response = await publicApi.getPlans();
-      if (response.success) {
-        setPlans(response.data || []);
+      if (response.success && response.data && response.data.length > 0) {
+        setPlans(response.data);
+      } else {
+        // Use default plans if API returns empty
+        console.log('Using default plans');
+        setPlans(DEFAULT_PLANS);
       }
     } catch (err) {
-      setError('Failed to load plans');
-      console.error(err);
+      console.error('Failed to load plans from API, using defaults:', err);
+      // Use default plans on error
+      setPlans(DEFAULT_PLANS);
+      setError('');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatPrice = (price, currency = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(price);
+  const formatPrice = (price, curr = 'USD') => {
+    const symbol = currencySymbols[curr] || '$';
+    const convertedPrice = price * (conversionRates[curr] || 1);
+    return `${symbol}${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
   const getTierColor = (tier) => {
@@ -66,15 +130,16 @@ const PricingSection = () => {
   };
 
   const getDisplayPrice = (plan) => {
+    const basePrice = plan.billing?.price || 0;
     if (billingInterval === 'year' && plan.billing?.interval === 'month') {
       // Calculate yearly price with 20% discount
-      return (plan.billing?.price || 0) * 12 * 0.8;
+      return basePrice * 12 * 0.8;
     }
-    return plan.billing?.price || 0;
+    return basePrice;
   };
 
   const handleSelectPlan = (plan) => {
-    navigate(`/register?plan=${plan.id}`);
+    navigate(`/register?plan=${plan.id}&currency=${currency}&billing=${billingInterval}`);
   };
 
   if (loading) {
@@ -90,6 +155,11 @@ const PricingSection = () => {
     );
   }
 
+  // Filter out Enterprise plans - they will be shown as "Contact Us"
+  const displayPlans = plans.filter(plan => plan.tier !== 'enterprise');
+  const freePlan = displayPlans.find(plan => plan.tier === 'free');
+  const paidPlans = displayPlans.filter(plan => plan.tier !== 'free');
+
   return (
     <section id="pricing" className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -103,26 +173,49 @@ const PricingSection = () => {
           </p>
 
           {/* Billing Toggle */}
-          <div className="flex items-center justify-center gap-4 mt-8">
-            <span className={`text-sm font-medium ${billingInterval === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>
-              Monthly
-            </span>
-            <button
-              onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
-              className={`relative w-14 h-7 rounded-full transition-colors ${
-                billingInterval === 'year' ? 'bg-[#DC2626]' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                  billingInterval === 'year' ? 'transform translate-x-7' : ''
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mt-8">
+            {/* Currency Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500">Currency:</span>
+              <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1">
+                {['USD', 'INR', 'EUR', 'GBP'].map((curr) => (
+                  <button
+                    key={curr}
+                    onClick={() => setCurrency(curr)}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      currency === curr
+                        ? 'bg-[#DC2626] text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {curr}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Billing Interval Toggle */}
+            <div className="flex items-center gap-4">
+              <span className={`text-sm font-medium ${billingInterval === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>
+                Monthly
+              </span>
+              <button
+                onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
+                className={`relative w-14 h-7 rounded-full transition-colors ${
+                  billingInterval === 'year' ? 'bg-[#DC2626]' : 'bg-gray-300'
                 }`}
-              />
-            </button>
-            <span className={`text-sm font-medium ${billingInterval === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>
-              Yearly
-              <span className="ml-1 text-green-600 font-semibold">(Save 20%)</span>
-            </span>
+              >
+                <span
+                  className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    billingInterval === 'year' ? 'transform translate-x-7' : ''
+                  }`}
+                />
+              </button>
+              <span className={`text-sm font-medium ${billingInterval === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>
+                Yearly
+                <span className="ml-1 text-green-600 font-semibold">(Save 20%)</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -146,7 +239,76 @@ const PricingSection = () => {
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {plans.map((plan) => {
+            {/* Free Plan */}
+            {freePlan && (
+              <div key={freePlan.id}>
+                <div
+                  className={`relative bg-white rounded-2xl border-2 border-gray-200 overflow-hidden transition-all hover:shadow-xl`}
+                >
+                  <div className="p-6">
+                    {/* Plan Header */}
+                    <div className="mb-4">
+                      <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                        Free
+                      </span>
+                      <h3 className="mt-2 text-xl font-bold text-gray-900">{freePlan.name}</h3>
+                      {freePlan.description && (
+                        <p className="text-sm text-gray-500 mt-1">{freePlan.description}</p>
+                      )}
+                    </div>
+
+                    {/* Price */}
+                    <div className="mb-6">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-4xl font-bold text-gray-900">Free</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">Forever free</p>
+                    </div>
+
+                    {/* Features */}
+                    <div className="space-y-3 mb-6">
+                      {freePlan.credits?.includedCredits > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">
+                            {freePlan.credits.includedCredits.toLocaleString()} {freePlan.credits.creditType || 'tokens'}
+                          </span>
+                        </div>
+                      )}
+                      {freePlan.limits?.maxUsers && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">Up to {freePlan.limits.maxUsers} user{freePlan.limits.maxUsers > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                      {freePlan.limits?.maxApiCalls && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">{freePlan.limits.maxApiCalls.toLocaleString()} API calls</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CTA Button */}
+                    <button
+                      onClick={() => handleSelectPlan(freePlan)}
+                      className="w-full py-3 px-4 rounded-lg font-semibold bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all"
+                    >
+                      Get Started Free
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Paid Plans */}
+            {paidPlans.map((plan) => {
               const tierStyle = getTierColor(plan.tier);
               const isPopular = plan.isPopular || plan.tier === 'professional';
 
@@ -180,17 +342,15 @@ const PricingSection = () => {
                     <div className="mb-6">
                       <div className="flex items-baseline gap-1">
                         <span className="text-4xl font-bold text-gray-900">
-                          {plan.billing?.price === 0 ? 'Free' : formatPrice(getDisplayPrice(plan), plan.billing?.currency)}
+                          {formatPrice(getDisplayPrice(plan), currency)}
                         </span>
-                        {plan.billing?.price > 0 && (
-                          <span className="text-gray-500">
-                            /{billingInterval === 'year' ? 'year' : plan.billing?.interval || 'month'}
-                          </span>
-                        )}
+                        <span className="text-gray-500">
+                          /{billingInterval === 'year' ? 'year' : plan.billing?.interval || 'month'}
+                        </span>
                       </div>
                       {billingInterval === 'year' && plan.billing?.price > 0 && plan.billing?.interval === 'month' && (
                         <p className="text-sm text-gray-400 mt-1">
-                          <span className="line-through">{formatPrice((plan.billing?.price || 0) * 12, plan.billing?.currency)}/year</span>
+                          <span className="line-through">{formatPrice((plan.billing?.price || 0) * 12, currency)}/year</span>
                         </p>
                       )}
                     </div>
@@ -281,7 +441,7 @@ const PricingSection = () => {
                           : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                       }`}
                     >
-                      {plan.billing?.price === 0 ? 'Get Started' : 'Start Free Trial'}
+                      Start Free Trial
                     </button>
 
                     {/* Trial Info */}
@@ -296,20 +456,6 @@ const PricingSection = () => {
             })}
           </div>
         )}
-
-        {/* Enterprise CTA */}
-        <div className="mt-12 text-center bg-white rounded-xl p-8 border border-gray-200">
-          <h3 className="text-xl font-bold text-gray-900 mb-2">Need a custom solution?</h3>
-          <p className="text-gray-600 mb-4">
-            Enterprise plans with dedicated support, custom limits, and SLA guarantees.
-          </p>
-          <button
-            onClick={() => navigate('/contact')}
-            className="px-6 py-2 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Contact Sales
-          </button>
-        </div>
       </div>
     </section>
   );

@@ -42,9 +42,6 @@ function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Get organization ID from user
-  const orgId = user?.organization?._id || user?.organization;
-
   // Data states
   const [dashboardData, setDashboardData] = useState(null);
   const [costsData, setCostsData] = useState(null);
@@ -58,10 +55,9 @@ function AnalyticsPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
-    if (orgId) {
-      fetchAllData();
-    }
-  }, [orgId, projectId]);
+    // Always fetch data - the backend handles users without organizations
+    fetchAllData();
+  }, [projectId]);
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -121,23 +117,6 @@ function AnalyticsPage() {
   // Loading state
   if (authLoading || isLoading) {
     return <Loader fullPage text="Loading analytics..." />;
-  }
-
-  // No organization state
-  if (!orgId) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-96">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No Organization</h2>
-          <p className="text-gray-500 mb-4">Please contact your administrator to be added to an organization.</p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -292,6 +271,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
   const summary = data?.summary || { costs: {}, features: {}, usage: {} };
   const costTrend = data?.costTrend || [];
   const recentActivity = data?.recentActivity || [];
+  const costByCategory = summary?.costs?.byCategory || [];
 
   return (
     <div className="space-y-6">
@@ -306,7 +286,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Cost</p>
-              <p className="text-xl font-bold text-gray-900">{formatCurrency(summary.costs?.total || 0)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatCurrency(summary?.costs?.total || 0)}</p>
             </div>
           </div>
         </div>
@@ -320,7 +300,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Active Features</p>
-              <p className="text-xl font-bold text-gray-900">{summary.features?.active || 0} / {summary.features?.total || 0}</p>
+              <p className="text-xl font-bold text-gray-900">{summary?.features?.active || 0} / {summary?.features?.total || 0}</p>
             </div>
           </div>
         </div>
@@ -334,7 +314,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Tokens</p>
-              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage?.totalTokens || 0)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatNumber(summary?.usage?.totalTokens || 0)}</p>
             </div>
           </div>
         </div>
@@ -349,7 +329,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </div>
             <div>
               <p className="text-xs text-gray-500">Total Requests</p>
-              <p className="text-xl font-bold text-gray-900">{formatNumber(summary.usage?.totalRequests || 0)}</p>
+              <p className="text-xl font-bold text-gray-900">{formatNumber(summary?.usage?.totalRequests || 0)}</p>
             </div>
           </div>
         </div>
@@ -360,31 +340,43 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
         {/* Cost Trend Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Trend (Last 7 Days)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={costTrend || []}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.primary} strokeWidth={2} name="Cost ($)" />
-            </LineChart>
-          </ResponsiveContainer>
+          {costTrend && costTrend.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={costTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Legend />
+                <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.primary} strokeWidth={2} name="Cost ($)" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-gray-400">
+              No trend data available
+            </div>
+          )}
         </div>
 
         {/* Cost by Category */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Category</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={summary.costs.byCategory || []}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="category" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
-            </BarChart>
-          </ResponsiveContainer>
+          {costByCategory && costByCategory.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={costByCategory}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="category" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Legend />
+                <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[300px] flex items-center justify-center text-gray-400">
+              No category data available
+            </div>
+          )}
         </div>
       </div>
 
@@ -435,74 +427,90 @@ function CostsTab({ data, formatCurrency, formatNumber }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Cost</p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary.totalCost || 0)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatCurrency(summary?.totalCost || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Tokens</p>
-          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalTokens || 0)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary?.totalTokens || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Requests</p>
-          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary.totalRequests || 0)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatNumber(summary?.totalRequests || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Features</p>
-          <p className="text-2xl font-bold text-gray-900">{summary.featureCount || 0}</p>
+          <p className="text-2xl font-bold text-gray-900">{summary?.featureCount || 0}</p>
         </div>
       </div>
 
       {/* Cost by Model */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Model</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={costsByModel || []} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" tick={{ fontSize: 12 }} />
-            <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-            <Tooltip formatter={(value) => formatCurrency(value)} />
-            <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
-          </BarChart>
-        </ResponsiveContainer>
+        {costsByModel && costsByModel.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={costsByModel} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" tick={{ fontSize: 12 }} />
+              <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-[300px] flex items-center justify-center text-gray-400">
+            No model cost data available
+          </div>
+        )}
       </div>
 
       {/* Cost by Provider */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Provider</h3>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={costsByProvider || []}
-                dataKey="cost"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {(costsByProvider || []).map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-            </PieChart>
-          </ResponsiveContainer>
+          {costsByProvider && costsByProvider.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={costsByProvider}
+                  dataKey="cost"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {costsByProvider.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-gray-400">
+              No provider data available
+            </div>
+          )}
         </div>
 
         {/* Top Cost Features */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Cost Features</h3>
-          <div className="space-y-3">
-            {(topCostFeatures || []).slice(0, 5).map((feature, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{feature.name}</p>
-                  <p className="text-xs text-gray-500">{formatNumber(feature.tokens)} tokens</p>
+          {topCostFeatures && topCostFeatures.length > 0 ? (
+            <div className="space-y-3">
+              {topCostFeatures.slice(0, 5).map((feature, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{feature.name}</p>
+                    <p className="text-xs text-gray-500">{formatNumber(feature.tokens)} tokens</p>
+                  </div>
+                  <p className="text-sm font-bold text-gray-900">{formatCurrency(feature.cost)}</p>
                 </div>
-                <p className="text-sm font-bold text-gray-900">{formatCurrency(feature.cost)}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-center py-8">No feature cost data available</p>
+          )}
         </div>
       </div>
     </div>
@@ -522,22 +530,22 @@ function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Revenue</p>
-          <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalRevenue || 0)}</p>
+          <p className="text-2xl font-bold text-green-600">{formatCurrency(summary?.totalRevenue || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Costs</p>
-          <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalCosts || 0)}</p>
+          <p className="text-2xl font-bold text-red-600">{formatCurrency(summary?.totalCosts || 0)}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Total Profit</p>
-          <p className={`text-2xl font-bold ${(summary.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(summary.totalProfit || 0)}
+          <p className={`text-2xl font-bold ${(summary?.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {formatCurrency(summary?.totalProfit || 0)}
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Overall Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.overallMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.overallMargin || 0}%
+          <p className={`text-2xl font-bold ${parseFloat(summary?.overallMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary?.overallMargin || 0}%
           </p>
         </div>
       </div>
@@ -546,78 +554,90 @@ function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performers</h3>
-          <div className="space-y-3">
-            {(topPerformers || []).map((feature, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{feature.featureName}</p>
-                  <p className="text-xs text-gray-500">{formatCurrency(feature.profit)} profit</p>
+          {topPerformers && topPerformers.length > 0 ? (
+            <div className="space-y-3">
+              {topPerformers.map((feature, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{feature.featureName}</p>
+                    <p className="text-xs text-gray-500">{formatCurrency(feature.profit)} profit</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    {feature.margin}%
+                  </span>
                 </div>
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                  {feature.margin}%
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-center py-4">No performer data available</p>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Bottom Performers</h3>
-          <div className="space-y-3">
-            {(bottomPerformers || []).map((feature, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{feature.featureName}</p>
-                  <p className="text-xs text-gray-500">{formatCurrency(feature.profit)} profit</p>
+          {bottomPerformers && bottomPerformers.length > 0 ? (
+            <div className="space-y-3">
+              {bottomPerformers.map((feature, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{feature.featureName}</p>
+                    <p className="text-xs text-gray-500">{formatCurrency(feature.profit)} profit</p>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                    {feature.margin}%
+                  </span>
                 </div>
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                  {feature.margin}%
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-center py-4">No performer data available</p>
+          )}
         </div>
       </div>
 
       {/* All Features Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">All Features</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {(features || []).map((feature, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500 capitalize">{feature.category}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs.totalCost)}</td>
-                  <td className={`px-4 py-3 text-sm text-right ${feature.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(feature.profit)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      parseFloat(feature.margin) >= 0
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
-                      {feature.margin}%
-                    </span>
-                  </td>
+        {features && features.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {features.map((feature, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 capitalize">{feature.category}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs?.totalCost || feature.costs || 0)}</td>
+                    <td className={`px-4 py-3 text-sm text-right ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(feature.profit || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        parseFloat(feature.margin || 0) >= 0
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {feature.margin || 0}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center py-8">No feature data available</p>
+        )}
       </div>
     </div>
   );
@@ -635,90 +655,100 @@ function MarginsTab({ data, formatCurrency, formatPercent }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Average Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.averageMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.averageMargin || 0}%
+          <p className={`text-2xl font-bold ${parseFloat(summary?.averageMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary?.averageMargin || 0}%
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Median Margin</p>
-          <p className={`text-2xl font-bold ${parseFloat(summary.medianMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {summary.medianMargin || 0}%
+          <p className={`text-2xl font-bold ${parseFloat(summary?.medianMargin || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {summary?.medianMargin || 0}%
           </p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Profitable Features</p>
-          <p className="text-2xl font-bold text-green-600">{summary.profitableFeatures || 0}</p>
+          <p className="text-2xl font-bold text-green-600">{summary?.profitableFeatures || 0}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs text-gray-500 mb-1">Unprofitable Features</p>
-          <p className="text-2xl font-bold text-red-600">{summary.unprofitableFeatures || 0}</p>
+          <p className="text-2xl font-bold text-red-600">{summary?.unprofitableFeatures || 0}</p>
         </div>
       </div>
 
       {/* Margin Distribution Chart */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Margin Distribution</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={marginDistribution || []}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="range" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="count" fill={CHART_COLORS.primary} name="Features" />
-          </BarChart>
-        </ResponsiveContainer>
+        {marginDistribution && marginDistribution.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={marginDistribution}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="range" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="count" fill={CHART_COLORS.primary} name="Features" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-[300px] flex items-center justify-center text-gray-400">
+            No margin distribution data available
+          </div>
+        )}
       </div>
 
       {/* Margin Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Feature Margins</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {(features || []).map((feature, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
-                  <td className="px-4 py-3 text-sm text-right">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      parseFloat(feature.grossMargin) >= 50
-                        ? 'bg-green-100 text-green-700'
-                        : parseFloat(feature.grossMargin) >= 0
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-red-100 text-red-700'
-                    }`}>
-                      {feature.grossMargin}%
-                    </span>
-                  </td>
-                  <td className={`px-4 py-3 text-sm text-right ${feature.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(feature.profit)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs)}</td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      feature.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {feature.status}
-                    </span>
-                  </td>
+        {features && features.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead>
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {features.map((feature, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        parseFloat(feature.grossMargin || 0) >= 50
+                          ? 'bg-green-100 text-green-700'
+                          : parseFloat(feature.grossMargin || 0) >= 0
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                      }`}>
+                        {feature.grossMargin || 0}%
+                      </span>
+                    </td>
+                    <td className={`px-4 py-3 text-sm text-right ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(feature.profit || 0)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue || 0)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs || 0)}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        feature.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {feature.status || 'unknown'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center py-8">No margin data available</p>
+        )}
       </div>
     </div>
   );

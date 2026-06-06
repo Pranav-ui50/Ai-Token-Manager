@@ -11,7 +11,7 @@
 
 import { Router } from 'express';
 import analyticsController from '../controllers/analytics.controller.js';
-import { protect, requirePermissions } from '../middlewares/auth.middleware.js';
+import { protect } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
@@ -21,10 +21,9 @@ router.use(protect);
 /**
  * @route   GET /api/analytics/dashboard
  * @desc    Get dashboard summary (FR-40)
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.get('/dashboard',
-  requirePermissions('view_features'),
   analyticsController.getDashboard
 );
 
@@ -34,10 +33,9 @@ router.get('/dashboard',
  * @query   {string} startDate - Filter by start date
  * @query   {string} endDate - Filter by end date
  * @query   {string} projectId - Filter by project
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.get('/costs',
-  requirePermissions('view_features'),
   analyticsController.getOperationalCosts
 );
 
@@ -45,10 +43,9 @@ router.get('/costs',
  * @route   GET /api/analytics/profitability
  * @desc    Get feature profitability analytics (FR-41)
  * @query   {string} projectId - Filter by project
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.get('/profitability',
-  requirePermissions('view_features'),
   analyticsController.getFeatureProfitability
 );
 
@@ -56,10 +53,9 @@ router.get('/profitability',
  * @route   GET /api/analytics/margins
  * @desc    Get margin analytics (FR-44)
  * @query   {string} projectId - Filter by project
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.get('/margins',
-  requirePermissions('view_features'),
   analyticsController.getMargins
 );
 
@@ -71,10 +67,9 @@ router.get('/margins',
  * @query   {string} projectId - Filter by project
  * @query   {string} startDate - Filter by start date
  * @query   {string} endDate - Filter by end date
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.get('/export',
-  requirePermissions('view_features'),
   analyticsController.exportReport
 );
 
@@ -84,10 +79,9 @@ router.get('/export',
  * @body    {Array} reportTypes - Types: costs, profitability, margins, summary
  * @body    {string} format - Format: json, excel, pdf
  * @body    {Object} filters - Filter options
- * @access  Private (requires view_analytics permission)
+ * @access  Private
  */
 router.post('/export/custom',
-  requirePermissions('view_features'),
   analyticsController.generateCustomReport
 );
 

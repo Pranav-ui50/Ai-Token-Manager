@@ -4,7 +4,7 @@
  * Displays detailed information about a single feature.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
 
@@ -20,6 +20,46 @@ const FeatureDetailPage = () => {
     requests: 1000,
     users: 1
   });
+
+  // Profit margin state
+  const [profitParams, setProfitParams] = useState({
+    sellingPricePerRequest: 0.01,
+    billingModel: 'per_request', // 'per_request', 'per_user', 'monthly_subscription'
+    monthlySubscriptionPrice: 29.99,
+    requestsPerUser: 1000,
+    usersCount: 100
+  });
+
+  // Initialize profit params when feature data loads
+  useEffect(() => {
+    if (feature) {
+      // Calculate initial selling price based on model pricing
+      const inputTokens = feature.tokenEstimates?.inputTokensPerRequest || 500;
+      const outputTokens = feature.tokenEstimates?.outputTokensPerRequest || 500;
+      const inputPrice = feature.model?.pricing?.inputPrice || 0;
+      const outputPrice = feature.model?.pricing?.outputPrice || 0;
+      const fixedCostPerRequest = feature.infrastructureCost?.fixedCostPerRequest || 0;
+      const monthlyFixedCost = feature.infrastructureCost?.monthlyFixedCost || 0;
+
+      const inputTokenCost = (inputPrice / 1000000) * inputTokens;
+      const outputTokenCost = (outputPrice / 1000000) * outputTokens;
+      const tokenCostPerRequest = inputTokenCost + outputTokenCost;
+      const totalCostPerRequest = tokenCostPerRequest + fixedCostPerRequest;
+
+      // Set reasonable defaults based on cost
+      const suggestedPrice = totalCostPerRequest > 0 ? totalCostPerRequest * 1.5 : 0.01;
+      const suggestedMonthlyPrice = totalCostPerRequest > 0
+        ? (totalCostPerRequest * 1000 * 1.5) + (monthlyFixedCost * 1.2) // 1000 requests + margin
+        : 29.99;
+
+      setProfitParams(prev => ({
+        ...prev,
+        sellingPricePerRequest: Math.max(suggestedPrice, 0.01),
+        monthlySubscriptionPrice: Math.max(suggestedMonthlyPrice, 9.99),
+        requestsPerUser: feature.limits?.maxRequestsPerUser || 1000
+      }));
+    }
+  }, [feature?._id]); // Only run when feature ID changes
 
   // Fetch feature details
   useEffect(() => {
@@ -119,6 +159,90 @@ const FeatureDetailPage = () => {
     return num?.toLocaleString() || '0';
   };
 
+  // Format percentage
+  const formatPercent = (num) => {
+    // Handle extreme values
+    if (!isFinite(num) || isNaN(num)) return '0.00%';
+    if (Math.abs(num) > 10000) return `${num >= 0 ? '+' : ''}${(num / 1000).toFixed(2)}k%`;
+    if (Math.abs(num) > 1000) return `${num >= 0 ? '+' : ''}${num.toFixed(0)}%`;
+    return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
+  };
+
+  // Calculate profit margin - Dynamic calculation with useMemo
+  const profitAnalysis = useMemo(() => {
+    if (!feature) return null;
+
+    const { sellingPricePerRequest, billingModel, monthlySubscriptionPrice, requestsPerUser, usersCount } = profitParams;
+    const inputTokens = feature.tokenEstimates?.inputTokensPerRequest || 0;
+    const outputTokens = feature.tokenEstimates?.outputTokensPerRequest || 0;
+    const inputPrice = feature.model?.pricing?.inputPrice || 0;
+    const outputPrice = feature.model?.pricing?.outputPrice || 0;
+    const fixedCostPerRequest = feature.infrastructureCost?.fixedCostPerRequest || 0;
+    const overheadPercentage = feature.infrastructureCost?.overheadPercentage || 0;
+    const monthlyFixedCost = feature.infrastructureCost?.monthlyFixedCost || 0;
+
+    // Calculate cost per request
+    const inputTokenCost = (inputPrice / 1000000) * inputTokens;
+    const outputTokenCost = (outputPrice / 1000000) * outputTokens;
+    const tokenCostPerRequest = inputTokenCost + outputTokenCost;
+    const infrastructureCostPerRequest = fixedCostPerRequest;
+    const baseCostPerRequest = tokenCostPerRequest + infrastructureCostPerRequest;
+    const totalCostPerRequest = baseCostPerRequest * (1 + overheadPercentage / 100);
+
+    // Check if we have valid pricing data
+    const hasPricingData = inputPrice > 0 || outputPrice > 0 || fixedCostPerRequest > 0;
+
+    let revenue, cost, profit, margin, profitPerRequest;
+
+    if (billingModel === 'per_request') {
+      // Per-request billing
+      revenue = sellingPricePerRequest;
+      cost = totalCostPerRequest;
+      profit = revenue - cost;
+      margin = revenue > 0 ? ((profit / revenue) * 100) : (hasPricingData ? -100 : 0);
+      profitPerRequest = profit;
+    } else if (billingModel === 'per_user') {
+      // Per-user billing (fixed requests per user)
+      const revenuePerUser = sellingPricePerRequest * requestsPerUser;
+      const costPerUser = totalCostPerRequest * requestsPerUser;
+      revenue = revenuePerUser;
+      cost = costPerUser;
+      profit = revenuePerUser - costPerUser;
+      margin = revenue > 0 ? ((profit / revenue) * 100) : (hasPricingData ? -100 : 0);
+      profitPerRequest = profit / requestsPerUser;
+    } else {
+      // Monthly subscription
+      const totalRequests = usersCount * requestsPerUser;
+      revenue = monthlySubscriptionPrice;
+      cost = (totalCostPerRequest * totalRequests) + (monthlyFixedCost / usersCount);
+      profit = revenue - cost;
+      margin = revenue > 0 ? ((profit / revenue) * 100) : (hasPricingData ? -100 : 0);
+      profitPerRequest = usersCount > 0 ? profit / totalRequests : 0;
+    }
+
+    // Break-even calculation
+    const breakEvenRequests = sellingPricePerRequest > totalCostPerRequest
+      ? Math.ceil(monthlyFixedCost / (sellingPricePerRequest - totalCostPerRequest))
+      : null;
+
+    return {
+      costPerRequest: totalCostPerRequest,
+      tokenCostPerRequest,
+      infrastructureCostPerRequest,
+      revenue,
+      cost,
+      profit,
+      margin,
+      breakEvenRequests,
+      monthlyFixedCost,
+      // Additional metrics
+      markup: cost > 0 ? ((revenue - cost) / cost * 100) : 0,
+      roi: cost > 0 ? (profit / cost * 100) : 0,
+      isProfitable: profit > 0,
+      profitPerRequest
+    };
+  }, [feature, profitParams]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
@@ -213,7 +337,7 @@ const FeatureDetailPage = () => {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-8">
-            {['overview', 'tokens', 'costs', 'calculator'].map((tab) => (
+            {['overview', 'tokens', 'costs', 'profit', 'calculator'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -223,7 +347,7 @@ const FeatureDetailPage = () => {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {tab}
+                {tab === 'profit' ? 'Profit Margin' : tab}
               </button>
             ))}
           </nav>
@@ -593,6 +717,427 @@ const FeatureDetailPage = () => {
                         )}
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Profit Margin Tab */}
+        {activeTab === 'profit' && (
+          <div className="space-y-6">
+            {/* Real-time indicator */}
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span>Real-time calculations - values update as you type</span>
+            </div>
+
+            {/* Warning if no model or pricing data */}
+            {(!feature.model || !feature.model?.pricing) && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <p className="font-medium text-yellow-800">Missing Pricing Data</p>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      {!feature.model
+                        ? 'No AI model is assigned to this feature. Please assign a model to calculate accurate profit margins.'
+                        : 'The assigned model does not have pricing information. Profit calculations will use default estimates.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Profit Overview Cards */}
+            {profitAnalysis && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className={`rounded-xl shadow-soft p-4 md:p-6 ${profitAnalysis.isProfitable ? 'bg-green-50' : 'bg-red-50'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {profitAnalysis.isProfitable ? (
+                      <svg className="w-4 h-4 md:w-5 md:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 md:w-5 md:h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
+                      </svg>
+                    )}
+                    <span className="text-xs md:text-sm font-medium text-gray-600">Profit Margin</span>
+                  </div>
+                  <p className={`text-xl md:text-3xl font-bold ${profitAnalysis.isProfitable ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatPercent(profitAnalysis.margin)}
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                  <p className="text-xs md:text-sm text-gray-500 mb-1">Revenue</p>
+                  <p className="text-lg md:text-2xl font-bold text-blue-600">{formatCurrency(profitAnalysis.revenue)}</p>
+                  <p className="text-xs text-gray-400 mt-1 hidden md:block">
+                    {profitParams.billingModel === 'per_request' && 'per request'}
+                    {profitParams.billingModel === 'per_user' && 'per user'}
+                    {profitParams.billingModel === 'monthly_subscription' && 'monthly'}
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                  <p className="text-xs md:text-sm text-gray-500 mb-1">Total Cost</p>
+                  <p className="text-lg md:text-2xl font-bold text-red-600">{formatCurrency(profitAnalysis.cost)}</p>
+                  <p className="text-xs text-gray-400 mt-1 hidden md:block">
+                    {formatCurrency(profitAnalysis.costPerRequest)} per request
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                  <p className="text-xs md:text-sm text-gray-500 mb-1">Profit</p>
+                  <p className={`text-lg md:text-2xl font-bold ${profitAnalysis.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(profitAnalysis.profit)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1 hidden md:block">
+                    {profitAnalysis.profit >= 0 ? 'Net profit' : 'Net loss'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+              {/* Pricing Configuration */}
+              <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Pricing Configuration</h3>
+
+                <div className="space-y-4">
+                  {/* Billing Model */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Billing Model</label>
+                    <select
+                      value={profitParams.billingModel}
+                      onChange={(e) => setProfitParams({ ...profitParams, billingModel: e.target.value })}
+                      className="w-full px-3 md:px-4 py-2 text-sm md:text-base border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="per_request">Per Request</option>
+                      <option value="per_user">Per User (with quota)</option>
+                      <option value="monthly_subscription">Monthly Subscription</option>
+                    </select>
+                  </div>
+
+                  {/* Per Request */}
+                  {profitParams.billingModel === 'per_request' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Selling Price per Request ($)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.0001"
+                        value={profitParams.sellingPricePerRequest}
+                        onChange={(e) => setProfitParams({ ...profitParams, sellingPricePerRequest: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">
+                        {profitAnalysis?.costPerRequest > 0 ? (
+                          <>
+                            Cost per request: {formatCurrency(profitAnalysis?.costPerRequest)} •
+                            Suggested: {formatCurrency(profitAnalysis?.costPerRequest * 1.5)} (50% margin)
+                          </>
+                        ) : (
+                          'Enter token estimates and model pricing for accurate cost calculation'
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Per User */}
+                  {profitParams.billingModel === 'per_user' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Price per Request ($)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={profitParams.sellingPricePerRequest}
+                          onChange={(e) => setProfitParams({ ...profitParams, sellingPricePerRequest: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Requests per User
+                        </label>
+                        <input
+                          type="number"
+                          value={profitParams.requestsPerUser}
+                          onChange={(e) => setProfitParams({ ...profitParams, requestsPerUser: parseInt(e.target.value) || 0 })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Monthly Subscription */}
+                  {profitParams.billingModel === 'monthly_subscription' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Monthly Price ($)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={profitParams.monthlySubscriptionPrice}
+                          onChange={(e) => setProfitParams({ ...profitParams, monthlySubscriptionPrice: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">
+                          {profitAnalysis?.costPerRequest > 0 ? (
+                            <>
+                              Total monthly cost for {profitParams.usersCount * profitParams.requestsPerUser} requests: {formatCurrency(profitAnalysis?.costPerRequest * profitParams.usersCount * profitParams.requestsPerUser + (feature?.infrastructureCost?.monthlyFixedCost || 0))}
+                            </>
+                          ) : (
+                            'Enter token estimates and model pricing for accurate cost calculation'
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Requests per User/Month
+                        </label>
+                        <input
+                          type="number"
+                          value={profitParams.requestsPerUser}
+                          onChange={(e) => setProfitParams({ ...profitParams, requestsPerUser: parseInt(e.target.value) || 1 })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">How many API requests each user can make per month</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Number of Users
+                        </label>
+                        <input
+                          type="number"
+                          value={profitParams.usersCount}
+                          onChange={(e) => setProfitParams({ ...profitParams, usersCount: parseInt(e.target.value) || 1 })}
+                          className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Expected number of paying subscribers</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Quick Pricing Suggestions */}
+                <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gray-50 rounded-lg">
+                  <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-3">Quick Pricing Suggestions</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => {
+                        const basePrice = profitAnalysis?.costPerRequest || 0;
+                        const multiplier = 1.25;
+                        if (profitParams.billingModel === 'monthly_subscription') {
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
+                        } else if (profitParams.billingModel === 'per_user') {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        } else {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        }
+                      }}
+                      className="px-2 md:px-3 py-2 text-xs bg-white border border-gray-200 rounded hover:bg-gray-50"
+                    >
+                      25% Margin
+                    </button>
+                    <button
+                      onClick={() => {
+                        const basePrice = profitAnalysis?.costPerRequest || 0;
+                        const multiplier = 1.5;
+                        if (profitParams.billingModel === 'monthly_subscription') {
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
+                        } else if (profitParams.billingModel === 'per_user') {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        } else {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        }
+                      }}
+                      className="px-2 md:px-3 py-2 text-xs bg-white border border-gray-200 rounded hover:bg-gray-50"
+                    >
+                      50% Margin
+                    </button>
+                    <button
+                      onClick={() => {
+                        const basePrice = profitAnalysis?.costPerRequest || 0;
+                        const multiplier = 2;
+                        if (profitParams.billingModel === 'monthly_subscription') {
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
+                        } else if (profitParams.billingModel === 'per_user') {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        } else {
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                        }
+                      }}
+                      className="px-2 md:px-3 py-2 text-xs bg-white border border-gray-200 rounded hover:bg-gray-50"
+                    >
+                      100% Margin
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cost Breakdown */}
+              <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Cost Breakdown per Request</h3>
+
+                {profitAnalysis && (
+                  <div className="space-y-4">
+                    {/* Cost Breakdown Bar */}
+                    <div className="relative h-6 md:h-8 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="absolute h-full bg-blue-500"
+                        style={{ width: `${(profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100}%` }}
+                        title="Token Cost"
+                      />
+                      <div
+                        className="absolute h-full bg-orange-500"
+                        style={{ left: `${(profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100}%`, width: `${(profitAnalysis.infrastructureCostPerRequest / profitAnalysis.costPerRequest) * 100}%` }}
+                        title="Infrastructure"
+                      />
+                    </div>
+                    <div className="flex gap-4 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-blue-500 rounded" />
+                        <span>Token Cost</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3 h-3 bg-orange-500 rounded" />
+                        <span>Infrastructure</span>
+                      </div>
+                    </div>
+
+                    {/* Detailed Costs */}
+                    <div className="border-t border-gray-100 pt-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Token Cost</span>
+                        <span className="font-medium">{formatCurrency(profitAnalysis.tokenCostPerRequest)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Infrastructure Cost</span>
+                        <span className="font-medium">{formatCurrency(profitAnalysis.infrastructureCostPerRequest)}</span>
+                      </div>
+                      {feature.infrastructureCost?.overheadPercentage > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Overhead ({feature.infrastructureCost.overheadPercentage}%)</span>
+                          <span className="font-medium">
+                            {formatCurrency(profitAnalysis.costPerRequest * feature.infrastructureCost.overheadPercentage / 100)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="border-t border-gray-100 pt-2 flex justify-between">
+                        <span className="text-sm font-semibold text-gray-700">Total Cost</span>
+                        <span className="text-sm font-bold text-red-600">{formatCurrency(profitAnalysis.costPerRequest)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Monthly Fixed Cost Warning */}
+                {feature.infrastructureCost?.monthlyFixedCost > 0 && (
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-4 h-4 md:w-5 md:h-5 text-yellow-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-yellow-800">Monthly Fixed Cost</p>
+                        <p className="text-xs text-yellow-700">
+                          {formatCurrency(feature.infrastructureCost.monthlyFixedCost)}/month not included in per-request calculation.
+                          Factor this into your break-even analysis.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Break-Even Analysis */}
+            {profitAnalysis && (
+              <div className="bg-white rounded-xl shadow-soft p-4 md:p-6">
+                <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-4">Break-Even Analysis</h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+                  <div className="p-3 md:p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">Break-Even Price</h4>
+                    <p className="text-lg md:text-2xl font-bold text-gray-900">{formatCurrency(profitAnalysis.costPerRequest)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Minimum price to cover costs</p>
+                  </div>
+
+                  <div className="p-3 md:p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">Current Markup</h4>
+                    <p className={`text-lg md:text-2xl font-bold ${profitAnalysis.markup >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatPercent(profitAnalysis.markup)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">Over cost basis</p>
+                  </div>
+
+                  <div className="p-3 md:p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-xs md:text-sm font-medium text-gray-500 mb-1 md:mb-2">ROI</h4>
+                    <p className={`text-lg md:text-2xl font-bold ${profitAnalysis.roi >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatPercent(profitAnalysis.roi)}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">Return on investment</p>
+                  </div>
+                </div>
+
+                {/* Profit Scenarios */}
+                <div className="mt-4 md:mt-6">
+                  <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-3">Profit at Different Volumes</h4>
+                  <div className="overflow-x-auto -mx-4 md:mx-0">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Requests</th>
+                          <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                          <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
+                          <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                          <th className="px-3 md:px-4 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase">Margin</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {[100, 1000, 10000, 100000, 1000000].map((requests) => {
+                          const revenue = profitParams.billingModel === 'per_request'
+                            ? requests * profitParams.sellingPricePerRequest
+                            : profitParams.billingModel === 'per_user'
+                            ? (requests / profitParams.requestsPerUser) * (profitParams.sellingPricePerRequest * profitParams.requestsPerUser)
+                            : profitParams.monthlySubscriptionPrice * profitParams.usersCount;
+                          const cost = requests * profitAnalysis.costPerRequest + (feature.infrastructureCost?.monthlyFixedCost || 0);
+                          const profit = revenue - cost;
+                          const margin = revenue > 0 ? (profit / revenue * 100) : 0;
+
+                          return (
+                            <tr key={requests} className="hover:bg-gray-50">
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-gray-900">{formatNumber(requests)}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-blue-600 font-medium">{formatCurrency(revenue)}</td>
+                              <td className="px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm text-red-600">{formatCurrency(cost)}</td>
+                              <td className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatCurrency(profit)}
+                              </td>
+                              <td className={`px-3 md:px-4 py-2 md:py-3 text-xs md:text-sm font-medium ${margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {formatPercent(margin)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>

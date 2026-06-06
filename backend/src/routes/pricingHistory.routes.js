@@ -109,10 +109,10 @@ router.get('/trends/:modelId',
 /**
  * @route   PUT /api/pricing-history/:id/verify
  * @desc    Verify a pricing change
- * @access  Private (requires manage_features permission)
+ * @access  Private (requires manage_pricing permission)
  */
 router.put('/:id/verify',
-  requirePermissions('manage_features'),
+  requirePermissions('manage_pricing'),
   [
     param('id').isMongoId().withMessage('Invalid pricing history ID'),
     validate

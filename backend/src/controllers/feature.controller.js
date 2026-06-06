@@ -6,6 +6,8 @@
 
 import featureService from '../services/feature.service.js';
 import auditService from '../services/audit.service.js';
+import Feature from '../models/Feature.js';
+import AIModel from '../models/AIModel.js';
 import { AppError } from '../middlewares/error.middleware.js';
 
 class FeatureController {
@@ -64,8 +66,20 @@ class FeatureController {
     try {
       const organizationId = req.user.organization;
 
+      // Return empty result if no organization
       if (!organizationId) {
-        throw new AppError('Organization is required. Please select an organization.', 400, 'ORGANIZATION_REQUIRED');
+        return res.status(200).json({
+          success: true,
+          data: {
+            features: [],
+            pagination: {
+              page: 1,
+              limit: 10,
+              total: 0,
+              pages: 0
+            }
+          }
+        });
       }
 
       const { page, limit, status, category, search, project } = req.query;
@@ -272,6 +286,121 @@ class FeatureController {
       res.status(200).json({
         success: true,
         data: { estimate }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Record usage for a feature
+   * @route POST /api/features/:id/usage
+   */
+  async recordUsage(req, res, next) {
+    try {
+      const { id } = req.params;
+      const organizationId = req.user.organization;
+      const {
+        requests = 1,
+        tokens = 0,
+        inputTokens = 0,
+        outputTokens = 0,
+        cost = null,
+        errorCount = 0,
+        avgLatency = 0
+      } = req.body;
+
+      // Find the feature
+      const feature = await Feature.findOne({
+        _id: id,
+        organization: organizationId
+      });
+
+      if (!feature) {
+        throw new AppError('Feature not found', 404, 'FEATURE_NOT_FOUND');
+      }
+
+      // Calculate cost if not provided
+      let calculatedCost = cost;
+      if (calculatedCost === null || calculatedCost === undefined) {
+        // Get model pricing if available
+        if (feature.model) {
+          const model = await AIModel.findById(feature.model).select('pricing');
+          if (model?.pricing) {
+            const inputCost = (inputTokens || 0) * (model.pricing.inputPrice || 0) / 1000000;
+            const outputCost = (outputTokens || 0) * (model.pricing.outputPrice || 0) / 1000000;
+            calculatedCost = inputCost + outputCost;
+          }
+        }
+        // Fallback: use token estimates if no model pricing
+        if (!calculatedCost) {
+          calculatedCost = 0;
+        }
+      }
+
+      // Record the usage
+      await feature.recordUsage({
+        requests,
+        tokens,
+        inputTokens,
+        outputTokens,
+        cost: calculatedCost,
+        errorCount,
+        avgLatency
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Usage recorded successfully',
+        data: {
+          featureId: feature._id,
+          stats: feature.stats
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get usage history for a feature
+   * @route GET /api/features/:id/usage
+   */
+  async getUsageHistory(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { startDate, endDate } = req.query;
+      const organizationId = req.user.organization;
+
+      const feature = await Feature.findOne({
+        _id: id,
+        organization: organizationId
+      }).select('name stats usageHistory');
+
+      if (!feature) {
+        throw new AppError('Feature not found', 404, 'FEATURE_NOT_FOUND');
+      }
+
+      let usageHistory = feature.usageHistory || [];
+
+      // Filter by date range if provided
+      if (startDate || endDate) {
+        usageHistory = usageHistory.filter(entry => {
+          const entryDate = new Date(entry.date);
+          if (startDate && entryDate < new Date(startDate)) return false;
+          if (endDate && entryDate > new Date(endDate)) return false;
+          return true;
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          featureId: feature._id,
+          name: feature.name,
+          stats: feature.stats,
+          usageHistory
+        }
       });
     } catch (error) {
       next(error);

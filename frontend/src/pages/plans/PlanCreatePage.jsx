@@ -284,7 +284,9 @@ const PlanCreatePage = () => {
         navigate(`/plans/${response.data._id}`);
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create plan');
+      console.error('Plan creation error:', err.response?.data);
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to create plan';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1017,7 +1019,7 @@ const PlanCreatePage = () => {
             </Button>
             <Button
               type="submit"
-              isLoading={loading}
+              loading={loading}
             >
               Create Plan
             </Button>

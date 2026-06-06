@@ -174,7 +174,8 @@ class BillingService {
     }
 
     const subscription = organization.subscription || {};
-    const plan = SUBSCRIPTION_PLANS[subscription.plan] || SUBSCRIPTION_PLANS.free;
+    const planKey = (subscription.plan || 'free').toLowerCase();
+    const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free;
 
     return {
       organization: {
@@ -429,9 +430,10 @@ class BillingService {
 
     logger.info(`Subscription reactivated: ${organizationId} by ${userId}`);
 
+    const planKey = (organization.subscription.plan || 'free').toLowerCase();
     return {
       status: 'active',
-      plan: SUBSCRIPTION_PLANS[organization.subscription.plan],
+      plan: SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free,
       message: 'Subscription reactivated successfully'
     };
   }
@@ -478,7 +480,10 @@ class BillingService {
     ]);
 
     const usage = featureUsage[0] || { totalRequests: 0, totalTokens: 0, totalCost: 0 };
-    const plan = SUBSCRIPTION_PLANS[organization.subscription?.plan || 'free'];
+
+    // Normalize plan name to lowercase for lookup
+    const planKey = (organization.subscription?.plan || 'free').toLowerCase();
+    const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free;
 
     return {
       period: {
@@ -1060,8 +1065,10 @@ class BillingService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const currentPlan = SUBSCRIPTION_PLANS[organization.subscription?.plan || 'free'];
-    const newPlan = SUBSCRIPTION_PLANS[plan];
+    const currentPlanKey = (organization.subscription?.plan || 'free').toLowerCase();
+    const currentPlan = SUBSCRIPTION_PLANS[currentPlanKey] || SUBSCRIPTION_PLANS.free;
+    const newPlanKey = plan.toLowerCase();
+    const newPlan = SUBSCRIPTION_PLANS[newPlanKey];
 
     if (!newPlan) {
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');

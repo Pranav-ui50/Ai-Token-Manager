@@ -70,8 +70,14 @@ class ModelService {
 
     const query = {};
     if (activeOnly) query.isActive = true;
-    if (providerId) query.provider = providerId;
     if (type) query.type = type;
+
+    // Handle providerId - MongoDB will auto-convert string to ObjectId
+    if (providerId) {
+      query.provider = providerId;
+    }
+
+    console.log('[ModelService] getAll query:', JSON.stringify(query));
 
     const models = await AIModel.find(query)
       .sort({ name: 1 })
@@ -79,6 +85,8 @@ class ModelService {
       .limit(limit)
       .populate('provider', 'name displayName slug logo')
       .populate('deprecated.replacementModel', 'name displayName');
+
+    console.log('[ModelService] Found models:', models.length);
 
     const total = await AIModel.countDocuments(query);
 
@@ -263,9 +271,14 @@ class ModelService {
     if (activeOnly) query.isActive = true;
     if (type) query.type = type;
 
+    console.log('[ModelService] getByProvider query:', JSON.stringify(query));
+
     const models = await AIModel.find(query)
       .sort({ name: 1 })
+      .populate('provider', 'name displayName slug logo')
       .populate('deprecated.replacementModel', 'name displayName');
+
+    console.log('[ModelService] getByProvider found:', models.length, 'models');
 
     return models;
   }

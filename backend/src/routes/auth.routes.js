@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import authController from '../controllers/auth.controller.js';
+import registrationPaymentController from '../controllers/registrationPayment.controller.js';
 import authMiddleware from '../middlewares/auth.middleware.js';
 import authValidator from '../validators/auth.validator.js';
 
@@ -17,13 +18,73 @@ const router = Router();
 
 /**
  * @route   POST /api/auth/register
- * @desc    Register a new user
+ * @desc    Register a new user (free plan - direct registration)
  * @access  Public
  */
 router.post(
   '/register',
   authValidator.registerValidation,
   authController.register
+);
+
+/**
+ * @route   POST /api/auth/register/payment
+ * @desc    Initiate registration with payment (paid plans)
+ * @access  Public
+ */
+router.post(
+  '/register/payment',
+  registrationPaymentController.initiatePayment
+);
+
+/**
+ * @route   POST /api/auth/register/verify-razorpay
+ * @desc    Verify Razorpay payment and complete registration
+ * @access  Public
+ */
+router.post(
+  '/register/verify-razorpay',
+  registrationPaymentController.verifyRazorpayPayment
+);
+
+/**
+ * @route   POST /api/auth/register/complete-stripe
+ * @desc    Complete Stripe registration after successful payment
+ * @access  Public
+ */
+router.post(
+  '/register/complete-stripe',
+  registrationPaymentController.completeStripeRegistration
+);
+
+/**
+ * @route   POST /api/auth/register/cancel
+ * @desc    Cancel pending registration
+ * @access  Public
+ */
+router.post(
+  '/register/cancel',
+  registrationPaymentController.cancelRegistration
+);
+
+/**
+ * @route   GET /api/auth/register/pending/:id
+ * @desc    Get pending registration status
+ * @access  Public
+ */
+router.get(
+  '/register/pending/:id',
+  registrationPaymentController.getPendingStatus
+);
+
+/**
+ * @route   POST /api/auth/register/retry-payment
+ * @desc    Retry payment for pending registration
+ * @access  Public
+ */
+router.post(
+  '/register/retry-payment',
+  registrationPaymentController.retryPayment
 );
 
 /**

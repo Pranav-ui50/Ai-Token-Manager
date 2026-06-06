@@ -49,6 +49,10 @@ const planSchema = new mongoose.Schema({
       required: [true, 'Plan price is required'],
       min: [0, 'Price cannot be negative']
     },
+    yearlyPrice: {
+      type: Number,
+      min: [0, 'Yearly price cannot be negative']
+    },
     currency: {
       type: String,
       default: 'USD',

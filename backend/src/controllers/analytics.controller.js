@@ -24,8 +24,27 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] getDashboard called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty dashboard data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            summary: {
+              totalTokens: 0,
+              totalRequests: 0,
+              tokensThisMonth: 0,
+              requestsThisMonth: 0,
+              tokensToday: 0,
+              requestsToday: 0,
+              avgTokensPerRequest: 0,
+              errorRate: 0
+            },
+            modelUsage: [],
+            featureUsage: [],
+            recentActivity: []
+          }
+        });
       }
 
       const data = await analyticsService.getDashboard(organizationId);
@@ -50,8 +69,17 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] getOperationalCosts called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            costs: [],
+            totalCost: 0,
+            breakdown: {}
+          }
+        });
       }
 
       const { startDate, endDate, projectId } = req.query;
@@ -83,8 +111,16 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] getFeatureProfitability called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            features: [],
+            totalProfitability: 0
+          }
+        });
       }
 
       const { projectId } = req.query;
@@ -114,8 +150,16 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] getMargins called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            margins: [],
+            averageMargin: 0
+          }
+        });
       }
 
       const { projectId } = req.query;
@@ -145,8 +189,17 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] exportReport called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            reportType: req.query.reportType || 'summary',
+            generatedAt: new Date().toISOString(),
+            data: []
+          }
+        });
       }
 
       const { reportType = 'summary', format = 'json', projectId, startDate, endDate } = req.query;
@@ -212,8 +265,16 @@ class AnalyticsController {
       logger.info(`[AnalyticsController] generateCustomReport called by user: ${req.user?.id}`);
 
       const organizationId = req.user.organization;
+
+      // Return empty data if no organization
       if (!organizationId) {
-        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+        return res.status(200).json({
+          success: true,
+          data: {
+            reports: {},
+            generatedAt: new Date().toISOString()
+          }
+        });
       }
 
       const {

@@ -14,6 +14,7 @@ import ProvidersSection from './components/ProvidersSection.jsx';
 import HowItWorksSection from './components/HowItWorksSection.jsx';
 import TestimonialsSection from './components/TestimonialsSection.jsx';
 import FAQSection from './components/FAQSection.jsx';
+import Footer from './components/Footer.jsx';
 
 const LandingPage = () => {
   return (
@@ -51,6 +52,9 @@ const LandingPage = () => {
         {/* FAQ Section */}
         <FAQSection />
       </main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };

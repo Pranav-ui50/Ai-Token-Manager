@@ -18,6 +18,8 @@ const getBaseMenuItems = (userOrganizationId) => ({
     { path: '/admin/users', icon: 'users', label: 'Users' },
     { path: '/admin/providers', icon: 'server', label: 'Providers' },
     { path: '/admin/models', icon: 'chip', label: 'Models' },
+    { path: '/admin/plans', icon: 'view-grid', label: 'Plans & Pricing' },
+    { path: '/admin/landing-content', icon: 'globe', label: 'Landing Page' },
     { path: '/audit-logs', icon: 'clipboard-list', label: 'Audit Logs' },
     { path: '/admin/settings', icon: 'settings', label: 'System Settings' }
   ],
@@ -48,7 +50,6 @@ const getBaseMenuItems = (userOrganizationId) => ({
     { path: '/simulations', icon: 'calculator', label: 'Simulations' },
     { path: '/invoices', icon: 'document-text', label: 'Invoices' },
     { path: '/reports', icon: 'chart-bar', label: 'Reports' },
-    { path: '/audit-logs', icon: 'clipboard-list', label: 'Audit Logs' },
     { path: '/analytics', icon: 'trending-up', label: 'Analytics' }
   ],
   product_manager: [
@@ -189,6 +190,11 @@ const Icons = {
   'clipboard-list': (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>
+  ),
+  globe: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
     </svg>
   )
 };

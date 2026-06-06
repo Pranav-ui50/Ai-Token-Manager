@@ -2,18 +2,22 @@
  * Billing Page
  *
  * Manage billing, subscription plans, payment methods, and invoices.
- * Red & White theme styling with full API integration.
+ * Matches the landing page pricing section style.
  */
 
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import billingApi from '../../services/api/billing.api.js';
+import publicApi from '../../services/api/public.api.js';
 import Modal from '../../components/common/Modal.jsx';
 import Button from '../../components/common/Button.jsx';
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-700',
   trial: 'bg-blue-100 text-blue-700',
+  pending_payment: 'bg-yellow-100 text-yellow-700',
+  past_due: 'bg-red-100 text-red-700',
   expired: 'bg-red-100 text-red-700',
   cancelled: 'bg-gray-100 text-gray-700'
 };
@@ -26,6 +30,50 @@ const PAYMENT_BRAND_COLORS = {
   other: 'bg-gray-500'
 };
 
+// Default plans as fallback
+const DEFAULT_PLANS = [
+  {
+    id: 'free',
+    name: 'Free',
+    tier: 'free',
+    description: 'Perfect for getting started with AI cost management',
+    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
+    credits: { includedCredits: 10000, creditType: 'token' },
+    limits: { maxUsers: 1, maxApiCalls: 1000 },
+    isPopular: false
+  },
+  {
+    id: 'starter',
+    name: 'Starter',
+    tier: 'starter',
+    description: 'Great for small teams exploring AI APIs',
+    billing: { price: 29, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 500000, creditType: 'token' },
+    limits: { maxUsers: 3, maxApiCalls: 10000 },
+    isPopular: false
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    tier: 'professional',
+    description: 'Ideal for growing teams with advanced AI needs',
+    billing: { price: 99, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 2000000, creditType: 'token' },
+    limits: { maxUsers: 10, maxApiCalls: 50000 },
+    isPopular: true
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    tier: 'business',
+    description: 'For organizations with heavy AI API usage',
+    billing: { price: 299, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 10000000, creditType: 'token' },
+    limits: { maxUsers: 50, maxApiCalls: 200000 },
+    isPopular: false
+  }
+];
+
 function BillingPage() {
   const { currentOrganization } = useOrganization();
   const [loading, setLoading] = useState(true);
@@ -33,11 +81,12 @@ function BillingPage() {
   const [billingData, setBillingData] = useState(null);
   const [usageData, setUsageData] = useState(null);
   const [invoices, setInvoices] = useState([]);
-  const [plans, setPlans] = useState([]);
+  const [plans, setPlans] = useState(DEFAULT_PLANS);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [billingInterval, setBillingInterval] = useState('month');
+  const [currency, setCurrency] = useState('USD');
 
   // Modal states
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showBillingDetailsModal, setShowBillingDetailsModal] = useState(false);
@@ -64,6 +113,22 @@ function BillingPage() {
     expiryMonth: '',
     expiryYear: ''
   });
+
+  // Currency conversion rates (approximate)
+  const conversionRates = {
+    USD: 1,
+    INR: 83.5,
+    EUR: 0.92,
+    GBP: 0.79
+  };
+
+  // Currency symbols
+  const currencySymbols = {
+    USD: '$',
+    INR: '₹',
+    EUR: '€',
+    GBP: '£'
+  };
 
   const organizationId = currentOrganization?._id || currentOrganization?.id;
 
@@ -102,37 +167,89 @@ function BillingPage() {
   const loadPlans = async () => {
     try {
       setPlansLoading(true);
-      const res = await billingApi.getAvailablePlans();
-      setPlans(res.data);
+      // Use the same public API as the landing page
+      const res = await publicApi.getPlans();
+      if (res.success && res.data && res.data.length > 0) {
+        setPlans(res.data);
+      } else {
+        setPlans(DEFAULT_PLANS);
+      }
     } catch (err) {
       console.error('Failed to load plans:', err);
+      setPlans(DEFAULT_PLANS);
     } finally {
       setPlansLoading(false);
     }
   };
 
-  const handleUpgrade = async (plan) => {
-    setSelectedPlan(plan);
-    setShowUpgradeModal(true);
+  const formatPrice = (price, curr = 'USD') => {
+    if (price === 'custom' || price === 'Contact Sales') return 'Custom';
+    const symbol = currencySymbols[curr] || '$';
+    const convertedPrice = price * (conversionRates[curr] || 1);
+    return `${symbol}${convertedPrice.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   };
 
-  const handleConfirmUpgrade = async () => {
-    if (!selectedPlan) return;
+  const getTierColor = (tier) => {
+    const colors = {
+      free: { bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-700' },
+      starter: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700' },
+      professional: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700' },
+      business: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700' },
+      enterprise: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700' }
+    };
+    return colors[tier] || colors.starter;
+  };
 
+  const getTierName = (tier) => {
+    const names = {
+      free: 'Free',
+      starter: 'Starter',
+      professional: 'Professional',
+      business: 'Business',
+      enterprise: 'Enterprise'
+    };
+    return names[tier] || tier;
+  };
+
+  const getDisplayPrice = (plan) => {
+    const basePrice = plan.billing?.price || plan.price || 0;
+    if (billingInterval === 'year' && (plan.billing?.interval === 'month' || !plan.billing?.interval)) {
+      return basePrice * 12 * 0.8;
+    }
+    return basePrice;
+  };
+
+  const handleSelectPlan = async (plan) => {
+    const currentPlanId = billingData?.subscription?.plan || billingData?.plan?.tier;
+
+    if (plan.tier === currentPlanId || plan.id === currentPlanId) {
+      return; // Already on this plan
+    }
+
+    // For upgrade/downgrade, you can integrate with payment flow
+    setSelectedPlan(plan);
+    // For now, just show an alert - integrate with actual payment flow
+    if (plan.tier === 'free' || plan.billing?.price === 0) {
+      if (confirm('Are you sure you want to downgrade to the Free plan?')) {
+        await handlePlanChange(plan);
+      }
+    } else {
+      // Redirect to checkout for paid plans
+      window.location.href = `/checkout?plan=${plan.id || plan.tier}&currency=${currency}&billing=${billingInterval}`;
+    }
+  };
+
+  const handlePlanChange = async (plan) => {
     setIsSubmitting(true);
     setError('');
-
     try {
       await billingApi.updateSubscription(organizationId, {
-        plan: selectedPlan.id,
-        billingCycle: 'monthly'
+        plan: plan.id || plan.tier,
+        billingCycle: billingInterval === 'year' ? 'yearly' : 'monthly'
       });
-
-      setShowUpgradeModal(false);
-      setSelectedPlan(null);
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to upgrade plan');
+      setError(err.response?.data?.message || 'Failed to change plan');
     } finally {
       setIsSubmitting(false);
     }
@@ -141,7 +258,6 @@ function BillingPage() {
   const handleCancelSubscription = async (reason) => {
     setIsSubmitting(true);
     setError('');
-
     try {
       await billingApi.cancelSubscription(organizationId, reason);
       setShowCancelModal(false);
@@ -156,7 +272,6 @@ function BillingPage() {
   const handleReactivate = async () => {
     setIsSubmitting(true);
     setError('');
-
     try {
       await billingApi.reactivateSubscription(organizationId);
       await loadBillingData();
@@ -171,7 +286,6 @@ function BillingPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
-
     try {
       await billingApi.addPaymentMethod(organizationId, newPaymentMethod);
       setShowPaymentModal(false);
@@ -192,7 +306,6 @@ function BillingPage() {
 
   const handleRemovePaymentMethod = async (methodId) => {
     if (!confirm('Are you sure you want to remove this payment method?')) return;
-
     try {
       await billingApi.removePaymentMethod(organizationId, methodId);
       await loadBillingData();
@@ -214,7 +327,6 @@ function BillingPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError('');
-
     try {
       await billingApi.updateBillingDetails(organizationId, billingDetails);
       setShowBillingDetailsModal(false);
@@ -250,24 +362,8 @@ function BillingPage() {
     });
   };
 
-  const formatPrice = (price) => {
-    if (price === 'custom' || price === 'Contact Sales') return 'Custom';
-    return `$${price}`;
-  };
-
-  const getUsagePercentage = (used, limit) => {
-    if (limit === 'unlimited') return 0;
-    return Math.min((used / limit) * 100, 100);
-  };
-
-  const getUsageColor = (percentage) => {
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
-
   const getStatusLabel = (status) => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+    return status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ');
   };
 
   if (loading) {
@@ -279,6 +375,10 @@ function BillingPage() {
       </div>
     );
   }
+
+  const currentPlanId = billingData?.subscription?.plan || billingData?.plan?.tier || 'free';
+  const freePlan = plans.find(plan => plan.tier === 'free' || plan.id === 'free');
+  const paidPlans = plans.filter(plan => plan.tier !== 'free' && plan.id !== 'free');
 
   return (
     <div className="p-6 space-y-6">
@@ -318,45 +418,29 @@ function BillingPage() {
         </div>
       )}
 
-      {/* Current Plan Card */}
+      {/* Current Plan Summary */}
       {billingData && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-[#DC2626] to-[#B91C1C] px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-red-100 text-sm">Current Plan</p>
-                <h2 className="text-white text-2xl font-bold">{billingData.plan?.displayName || billingData.plan?.name || 'Free'}</h2>
+        <div className="bg-gradient-to-r from-[#DC2626] to-[#B91C1C] rounded-2xl p-6 text-white">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-red-100 text-sm">Current Plan</p>
+              <h2 className="text-3xl font-bold">{billingData.plan?.displayName || billingData.plan?.name || 'Free'}</h2>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[billingData.subscription?.status] || STATUS_COLORS.trial}`}>
+                  {getStatusLabel(billingData.subscription?.status || 'trial')}
+                </span>
+                {billingData.subscription?.status === 'cancelled' ? (
+                  <span className="text-sm text-red-100">Access until: {formatDate(billingData.subscription?.currentPeriodEnd)}</span>
+                ) : billingData.subscription?.status === 'trial' ? (
+                  <span className="text-sm text-red-100">Trial ends: {formatDate(billingData.subscription?.trialEndsAt)}</span>
+                ) : (
+                  <span className="text-sm text-red-100">Next billing: {formatDate(billingData.subscription?.currentPeriodEnd)}</span>
+                )}
               </div>
-              <div className="text-right">
-                <p className="text-white text-3xl font-bold">
-                  {formatPrice(billingData.plan?.price)}
-                  {billingData.plan?.price !== 'custom' && billingData.plan?.price !== 0 && (
-                    <span className="text-lg font-normal">/mo</span>
-                  )}
-                </p>
-                <div className="flex items-center gap-2 justify-end mt-1">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[billingData.subscription?.status] || STATUS_COLORS.trial}`}>
-                    {getStatusLabel(billingData.subscription?.status || 'trial')}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Subscription Actions */}
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-            <div className="text-sm text-gray-600">
-              {billingData.subscription?.status === 'cancelled' ? (
-                <span>Your subscription has been cancelled. Access until: {formatDate(billingData.subscription?.currentPeriodEnd)}</span>
-              ) : billingData.subscription?.status === 'trial' ? (
-                <span>Trial ends: {formatDate(billingData.subscription?.trialEndsAt)}</span>
-              ) : (
-                <span>Next billing date: {formatDate(billingData.subscription?.currentPeriodEnd)}</span>
-              )}
             </div>
             <div className="flex gap-2">
               {billingData.subscription?.status === 'cancelled' && (
-                <Button variant="primary" onClick={handleReactivate} disabled={isSubmitting}>
+                <Button variant="secondary" onClick={handleReactivate} disabled={isSubmitting}>
                   Reactivate
                 </Button>
               )}
@@ -386,7 +470,7 @@ function BillingPage() {
                 {value.limit !== 'unlimited' && (
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${getUsageColor(value.percentage)}`}
+                      className={`h-full rounded-full ${value.percentage >= 90 ? 'bg-red-500' : value.percentage >= 70 ? 'bg-yellow-500' : 'bg-green-500'}`}
                       style={{ width: `${Math.min(value.percentage, 100)}%` }}
                     />
                   </div>
@@ -397,84 +481,255 @@ function BillingPage() {
         </div>
       )}
 
-      {/* Available Plans */}
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Plans</h2>
-        {plansLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {plans.map((plan) => {
-              const isCurrentPlan = billingData?.subscription?.plan === plan.id;
-              return (
-                <div
-                  key={plan.id}
-                  className={`relative bg-white rounded-xl shadow-sm border-2 overflow-hidden ${
-                    plan.id === 'professional' ? 'border-[#DC2626]' : 'border-gray-100'
-                  }`}
-                >
-                  {plan.id === 'professional' && (
-                    <div className="absolute top-0 right-0 bg-[#DC2626] text-white text-xs font-medium px-3 py-1">
-                      Popular
-                    </div>
-                  )}
-                  <div className="p-6">
-                    <h3 className="text-lg font-bold text-gray-900">{plan.displayName || plan.name}</h3>
-                    <div className="mt-2">
-                      <span className="text-3xl font-bold text-gray-900">{formatPrice(plan.price)}</span>
-                      {plan.price !== 'custom' && plan.price !== 0 && (
-                        <span className="text-gray-500">/mo</span>
-                      )}
-                    </div>
+      {/* Pricing Section - Same as Landing Page */}
+      <div className="bg-gray-50 rounded-2xl py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Section Header */}
+          <div className="text-center mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+              Change Your Plan
+            </h2>
+            <p className="text-gray-600">
+              Select a plan that fits your needs. Upgrade or downgrade anytime.
+            </p>
 
-                    <ul className="mt-6 space-y-3">
-                      <li className="flex items-center gap-2 text-sm">
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-gray-600">
-                          {plan.features?.maxProjects === 'unlimited' ? 'Unlimited' : plan.features?.maxProjects} Projects
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2 text-sm">
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-gray-600">
-                          {plan.features?.maxTeamMembers === 'unlimited' ? 'Unlimited' : plan.features?.maxTeamMembers} Team Members
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2 text-sm">
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-gray-600">
-                          {plan.features?.apiCalls === 'unlimited' ? 'Unlimited' : plan.features?.apiCalls?.toLocaleString()} API Calls
-                        </span>
-                      </li>
-                    </ul>
-
+            {/* Billing Toggle */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mt-6">
+              {/* Currency Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Currency:</span>
+                <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1">
+                  {['USD', 'INR', 'EUR', 'GBP'].map((curr) => (
                     <button
-                      onClick={() => handleUpgrade(plan)}
-                      disabled={isCurrentPlan}
-                      className={`mt-6 w-full py-2.5 px-4 rounded-lg font-medium transition-colors ${
-                        isCurrentPlan
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : plan.id === 'professional'
-                            ? 'bg-[#DC2626] text-white hover:bg-[#B91C1C]'
-                            : 'border-2 border-[#DC2626] text-[#DC2626] hover:bg-red-50'
+                      key={curr}
+                      onClick={() => setCurrency(curr)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        currency === curr
+                          ? 'bg-[#DC2626] text-white'
+                          : 'text-gray-600 hover:bg-gray-100'
                       }`}
                     >
-                      {isCurrentPlan ? 'Current Plan' : plan.price === 'custom' ? 'Contact Sales' : 'Upgrade'}
+                      {curr}
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Billing Interval Toggle */}
+              <div className="flex items-center gap-4">
+                <span className={`text-sm font-medium ${billingInterval === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>
+                  Monthly
+                </span>
+                <button
+                  onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
+                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                    billingInterval === 'year' ? 'bg-[#DC2626]' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      billingInterval === 'year' ? 'transform translate-x-7' : ''
+                    }`}
+                  />
+                </button>
+                <span className={`text-sm font-medium ${billingInterval === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>
+                  Yearly
+                  <span className="ml-1 text-green-600 font-semibold">(Save 20%)</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Plans Grid */}
+          {plansLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Free Plan */}
+              {freePlan && (
+                <div key={freePlan.id}>
+                  <div
+                    className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all hover:shadow-xl ${
+                      currentPlanId === 'free' || currentPlanId === freePlan.id ? 'border-[#DC2626] ring-2 ring-[#DC2626] ring-opacity-50' : 'border-gray-200'
+                    }`}
+                  >
+                    {currentPlanId === 'free' || currentPlanId === freePlan.id ? (
+                      <div className="absolute top-0 right-0 bg-[#DC2626] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                        Current Plan
+                      </div>
+                    ) : null}
+                    <div className="p-6">
+                      <div className="mb-4">
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                          Free
+                        </span>
+                        <h3 className="mt-2 text-xl font-bold text-gray-900">{freePlan.name}</h3>
+                        {freePlan.description && (
+                          <p className="text-sm text-gray-500 mt-1">{freePlan.description}</p>
+                        )}
+                      </div>
+
+                      <div className="mb-6">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold text-gray-900">Free</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">Forever free</p>
+                      </div>
+
+                      <div className="space-y-3 mb-6">
+                        {freePlan.credits?.includedCredits > 0 && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">
+                              {freePlan.credits.includedCredits.toLocaleString()} {freePlan.credits.creditType || 'tokens'}
+                            </span>
+                          </div>
+                        )}
+                        {freePlan.limits?.maxUsers && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">Up to {freePlan.limits.maxUsers} user{freePlan.limits.maxUsers > 1 ? 's' : ''}</span>
+                          </div>
+                        )}
+                        {freePlan.limits?.maxApiCalls && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">{freePlan.limits.maxApiCalls.toLocaleString()} API calls</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleSelectPlan(freePlan)}
+                        disabled={currentPlanId === 'free' || currentPlanId === freePlan.id}
+                        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${
+                          currentPlanId === 'free' || currentPlanId === freePlan.id
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                        }`}
+                      >
+                        {currentPlanId === 'free' || currentPlanId === freePlan.id ? 'Current Plan' : 'Downgrade'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+
+              {/* Paid Plans */}
+              {paidPlans.map((plan) => {
+                const tierStyle = getTierColor(plan.tier);
+                const isPopular = plan.isPopular || plan.tier === 'professional';
+                const isCurrentPlan = currentPlanId === plan.tier || currentPlanId === plan.id;
+
+                return (
+                  <div
+                    key={plan.id}
+                    className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all hover:shadow-xl ${
+                      isCurrentPlan ? 'border-[#DC2626] ring-2 ring-[#DC2626] ring-opacity-50' : isPopular ? 'border-[#DC2626] shadow-lg' : 'border-gray-200'
+                    }`}
+                  >
+                    {isCurrentPlan ? (
+                      <div className="absolute top-0 right-0 bg-[#DC2626] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                        Current Plan
+                      </div>
+                    ) : isPopular ? (
+                      <div className="absolute top-0 right-0 bg-[#DC2626] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                        Most Popular
+                      </div>
+                    ) : null}
+
+                    <div className="p-6">
+                      <div className="mb-4">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${tierStyle.badge}`}>
+                          {getTierName(plan.tier)}
+                        </span>
+                        <h3 className="mt-2 text-xl font-bold text-gray-900">{plan.name}</h3>
+                        {plan.description && (
+                          <p className="text-sm text-gray-500 mt-1">{plan.description}</p>
+                        )}
+                      </div>
+
+                      <div className="mb-6">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold text-gray-900">
+                            {formatPrice(getDisplayPrice(plan), currency)}
+                          </span>
+                          <span className="text-gray-500">
+                            /{billingInterval === 'year' ? 'year' : plan.billing?.interval || 'month'}
+                          </span>
+                        </div>
+                        {billingInterval === 'year' && (plan.billing?.price || plan.price) > 0 && (
+                          <p className="text-sm text-gray-400 mt-1">
+                            <span className="line-through">{formatPrice(((plan.billing?.price || plan.price || 0) * 12), currency)}/year</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 mb-6">
+                        {plan.credits?.includedCredits > 0 && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">
+                              {plan.credits.includedCredits.toLocaleString()} {plan.credits.creditType || 'tokens'} included
+                            </span>
+                          </div>
+                        )}
+
+                        {plan.limits?.maxUsers && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">Up to {plan.limits.maxUsers} users</span>
+                          </div>
+                        )}
+
+                        {plan.limits?.maxApiCalls && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="text-gray-600">{plan.limits.maxApiCalls.toLocaleString()} API calls</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleSelectPlan(plan)}
+                        disabled={isCurrentPlan}
+                        className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${
+                          isCurrentPlan
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : isPopular
+                              ? 'bg-[#DC2626] text-white hover:bg-[#B91C1C]'
+                              : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                        }`}
+                      >
+                        {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                      </button>
+
+                      {plan.billing?.trialDays > 0 && !isCurrentPlan && (
+                        <p className="text-center text-sm text-gray-500 mt-3">
+                          {plan.billing.trialDays}-day free trial
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Billing History / Invoices */}
@@ -543,7 +798,6 @@ function BillingPage() {
         size="md"
       >
         <div className="p-6 space-y-4">
-          {/* Existing Payment Methods */}
           {billingData?.paymentMethods?.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-gray-700">Saved Payment Methods</h3>
@@ -584,7 +838,6 @@ function BillingPage() {
             </div>
           )}
 
-          {/* Add New Payment Method Form */}
           <div className="border-t border-gray-200 pt-4">
             <h3 className="text-sm font-medium text-gray-700 mb-3">Add New Payment Method</h3>
             <form onSubmit={handleAddPaymentMethod} className="space-y-4">
@@ -597,7 +850,7 @@ function BillingPage() {
                     onChange={(e) => setNewPaymentMethod({ ...newPaymentMethod, last4: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                     placeholder="4242"
                     maxLength={4}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                     required
                   />
                 </div>
@@ -606,7 +859,7 @@ function BillingPage() {
                   <select
                     value={newPaymentMethod.brand}
                     onChange={(e) => setNewPaymentMethod({ ...newPaymentMethod, brand: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                   >
                     <option value="visa">Visa</option>
                     <option value="mastercard">Mastercard</option>
@@ -626,7 +879,7 @@ function BillingPage() {
                     placeholder="01"
                     min={1}
                     max={12}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                     required
                   />
                 </div>
@@ -639,7 +892,7 @@ function BillingPage() {
                     placeholder={new Date().getFullYear()}
                     min={new Date().getFullYear()}
                     max={new Date().getFullYear() + 20}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                     required
                   />
                 </div>
@@ -672,7 +925,7 @@ function BillingPage() {
                 type="text"
                 value={billingDetails.companyName}
                 onChange={(e) => setBillingDetails({ ...billingDetails, companyName: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
               />
             </div>
             <div>
@@ -681,7 +934,7 @@ function BillingPage() {
                 type="text"
                 value={billingDetails.address}
                 onChange={(e) => setBillingDetails({ ...billingDetails, address: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -691,7 +944,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.city}
                   onChange={(e) => setBillingDetails({ ...billingDetails, city: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
               <div>
@@ -700,7 +953,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.state}
                   onChange={(e) => setBillingDetails({ ...billingDetails, state: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
             </div>
@@ -711,7 +964,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.country}
                   onChange={(e) => setBillingDetails({ ...billingDetails, country: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
               <div>
@@ -720,7 +973,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.postalCode}
                   onChange={(e) => setBillingDetails({ ...billingDetails, postalCode: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
             </div>
@@ -731,7 +984,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.taxId}
                   onChange={(e) => setBillingDetails({ ...billingDetails, taxId: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
               <div>
@@ -740,7 +993,7 @@ function BillingPage() {
                   type="text"
                   value={billingDetails.vatNumber}
                   onChange={(e) => setBillingDetails({ ...billingDetails, vatNumber: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
                 />
               </div>
             </div>
@@ -754,60 +1007,6 @@ function BillingPage() {
             </div>
           </form>
         </div>
-      </Modal>
-
-      {/* Upgrade Plan Modal */}
-      <Modal
-        isOpen={showUpgradeModal}
-        onClose={() => {
-          setShowUpgradeModal(false);
-          setSelectedPlan(null);
-        }}
-        title={`Upgrade to ${selectedPlan?.displayName || selectedPlan?.name || ''} Plan`}
-        size="md"
-      >
-        {selectedPlan && (
-          <div className="p-6 space-y-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium text-gray-900">{selectedPlan.displayName || selectedPlan.name}</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {formatPrice(selectedPlan.price)}
-                  {selectedPlan.price !== 'custom' && selectedPlan.price !== 0 && '/mo'}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <p className="text-sm text-yellow-700">
-                {selectedPlan.price === 'custom'
-                  ? 'Contact our sales team for enterprise pricing.'
-                  : `Your card will be charged ${formatPrice(selectedPlan.price)} immediately. You can cancel anytime.`}
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowUpgradeModal(false);
-                  setSelectedPlan(null);
-                }}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleConfirmUpgrade}
-                disabled={isSubmitting || selectedPlan.price === 'custom'}
-                className="flex-1"
-              >
-                {isSubmitting ? 'Processing...' : 'Confirm Upgrade'}
-              </Button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       {/* Cancel Subscription Modal */}
@@ -853,7 +1052,7 @@ function CancelSubscriptionForm({ onCancel, onSubmit, isSubmitting }) {
           onChange={(e) => setReason(e.target.value)}
           placeholder="Tell us why you're leaving..."
           rows={3}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none "
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#DC2626]"
         />
       </div>
 

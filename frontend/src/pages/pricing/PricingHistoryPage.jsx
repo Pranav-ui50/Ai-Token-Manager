@@ -30,19 +30,29 @@ function PricingHistoryPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [historyData, statsData, providersData] = await Promise.all([
-        pricingHistoryApi.getRecentChanges({ days: daysFilter, limit: 50 }),
-        pricingHistoryApi.getStatistics(selectedProvider || null),
-        providerApi.getAll()
-      ]);
+      // Fetch providers list first (needed for both cases)
+      const providersData = await providerApi.getAll();
+      const providersArray = Array.isArray(providersData) ? providersData : (providersData?.providers || []);
+      setProviders(providersArray);
+
+      // Fetch history based on provider filter
+      let historyData;
+      if (selectedProvider) {
+        // Get history for specific provider
+        historyData = await pricingHistoryApi.getByProvider(selectedProvider, { limit: 50 });
+      } else {
+        // Get all recent changes
+        historyData = await pricingHistoryApi.getRecentChanges({ days: daysFilter, limit: 50 });
+      }
+
+      // Fetch statistics with provider filter
+      const statsData = await pricingHistoryApi.getStatistics(selectedProvider || null);
 
       // Extract arrays from API responses
-      const historyArray = Array.isArray(historyData) ? historyData : (historyData?.changes || historyData?.data || []);
-      const providersArray = Array.isArray(providersData) ? providersData : (providersData?.providers || []);
+      const historyArray = Array.isArray(historyData) ? historyData : (historyData?.history || historyData?.data || []);
 
       setHistory(historyArray);
       setStatistics(statsData || null);
-      setProviders(providersArray);
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to load pricing history');
     } finally {

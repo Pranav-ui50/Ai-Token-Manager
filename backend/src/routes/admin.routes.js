@@ -154,4 +154,71 @@ router.patch('/models/:id/status', adminController.toggleModelStatus);
  */
 router.get('/dashboard', adminController.getDashboardStats);
 
+// ===========================================
+// Plan Management Routes (Platform-wide)
+// ===========================================
+
+/**
+ * @route   GET /api/admin/plans
+ * @desc    Get all plans (platform-wide)
+ * @access  Private (Super Admin)
+ */
+router.get('/plans', adminController.getPlans);
+
+/**
+ * @route   POST /api/admin/plans
+ * @desc    Create new plan
+ * @access  Private (Super Admin)
+ */
+router.post('/plans', adminController.createPlan);
+
+/**
+ * @route   GET /api/admin/plans/:id
+ * @desc    Get plan by ID
+ * @access  Private (Super Admin)
+ */
+router.get('/plans/:id', adminController.getPlanById);
+
+/**
+ * @route   PUT /api/admin/plans/:id
+ * @desc    Update plan
+ * @access  Private (Super Admin)
+ */
+router.put('/plans/:id', adminController.updatePlan);
+
+/**
+ * @route   DELETE /api/admin/plans/:id
+ * @desc    Delete plan
+ * @access  Private (Super Admin)
+ */
+router.delete('/plans/:id', adminController.deletePlan);
+
+/**
+ * @route   PATCH /api/admin/plans/:id/status
+ * @desc    Toggle plan status
+ * @access  Private (Super Admin)
+ */
+router.patch('/plans/:id/status', adminController.togglePlanStatus);
+
+/**
+ * @route   PATCH /api/admin/plans/:id/visibility
+ * @desc    Toggle plan public visibility
+ * @access  Private (Super Admin)
+ */
+router.patch('/plans/:id/visibility', adminController.togglePlanVisibility);
+
+/**
+ * @route   PATCH /api/admin/plans/:id/default
+ * @desc    Set plan as default
+ * @access  Private (Super Admin)
+ */
+router.patch('/plans/:id/default', adminController.setDefaultPlan);
+
+/**
+ * @route   PATCH /api/admin/plans/reorder
+ * @desc    Reorder plans
+ * @access  Private (Super Admin)
+ */
+router.patch('/plans/reorder', adminController.reorderPlans);
+
 export default router;

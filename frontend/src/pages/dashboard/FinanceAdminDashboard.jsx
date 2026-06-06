@@ -57,20 +57,47 @@ function FinanceAdminDashboard() {
       const data = response?.data || response || {};
       const summary = data?.summary || {};
 
+      // Map backend fields to frontend stats
+      // Backend returns totalCost, projectedCost, savings, activeSubscriptions directly
       setStats({
-        totalSpend: extractNumber(summary.totalCost || summary.monthlySpend) / 100, // Convert from cents
-        projectedCost: extractNumber(summary.projectedCost || summary.estimatedCost) / 100,
-        savings: extractNumber(summary.savings || summary.costSavings) / 100,
-        activeSubscriptions: extractNumber(summary.activeSubscriptions || summary.subscriptions) || 0
+        totalSpend: extractNumber(summary.totalCost || summary.monthlySpend || 0),
+        projectedCost: extractNumber(summary.projectedCost || summary.estimatedCost || 0),
+        savings: extractNumber(summary.savings || summary.costSavings || 0),
+        activeSubscriptions: extractNumber(summary.activePlans || summary.activeSubscriptions || summary.subscriptions || 0)
       });
 
       // Set cost trend data for monthly chart
       const costTrend = data?.costTrend || [];
-      setMonthlyData(costTrend.length > 0 ? costTrend : generateDefaultMonthlyData());
+      if (costTrend.length > 0) {
+        // Transform costTrend data for chart display
+        const transformedTrend = costTrend.map(item => ({
+          month: item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short' }) : item.month || '',
+          actual: item.cost || item.actual || 0,
+          projected: item.projected || 0,
+          tokens: item.tokens || 0,
+          requests: item.requests || 0
+        }));
+        setMonthlyData(transformedTrend);
+      } else {
+        setMonthlyData(generateDefaultMonthlyData());
+      }
 
       // Set top models from analytics
-      const models = data?.topModels || data?.modelsByUsage || [];
-      setTopModels(models.length > 0 ? models.slice(0, 5) : generateDefaultModels());
+      const models = data?.topModels || data?.summary?.costs?.byModel || [];
+      if (models.length > 0) {
+        // Transform models data for display
+        const transformedModels = models.map(model => ({
+          _id: model.model || model._id,
+          name: model.name || model.model || 'Unknown',
+          cost: model.cost || 0,
+          tokens: model.tokens || 0,
+          requests: model.requests || 0,
+          provider: model.provider || 'Unknown'
+        }));
+        setTopModels(transformedModels.slice(0, 5));
+      } else {
+        setTopModels(generateDefaultModels());
+      }
 
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
@@ -96,12 +123,14 @@ function FinanceAdminDashboard() {
   const formatCurrency = (amount) => {
     const numValue = typeof amount === 'object' ? extractNumber(amount) : amount;
     if (!numValue && numValue !== 0) return '$0.00';
+    // Ensure we're working with a number and format it
+    const value = Number(numValue);
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(numValue);
+    }).format(value);
   };
 
   const formatNumber = (num) => {
@@ -263,18 +292,18 @@ function FinanceAdminDashboard() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">{data.month || `Month ${index + 1}`}</span>
                     <div className="flex items-center gap-4">
-                      <span className="text-gray-900 font-medium">{formatCurrency(extractNumber(data.actual) / 100)}</span>
-                      <span className="text-gray-400 text-xs">Projected: {formatCurrency(extractNumber(data.projected) / 100)}</span>
+                      <span className="text-gray-900 font-medium">{formatCurrency(extractNumber(data.actual))}</span>
+                      <span className="text-gray-400 text-xs">Projected: {formatCurrency(extractNumber(data.projected))}</span>
                     </div>
                   </div>
                   <div className="flex gap-1">
                     <div
                       className="h-2 bg-[#DC2626] rounded-full"
-                      style={{ width: `${Math.min((extractNumber(data.actual) / 1500000) * 100, 100)}%` }}
+                      style={{ width: `${Math.min((extractNumber(data.actual) / 100) * 100, 100)}%` }}
                     />
                     <div
                       className="h-2 bg-gray-200 rounded-full"
-                      style={{ width: `${Math.min((extractNumber(data.projected - data.actual) / 1500000) * 100, 100)}%` }}
+                      style={{ width: `${Math.min((extractNumber(data.projected - data.actual) / 100) * 100, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -309,7 +338,7 @@ function FinanceAdminDashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">{formatCurrency(extractNumber(model.cost) / 100)}</p>
+                    <p className="font-semibold text-gray-900">{formatCurrency(extractNumber(model.cost))}</p>
                     <p className="text-xs text-gray-500">{formatNumber(model.tokens || model.tokenCount || 0)} tokens</p>
                   </div>
                 </div>

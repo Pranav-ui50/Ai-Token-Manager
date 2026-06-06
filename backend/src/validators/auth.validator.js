@@ -66,6 +66,16 @@ export const registerValidation = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Organization name must be between 2 and 100 characters'),
 
+  body('planId')
+    .optional()
+    .isIn(['free', 'starter', 'professional', 'enterprise'])
+    .withMessage('Invalid plan selected'),
+
+  body('billingCycle')
+    .optional()
+    .isIn(['monthly', 'yearly'])
+    .withMessage('Invalid billing cycle selected'),
+
   validate
 ];
 

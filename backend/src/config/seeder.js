@@ -635,9 +635,26 @@ const DEFAULT_MODELS = [
   {
     providerName: 'DeepSeek',
     models: [
-      { name: 'deepseek-v3', displayName: 'DeepSeek V3', type: 'chat', inputPrice: 0.27, outputPrice: 1.10, contextWindow: 64000 },
-      { name: 'deepseek-r1', displayName: 'DeepSeek R1', type: 'chat', inputPrice: 0.55, outputPrice: 2.19, contextWindow: 64000, description: 'Reasoning model' },
-      { name: 'deepseek-coder', displayName: 'DeepSeek Coder', type: 'chat', inputPrice: 0.14, outputPrice: 0.28, contextWindow: 64000, description: 'Code specialist' }
+      // Flagship Models
+      { name: 'deepseek-v3', displayName: 'DeepSeek V3', type: 'chat', inputPrice: 0.27, outputPrice: 1.10, contextWindow: 64000, description: 'Latest flagship model' },
+      { name: 'deepseek-r1', displayName: 'DeepSeek R1', type: 'chat', inputPrice: 0.55, outputPrice: 2.19, contextWindow: 64000, description: 'Reasoning model with extended thinking' },
+
+      // Code Models
+      { name: 'deepseek-coder', displayName: 'DeepSeek Coder', type: 'chat', inputPrice: 0.14, outputPrice: 0.28, contextWindow: 64000, description: 'Code specialist' },
+      { name: 'deepseek-coder-v2', displayName: 'DeepSeek Coder V2', type: 'chat', inputPrice: 0.14, outputPrice: 0.28, contextWindow: 128000, description: 'Improved code model' },
+
+      // R1 Distill Models (Qwen-based)
+      { name: 'deepseek-r1-distill-qwen-1.5b', displayName: 'DeepSeek R1 Distill Qwen 1.5B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'Smallest R1 distill - Qwen based' },
+      { name: 'deepseek-r1-distill-qwen-7b', displayName: 'DeepSeek R1 Distill Qwen 7B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'R1 distill - Qwen 7B' },
+      { name: 'deepseek-r1-distill-qwen-14b', displayName: 'DeepSeek R1 Distill Qwen 14B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'R1 distill - Qwen 14B' },
+      { name: 'deepseek-r1-distill-qwen-32b', displayName: 'DeepSeek R1 Distill Qwen 32B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'R1 distill - Qwen 32B' },
+
+      // R1 Distill Models (Llama-based)
+      { name: 'deepseek-r1-distill-llama-8b', displayName: 'DeepSeek R1 Distill Llama 8B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'R1 distill - Llama 8B' },
+      { name: 'deepseek-r1-distill-llama-70b', displayName: 'DeepSeek R1 Distill Llama 70B', type: 'chat', inputPrice: 0.00, outputPrice: 0.00, contextWindow: 32000, description: 'Largest R1 distill - Llama 70B' },
+
+      // Chat Models
+      { name: 'deepseek-chat', displayName: 'DeepSeek Chat', type: 'chat', inputPrice: 0.27, outputPrice: 1.10, contextWindow: 64000, description: 'General purpose chat' }
     ]
   },
   // ===========================================
@@ -747,7 +764,7 @@ const DEFAULT_PLANS = [
     slug: 'free',
     tier: 'free',
     description: 'Perfect for getting started with AI cost management',
-    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
+    billing: { price: 0, yearlyPrice: 0, currency: 'USD', interval: 'month', trialDays: 0 },
     pricingModel: { type: 'flat' },
     credits: { includedCredits: 10000, creditType: 'token' },
     limits: { maxUsers: 1, maxApiCalls: 1000, maxTokens: 100000 },
@@ -759,7 +776,7 @@ const DEFAULT_PLANS = [
     slug: 'starter',
     tier: 'starter',
     description: 'Great for small teams exploring AI APIs',
-    billing: { price: 29, currency: 'USD', interval: 'month', trialDays: 14 },
+    billing: { price: 29, yearlyPrice: 278.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 500000, includedRequests: 5000 } },
     credits: { includedCredits: 500000, creditType: 'token' },
     limits: { maxUsers: 3, maxApiCalls: 10000, maxTokens: 500000 },
@@ -771,7 +788,7 @@ const DEFAULT_PLANS = [
     slug: 'professional',
     tier: 'professional',
     description: 'Ideal for growing teams with advanced AI needs',
-    billing: { price: 99, currency: 'USD', interval: 'month', trialDays: 14 },
+    billing: { price: 99, yearlyPrice: 950.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 2000000, includedRequests: 20000 } },
     credits: { includedCredits: 2000000, creditType: 'token' },
     limits: { maxUsers: 10, maxApiCalls: 50000, maxTokens: 2000000 },
@@ -783,24 +800,12 @@ const DEFAULT_PLANS = [
     slug: 'business',
     tier: 'business',
     description: 'For organizations with heavy AI API usage',
-    billing: { price: 299, currency: 'USD', interval: 'month', trialDays: 14 },
+    billing: { price: 299, yearlyPrice: 2870.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 10000000, includedRequests: 100000 } },
     credits: { includedCredits: 10000000, creditType: 'token' },
     limits: { maxUsers: 50, maxApiCalls: 200000, maxTokens: 10000000 },
     isPopular: false,
     displayOrder: 4
-  },
-  {
-    name: 'Enterprise',
-    slug: 'enterprise',
-    tier: 'enterprise',
-    description: 'Custom solutions for large-scale deployments',
-    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
-    pricingModel: { type: 'flat' },
-    credits: { includedCredits: 0, creditType: 'token' },
-    limits: { maxUsers: null, maxApiCalls: null, maxTokens: null },
-    isPopular: false,
-    displayOrder: 5
   }
 ];
 

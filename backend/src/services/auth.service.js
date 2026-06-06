@@ -10,6 +10,7 @@ import Role from '../models/Role.js';
 import Organization from '../models/Organization.js';
 import PasswordReset from '../models/PasswordReset.js';
 import EmailVerification from '../models/EmailVerification.js';
+import Plan from '../models/Plan.js';
 import { generateTokens, verifyAccessToken, verifyRefreshToken } from '../utils/jwt.js';
 import { generateToken, generateNumericCode } from '../utils/encryption.js';
 import { AppError } from '../middlewares/error.middleware.js';
@@ -24,9 +25,31 @@ class AuthService {
    * @returns {Object} Created user, tokens, and verification token
    */
   async register(userData) {
-    const { email, password, firstName, lastName, organizationName } = userData;
+    const { email, password, firstName, lastName, organizationName, planId, billingCycle } = userData;
 
-    logger.info(`[Auth] Register attempt for email: ${email}`);
+    logger.info(`[Auth] Register attempt for email: ${email}, plan: ${planId || 'free'}, billing: ${billingCycle || 'monthly'}`);
+
+    // Determine if plan is paid
+    const paidPlanSlugs = ['starter', 'professional', 'business', 'enterprise'];
+    let selectedPlan = planId || 'free';
+    const selectedBillingCycle = billingCycle || 'monthly';
+    let isPaidPlan = paidPlanSlugs.includes(selectedPlan);
+
+    // If planId looks like a MongoDB ObjectId, fetch the plan to check its price
+    if (planId && /^[0-9a-fA-F]{24}$/.test(planId)) {
+      try {
+        const plan = await Plan.findById(planId);
+        if (plan) {
+          selectedPlan = plan.slug || plan.tier || planId;
+          isPaidPlan = plan.billing?.price > 0;
+          logger.info(`[Auth] Plan fetched: ${plan.name}, price: ${plan.billing?.price}, isPaid: ${isPaidPlan}`);
+        }
+      } catch (err) {
+        logger.warn(`[Auth] Could not fetch plan by ID: ${planId}`, err.message);
+      }
+    }
+
+    logger.info(`[Auth] Plan selection: ${selectedPlan}, isPaidPlan: ${isPaidPlan}`);
 
     // Check if user already exists
     const existingUser = await User.findByEmail(email);
@@ -60,6 +83,9 @@ class AuthService {
     let organization = null;
     if (organizationName) {
       try {
+        // Set subscription status based on plan type
+        const subscriptionStatus = isPaidPlan ? 'pending_payment' : 'trial';
+
         organization = await Organization.create({
           name: organizationName,
           owner: user._id,
@@ -68,7 +94,13 @@ class AuthService {
             role: orgOwnerRole._id,
             joinedAt: new Date()
           }],
-          isActive: true
+          isActive: true,
+          subscription: {
+            plan: selectedPlan,
+            status: subscriptionStatus,
+            billingCycle: selectedBillingCycle,
+            trialEndsAt: isPaidPlan ? null : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 days trial for free plans
+          }
         });
 
         logger.info(`[Auth] Organization created: ${organization._id}`);
@@ -114,14 +146,18 @@ class AuthService {
     const userObj = user.toObject();
     delete userObj.password;
 
-    logger.info(`[Auth] Registration successful: ${user.email}`);
+    logger.info(`[Auth] Registration successful: ${user.email}${isPaidPlan ? ', requires payment' : ''}`);
 
     return {
       user: userObj,
       accessToken,
       refreshToken,
       expiresIn,
-      verificationToken: config.nodeEnv === 'development' ? verificationToken : undefined
+      verificationToken: config.nodeEnv === 'development' ? verificationToken : undefined,
+      // Payment requirement info for paid plans
+      requiresPayment: isPaidPlan,
+      planId: selectedPlan,
+      billingCycle: selectedBillingCycle
     };
   }
 

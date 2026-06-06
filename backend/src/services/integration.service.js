@@ -541,34 +541,50 @@ class IntegrationService {
         usageData = await this._syncAnthropicUsage(credentials.apiKey, orgId, integration.config);
       }
 
+      // Get all features for this organization
+      const allFeatures = await Feature.find({ organization: orgId });
+
       // Update features with synced usage data
       for (const data of usageData) {
-        const feature = await Feature.findOne({
+        // Try multiple strategies to find the feature
+        let feature = null;
+
+        // Strategy 1: Find by external ID
+        feature = await Feature.findOne({
           organization: orgId,
           externalId: data.modelId
         });
 
-        if (feature) {
-          // Update feature stats
-          feature.stats = {
-            ...feature.stats,
-            totalRequests: (feature.stats?.totalRequests || 0) + data.requests,
-            totalTokens: (feature.stats?.totalTokens || 0) + data.totalTokens,
-            totalCost: (feature.stats?.totalCost || 0) + data.cost
-          };
-
-          // Add to usage history
-          if (!feature.usageHistory) {
-            feature.usageHistory = [];
+        // Strategy 2: Find by model name matching
+        if (!feature && data.modelId) {
+          const provider = await this._getProviderForIntegration(integration.type);
+          if (provider) {
+            const aiModel = await this._findModelByName(data.modelId, provider._id);
+            if (aiModel) {
+              feature = await Feature.findOne({
+                organization: orgId,
+                model: aiModel._id
+              });
+            }
           }
-          feature.usageHistory.push({
-            date: new Date(),
-            requests: data.requests,
-            tokens: data.totalTokens,
-            cost: data.cost
-          });
+        }
 
-          await feature.save();
+        // Strategy 3: Use first available feature if no match
+        if (!feature && allFeatures.length > 0) {
+          feature = allFeatures[0];
+        }
+
+        if (feature) {
+          // Update feature stats using the recordUsage method
+          await feature.recordUsage({
+            requests: data.requests || 0,
+            tokens: data.totalTokens || 0,
+            inputTokens: data.inputTokens || 0,
+            outputTokens: data.outputTokens || 0,
+            cost: data.cost || 0,
+            errorCount: 0,
+            avgLatency: 0
+          });
           recordsProcessed++;
         }
       }
@@ -592,6 +608,34 @@ class IntegrationService {
       logger.error(`[IntegrationService] AI provider sync failed: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Get provider for integration type
+   */
+  async _getProviderForIntegration(type) {
+    const Provider = (await import('../models/Provider.js')).default;
+    return Provider.findOne({
+      $or: [
+        { slug: type },
+        { name: new RegExp(type, 'i') }
+      ]
+    });
+  }
+
+  /**
+   * Find model by name and provider
+   */
+  async _findModelByName(modelName, providerId) {
+    const AIModel = (await import('../models/AIModel.js')).default;
+    return AIModel.findOne({
+      provider: providerId,
+      $or: [
+        { name: new RegExp(modelName, 'i') },
+        { displayName: new RegExp(modelName, 'i') },
+        { slug: modelName.toLowerCase().replace(/[^a-z0-9]/g, '-') }
+      ]
+    });
   }
 
   /**

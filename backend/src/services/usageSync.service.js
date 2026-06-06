@@ -190,18 +190,19 @@ class UsageSyncService {
         });
       }
 
+      // Get all features for this organization
+      const orgFeatures = await Feature.find({
+        organization: integration.organization._id
+      }).populate('model');
+
       // Process each usage record
       for (const record of usageData) {
         try {
-          // Find or create feature for this model
+          // Find feature for this model - try multiple matching strategies
           let feature = null;
-          if (provider) {
-            feature = await Feature.findOne({
-              organization: integration.organization._id,
-              model: { $exists: true }
-            }).populate('model');
 
-            // Try to find matching AIModel
+          // Strategy 1: Find feature with matching model name
+          if (provider) {
             const aiModel = await AIModel.findOne({
               provider: provider._id,
               $or: [
@@ -217,6 +218,11 @@ class UsageSyncService {
                 model: aiModel._id
               });
             }
+          }
+
+          // Strategy 2: Find first feature without a model or with any model
+          if (!feature && orgFeatures.length > 0) {
+            feature = orgFeatures[0]; // Use first available feature
           }
 
           // Update feature usage stats

@@ -17,11 +17,15 @@ class FeatureService {
    * @returns {Object} Created feature
    */
   async createFeature(featureData) {
-    const { organization, name, model, provider } = featureData;
+    const { organization, name, model, provider, modelIdentifier, modelDisplayName, modelCapabilities } = featureData;
 
-    // Verify model exists if provided
-    if (model) {
-      const modelDoc = await AIModel.findById(model);
+    // Determine if this is a database model or dynamic model
+    const isDatabaseModel = model && /^[0-9a-fA-F]{24}$/.test(model);
+
+    // Verify model exists if it's a database model reference
+    let modelDoc = null;
+    if (isDatabaseModel) {
+      modelDoc = await AIModel.findById(model);
       if (!modelDoc) {
         throw new AppError('AI Model not found', 404, 'MODEL_NOT_FOUND');
       }
@@ -41,11 +45,31 @@ class FeatureService {
       throw new AppError('Feature with this name already exists', 409, 'DUPLICATE_FEATURE');
     }
 
-    // Create feature
-    const feature = await Feature.create({
+    // Prepare feature data
+    const featurePayload = {
       ...featureData,
       slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    });
+    };
+
+    // Handle model reference
+    if (isDatabaseModel && modelDoc) {
+      // Use database model reference
+      featurePayload.model = model;
+      featurePayload.modelIdentifier = modelDoc.name;
+      featurePayload.modelDisplayName = modelDoc.displayName || modelDoc.name;
+      featurePayload.modelCapabilities = modelDoc.capabilities;
+    } else if (modelIdentifier) {
+      // Dynamic model from API - no database reference
+      featurePayload.model = null;
+      featurePayload.modelIdentifier = modelIdentifier;
+      featurePayload.modelDisplayName = modelDisplayName || modelIdentifier;
+      if (modelCapabilities) {
+        featurePayload.modelCapabilities = modelCapabilities;
+      }
+    }
+
+    // Create feature
+    const feature = await Feature.create(featurePayload);
 
     // Populate references
     await feature.populate('model', 'name displayName type pricing capabilities');

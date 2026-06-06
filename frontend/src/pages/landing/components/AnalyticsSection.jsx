@@ -2,12 +2,63 @@
  * Analytics Section
  *
  * Interactive charts preview showing platform capabilities.
+ * Dynamic content fetched from API.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import publicApi from '../../../services/api/public.api.js';
+
+// Default features as fallback
+const defaultFeatures = [
+  {
+    title: 'Real-Time Dashboards',
+    description: 'Monitor your AI usage in real-time with interactive dashboards that update instantly.',
+    icon: 'chart',
+    color: 'blue'
+  },
+  {
+    title: 'Cost Forecasting',
+    description: 'Predict future costs with AI-powered forecasting based on your usage patterns.',
+    icon: 'trending',
+    color: 'green'
+  },
+  {
+    title: 'Custom Reports',
+    description: 'Generate detailed reports for stakeholders with custom date ranges and metrics.',
+    icon: 'report',
+    color: 'purple'
+  }
+];
 
 const AnalyticsSection = () => {
   const [activeChart, setActiveChart] = useState('usage');
+  const [title, setTitle] = useState('Powerful Analytics at Your Fingertips');
+  const [subtitle, setSubtitle] = useState('Visualize your AI usage, costs, and trends with interactive charts and detailed insights.');
+  const [features, setFeatures] = useState(defaultFeatures);
+
+  // Fetch dynamic content from API
+  useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        const response = await publicApi.getLandingSection('analytics');
+        if (response.success && response.data) {
+          if (response.data.title) {
+            setTitle(response.data.title);
+          }
+          if (response.data.subtitle) {
+            setSubtitle(response.data.subtitle);
+          }
+          if (response.data.features) {
+            setFeatures(response.data.features);
+          }
+        }
+      } catch (error) {
+        console.log('Using default analytics content:', error);
+      }
+    };
+
+    fetchContent();
+  }, []);
 
   // Sample data for charts
   const usageData = [
@@ -33,16 +84,50 @@ const AnalyticsSection = () => {
     { category: 'Overage', percentage: 10, amount: '$1,200' }
   ];
 
+  // Color mapping for features
+  const colorClasses = {
+    blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
+    green: { bg: 'bg-green-100', text: 'text-green-600' },
+    purple: { bg: 'bg-purple-100', text: 'text-purple-600' },
+    red: { bg: 'bg-red-100', text: 'text-red-600' },
+    yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600' }
+  };
+
+  // Icon mapping
+  const featureIcons = {
+    chart: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+    trending: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      </svg>
+    ),
+    report: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+    analytics: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    )
+  };
+
   return (
     <section id="analytics" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Powerful Analytics at Your Fingertips
+            {title}
           </h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Visualize your AI usage, costs, and trends with interactive charts and detailed insights.
+            {subtitle}
           </p>
         </div>
 
@@ -204,39 +289,24 @@ const AnalyticsSection = () => {
 
         {/* Features List */}
         <div className="grid md:grid-cols-3 gap-6 mt-8">
-          <div className="bg-white p-6 rounded-xl border border-gray-200">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Real-Time Dashboards</h4>
-            <p className="text-gray-600">
-              Monitor your AI usage in real-time with interactive dashboards that update instantly.
-            </p>
-          </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Cost Forecasting</h4>
-            <p className="text-gray-600">
-              Predict future costs with AI-powered forecasting based on your usage patterns.
-            </p>
-          </div>
-          <div className="bg-white p-6 rounded-xl border border-gray-200">
-            <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">Custom Reports</h4>
-            <p className="text-gray-600">
-              Generate detailed reports for stakeholders with custom date ranges and metrics.
-            </p>
-          </div>
+          {features.map((feature, index) => {
+            const colors = colorClasses[feature.color] || colorClasses.blue;
+            const icon = featureIcons[feature.icon] || featureIcons.chart;
+
+            return (
+              <div key={index} className="bg-white p-6 rounded-xl border border-gray-200">
+                <div className={`w-12 h-12 ${colors.bg} rounded-lg flex items-center justify-center mb-4`}>
+                  <div className={colors.text}>
+                    {icon}
+                  </div>
+                </div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h4>
+                <p className="text-gray-600">
+                  {feature.description}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>

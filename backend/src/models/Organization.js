@@ -98,14 +98,22 @@ const organizationSchema = new mongoose.Schema(
       }
     },
     subscription: {
+      planId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Plan',
+        default: null
+      },
       plan: {
         type: String,
-        enum: ['free', 'starter', 'professional', 'enterprise'],
-        default: 'free'
+        default: null
+      },
+      planName: {
+        type: String,
+        default: null
       },
       status: {
         type: String,
-        enum: ['active', 'trial', 'expired', 'cancelled'],
+        enum: ['active', 'trial', 'pending_payment', 'past_due', 'expired', 'cancelled'],
         default: 'trial'
       },
       billingCycle: {

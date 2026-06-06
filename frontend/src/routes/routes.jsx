@@ -146,6 +146,24 @@ const AdminProvidersPage = lazy(() => import('../pages/admin/AdminProvidersPage.
 const AdminModelsPage = lazy(() => import('../pages/admin/AdminModelsPage.jsx'));
 const AdminSettingsPage = lazy(() => import('../pages/admin/AdminSettingsPage.jsx'));
 const AdminSystemHealthPage = lazy(() => import('../pages/admin/AdminSystemHealthPage.jsx'));
+const AdminLandingPageContent = lazy(() => import('../pages/admin/AdminLandingPageContent.jsx'));
+const AdminPlansPage = lazy(() => import('../pages/admin/AdminPlansPage.jsx'));
+
+// Usage page
+const UsagePage = lazy(() => import('../pages/usage/UsagePage.jsx'));
+
+// Docs page
+const DocsPage = lazy(() => import('../pages/docs/DocsPage.jsx'));
+
+// Payment pages
+const CheckoutPage = lazy(() => import('../pages/checkout/CheckoutPage.jsx'));
+const PaymentSuccessPage = lazy(() => import('../pages/payment/PaymentSuccessPage.jsx'));
+const PaymentFailedPage = lazy(() => import('../pages/payment/PaymentFailedPage.jsx'));
+const PaymentCancelPage = lazy(() => import('../pages/payment/PaymentCancelPage.jsx'));
+
+// Registration pages
+const RegistrationSuccessPage = lazy(() => import('../pages/registration/RegistrationSuccessPage.jsx'));
+const RegistrationCancelPage = lazy(() => import('../pages/registration/RegistrationCancelPage.jsx'));
 
 // Routes configuration
 const routes = [
@@ -190,6 +208,74 @@ const routes = [
           <ResetPasswordPage />
         </PageWrapper>
       </GuestRoute>
+    )
+  },
+
+  // ===========================================
+  // Checkout Route (Protected - No Dashboard Layout)
+  // ===========================================
+  {
+    path: '/checkout',
+    element: (
+      <ProtectedRoute>
+        <PageWrapper>
+          <CheckoutPage />
+        </PageWrapper>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
+  // Payment Result Routes (Protected - No Dashboard Layout)
+  // ===========================================
+  {
+    path: '/payment/success',
+    element: (
+      <ProtectedRoute>
+        <PageWrapper>
+          <PaymentSuccessPage />
+        </PageWrapper>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/payment/cancel',
+    element: (
+      <ProtectedRoute>
+        <PageWrapper>
+          <PaymentCancelPage />
+        </PageWrapper>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/payment/failed',
+    element: (
+      <ProtectedRoute>
+        <PageWrapper>
+          <PaymentFailedPage />
+        </PageWrapper>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
+  // Registration Result Routes (Public - No auth yet)
+  // ===========================================
+  {
+    path: '/registration/success',
+    element: (
+      <PageWrapper>
+        <RegistrationSuccessPage />
+      </PageWrapper>
+    )
+  },
+  {
+    path: '/registration/cancel',
+    element: (
+      <PageWrapper>
+        <RegistrationCancelPage />
+      </PageWrapper>
     )
   },
 
@@ -471,6 +557,38 @@ const routes = [
         <DashboardLayout>
           <PageWrapper>
             <AnalyticsPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
+  // Usage Routes
+  // ===========================================
+  {
+    path: '/usage',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <UsagePage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
+  // Documentation Routes
+  // ===========================================
+  {
+    path: '/docs',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <DocsPage />
           </PageWrapper>
         </DashboardLayout>
       </ProtectedRoute>
@@ -799,6 +917,30 @@ const routes = [
         <DashboardLayout>
           <PageWrapper>
             <AdminSystemHealthPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/admin/landing-content',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminLandingPageContent />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/admin/plans',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminPlansPage />
           </PageWrapper>
         </DashboardLayout>
       </ProtectedRoute>
