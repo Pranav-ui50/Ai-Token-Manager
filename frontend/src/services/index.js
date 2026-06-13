@@ -16,7 +16,6 @@ export {
   planApi,
   pricingHistoryApi,
   projectApi,
-  notificationApi,
   analyticsApi,
   auditApi,
   billingApi,
@@ -34,7 +33,6 @@ export {
   useOrganizationStore,
   useUsageStore,
   usePricingStore,
-  useNotificationStore,
   useSettingsStore,
   stores
 } from '../store/index.js';
@@ -52,7 +50,6 @@ export default {
   planApi: require('./api/index.js').planApi,
   pricingHistoryApi: require('./api/index.js').pricingHistoryApi,
   projectApi: require('./api/index.js').projectApi,
-  notificationApi: require('./api/index.js').notificationApi,
   analyticsApi: require('./api/index.js').analyticsApi,
   auditApi: require('./api/index.js').auditApi,
   billingApi: require('./api/index.js').billingApi,

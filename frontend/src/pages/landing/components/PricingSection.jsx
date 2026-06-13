@@ -11,16 +11,6 @@ import publicApi from '../../../services/api/public.api.js';
 // Default plans as fallback
 const DEFAULT_PLANS = [
   {
-    id: 'free',
-    name: 'Free',
-    tier: 'free',
-    description: 'Perfect for getting started with AI cost management',
-    billing: { price: 0, currency: 'USD', interval: 'month', trialDays: 0 },
-    credits: { includedCredits: 10000, creditType: 'token' },
-    limits: { maxUsers: 1, maxApiCalls: 1000 },
-    isPopular: false
-  },
-  {
     id: 'starter',
     name: 'Starter',
     tier: 'starter',
@@ -109,7 +99,6 @@ const PricingSection = () => {
 
   const getTierColor = (tier) => {
     const colors = {
-      free: { bg: 'bg-gray-50', border: 'border-gray-200', badge: 'bg-gray-100 text-gray-700' },
       starter: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700' },
       professional: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700' },
       business: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700' },
@@ -120,7 +109,6 @@ const PricingSection = () => {
 
   const getTierName = (tier) => {
     const names = {
-      free: 'Free',
       starter: 'Starter',
       professional: 'Professional',
       business: 'Business',
@@ -156,9 +144,7 @@ const PricingSection = () => {
   }
 
   // Filter out Enterprise plans - they will be shown as "Contact Us"
-  const displayPlans = plans.filter(plan => plan.tier !== 'enterprise');
-  const freePlan = displayPlans.find(plan => plan.tier === 'free');
-  const paidPlans = displayPlans.filter(plan => plan.tier !== 'free');
+  const displayPlans = plans.filter(plan => plan.tier !== 'enterprise' && plan.tier !== 'free');
 
   return (
     <section id="pricing" className="py-20 bg-gray-50">
@@ -197,7 +183,7 @@ const PricingSection = () => {
             {/* Billing Interval Toggle */}
             <div className="flex items-center gap-4">
               <span className={`text-sm font-medium ${billingInterval === 'month' ? 'text-gray-900' : 'text-gray-500'}`}>
-                Monthly
+                Month
               </span>
               <button
                 onClick={() => setBillingInterval(billingInterval === 'month' ? 'year' : 'month')}
@@ -212,7 +198,7 @@ const PricingSection = () => {
                 />
               </button>
               <span className={`text-sm font-medium ${billingInterval === 'year' ? 'text-gray-900' : 'text-gray-500'}`}>
-                Yearly
+                Year
                 <span className="ml-1 text-green-600 font-semibold">(Save 20%)</span>
               </span>
             </div>
@@ -233,82 +219,13 @@ const PricingSection = () => {
         )}
 
         {/* Plans Grid */}
-        {plans.length === 0 && !error ? (
+        {displayPlans.length === 0 && !error ? (
           <div className="text-center py-12">
             <p className="text-gray-500">No plans available at the moment.</p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {/* Free Plan */}
-            {freePlan && (
-              <div key={freePlan.id}>
-                <div
-                  className={`relative bg-white rounded-2xl border-2 border-gray-200 overflow-hidden transition-all hover:shadow-xl`}
-                >
-                  <div className="p-6">
-                    {/* Plan Header */}
-                    <div className="mb-4">
-                      <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                        Free
-                      </span>
-                      <h3 className="mt-2 text-xl font-bold text-gray-900">{freePlan.name}</h3>
-                      {freePlan.description && (
-                        <p className="text-sm text-gray-500 mt-1">{freePlan.description}</p>
-                      )}
-                    </div>
-
-                    {/* Price */}
-                    <div className="mb-6">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl font-bold text-gray-900">Free</span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">Forever free</p>
-                    </div>
-
-                    {/* Features */}
-                    <div className="space-y-3 mb-6">
-                      {freePlan.credits?.includedCredits > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-gray-600">
-                            {freePlan.credits.includedCredits.toLocaleString()} {freePlan.credits.creditType || 'tokens'}
-                          </span>
-                        </div>
-                      )}
-                      {freePlan.limits?.maxUsers && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-gray-600">Up to {freePlan.limits.maxUsers} user{freePlan.limits.maxUsers > 1 ? 's' : ''}</span>
-                        </div>
-                      )}
-                      {freePlan.limits?.maxApiCalls && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-gray-600">{freePlan.limits.maxApiCalls.toLocaleString()} API calls</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* CTA Button */}
-                    <button
-                      onClick={() => handleSelectPlan(freePlan)}
-                      className="w-full py-3 px-4 rounded-lg font-semibold bg-gray-100 text-gray-900 hover:bg-gray-200 transition-all"
-                    >
-                      Get Started Free
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Paid Plans */}
-            {paidPlans.map((plan) => {
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {displayPlans.map((plan) => {
               const tierStyle = getTierColor(plan.tier);
               const isPopular = plan.isPopular || plan.tier === 'professional';
 

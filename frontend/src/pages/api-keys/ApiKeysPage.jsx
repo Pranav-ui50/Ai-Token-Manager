@@ -12,6 +12,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import apiKeyApi from '../../services/api/apiKey.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const PERMISSION_OPTIONS = [
   { value: 'providers:read', label: 'View Providers' },
@@ -41,8 +42,6 @@ function ApiKeysPage() {
   const { canManageApiKeys, canViewApiKeys } = usePermissions();
   const [apiKeys, setApiKeys] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -81,7 +80,7 @@ function ApiKeysPage() {
       setApiKeys(response.data || []);
     } catch (err) {
       console.error('Failed to fetch API keys:', err);
-      setError(err.response?.data?.error?.message || 'Failed to load API keys');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load API keys');
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +88,6 @@ function ApiKeysPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    setError('');
 
     try {
       const data = {
@@ -103,9 +101,9 @@ function ApiKeysPage() {
       setShowCreateModal(false);
       resetForm();
       fetchApiKeys();
-      setSuccess('API key created successfully. Copy the key now - it won\'t be shown again!');
+      showToast.apiKeyCreated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create API key');
+      showToast.error(err.response?.data?.error?.message || 'Failed to create API key');
     }
   };
 
@@ -116,9 +114,9 @@ function ApiKeysPage() {
     try {
       await apiKeyApi.revoke(key._id, reason || undefined);
       setApiKeys(prev => prev.map(k => k._id === key._id ? { ...k, status: 'revoked' } : k));
-      setSuccess('API key revoked successfully');
+      showToast.apiKeyRevoked();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to revoke API key');
+      showToast.error(err.response?.data?.error?.message || 'Failed to revoke API key');
     }
   };
 
@@ -128,9 +126,9 @@ function ApiKeysPage() {
     try {
       await apiKeyApi.delete(key._id);
       setApiKeys(prev => prev.filter(k => k._id !== key._id));
-      setSuccess('API key deleted successfully');
+      showToast.apiKeyDeleted();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete API key');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete API key');
     }
   };
 
@@ -141,9 +139,9 @@ function ApiKeysPage() {
       const response = await apiKeyApi.regenerate(key._id);
       setNewKeyData(response.data);
       fetchApiKeys();
-      setSuccess('API key regenerated. Copy the new key now - it won\'t be shown again!');
+      showToast.apiKeyRegenerated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to regenerate API key');
+      showToast.error(err.response?.data?.error?.message || 'Failed to regenerate API key');
     }
   };
 
@@ -156,7 +154,7 @@ function ApiKeysPage() {
       const response = await apiKeyApi.getUsageStats(key._id);
       setKeyStats(response.data);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to load key statistics');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load key statistics');
     }
   };
 
@@ -204,7 +202,7 @@ function ApiKeysPage() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    setSuccess('API key copied to clipboard!');
+    showToast.apiKeyCopied();
   };
 
   const formatDate = (date) => {

@@ -760,18 +760,6 @@ export const seedModels = async () => {
  */
 const DEFAULT_PLANS = [
   {
-    name: 'Free',
-    slug: 'free',
-    tier: 'free',
-    description: 'Perfect for getting started with AI cost management',
-    billing: { price: 0, yearlyPrice: 0, currency: 'USD', interval: 'month', trialDays: 0 },
-    pricingModel: { type: 'flat' },
-    credits: { includedCredits: 10000, creditType: 'token' },
-    limits: { maxUsers: 1, maxApiCalls: 1000, maxTokens: 100000 },
-    isPopular: false,
-    displayOrder: 1
-  },
-  {
     name: 'Starter',
     slug: 'starter',
     tier: 'starter',
@@ -781,7 +769,7 @@ const DEFAULT_PLANS = [
     credits: { includedCredits: 500000, creditType: 'token' },
     limits: { maxUsers: 3, maxApiCalls: 10000, maxTokens: 500000 },
     isPopular: false,
-    displayOrder: 2
+    displayOrder: 1
   },
   {
     name: 'Professional',
@@ -793,7 +781,7 @@ const DEFAULT_PLANS = [
     credits: { includedCredits: 2000000, creditType: 'token' },
     limits: { maxUsers: 10, maxApiCalls: 50000, maxTokens: 2000000 },
     isPopular: true,
-    displayOrder: 3
+    displayOrder: 2
   },
   {
     name: 'Business',
@@ -805,7 +793,7 @@ const DEFAULT_PLANS = [
     credits: { includedCredits: 10000000, creditType: 'token' },
     limits: { maxUsers: 50, maxApiCalls: 200000, maxTokens: 10000000 },
     isPopular: false,
-    displayOrder: 4
+    displayOrder: 3
   }
 ];
 
@@ -859,7 +847,7 @@ export const seedPlans = async () => {
         status: 'active',
         settings: {
           isPublic: true,
-          isDefault: planData.tier === 'free',
+          isDefault: false,
           allowUpgrade: true,
           allowDowngrade: true
         }

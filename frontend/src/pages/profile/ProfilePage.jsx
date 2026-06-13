@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { apiClient } from '../../services/api';
 import { Input, Select, Textarea, Form, FormActions, FormError, FormSuccess, Toggle } from '../../components/forms';
+import { showToast } from '../../utils/toasts.js';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -16,8 +17,6 @@ const ProfilePage = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const [profile, setProfile] = useState({
     firstName: '',
@@ -66,7 +65,7 @@ const ProfilePage = () => {
         });
       }
     } catch (err) {
-      setError('Failed to load profile');
+      showToast.error('Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -75,17 +74,15 @@ const ProfilePage = () => {
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       const response = await apiClient.put('/api/users/me', profile);
       if (response.data.success) {
-        setSuccess('Profile updated successfully');
+        showToast.profileUpdated();
         updateUser(response.data.data);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      showToast.error(err.response?.data?.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
@@ -94,16 +91,14 @@ const ProfilePage = () => {
   const handlePreferencesSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setError('');
-    setSuccess('');
 
     try {
       const response = await apiClient.put('/api/users/me/preferences', preferences);
       if (response.data.success) {
-        setSuccess('Preferences updated successfully');
+        showToast.settingsSaved();
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update preferences');
+      showToast.error(err.response?.data?.message || 'Failed to update preferences');
     } finally {
       setSaving(false);
     }
@@ -119,10 +114,10 @@ const ProfilePage = () => {
       if (response.data.success) {
         // Show 2FA setup modal with QR code
         setPreferences({ ...preferences, twoFactorEnabled: true });
-        setSuccess('Two-factor authentication enabled');
+        showToast.twoFactorEnabled();
       }
     } catch (err) {
-      setError('Failed to enable two-factor authentication');
+      showToast.error('Failed to enable two-factor authentication');
     }
   };
 
@@ -131,10 +126,10 @@ const ProfilePage = () => {
       const response = await apiClient.post('/api/users/me/2fa/disable');
       if (response.data.success) {
         setPreferences({ ...preferences, twoFactorEnabled: false });
-        setSuccess('Two-factor authentication disabled');
+        showToast.twoFactorDisabled();
       }
     } catch (err) {
-      setError('Failed to disable two-factor authentication');
+      showToast.error('Failed to disable two-factor authentication');
     }
   };
 
@@ -184,10 +179,6 @@ const ProfilePage = () => {
             </nav>
           </div>
         </div>
-
-        {/* Alerts */}
-        {error && <FormError error={error} className="mb-4" />}
-        {success && <FormSuccess message={success} className="mb-4" />}
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (

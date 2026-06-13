@@ -6,7 +6,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import publicApi from '../../../services/api/public.api.js';
 
 // Icon mapping
@@ -74,10 +73,9 @@ const defaultSteps = [
 ];
 
 const HowItWorksSection = () => {
-  const navigate = useNavigate();
   const [steps, setSteps] = useState(defaultSteps);
-  const [title, setTitle] = useState('Get Started in Minutes');
-  const [subtitle, setSubtitle] = useState('Our streamlined onboarding process gets you up and running quickly.');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
 
   // Fetch dynamic content from API
   useEffect(() => {
@@ -88,12 +86,9 @@ const HowItWorksSection = () => {
           if (response.data.steps) {
             setSteps(response.data.steps);
           }
-          if (response.data.title) {
-            setTitle(response.data.title);
-          }
-          if (response.data.subtitle) {
-            setSubtitle(response.data.subtitle);
-          }
+          // Update title/subtitle - use empty string if not provided to allow hiding
+          setTitle(response.data.title ?? '');
+          setSubtitle(response.data.subtitle ?? '');
         }
       } catch (error) {
         console.log('Using default how it works content:', error);
@@ -103,86 +98,84 @@ const HowItWorksSection = () => {
     fetchContent();
   }, []);
 
+  // Filter steps that have valid title and description
+  const validSteps = steps.filter(step =>
+    step && step.title?.trim() && step.description?.trim()
+  );
+
+  // Check if header should be shown
+  const showHeader = title?.trim() || subtitle?.trim();
+
+  // Don't render section if no valid content
+  if (validSteps.length === 0 && !showHeader) {
+    return null;
+  }
+
   return (
     <section id="how-it-works" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            {title}
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            {subtitle}
-          </p>
-        </div>
+        {/* Section Header - Only show if title or subtitle exists */}
+        {showHeader && (
+          <div className="text-center mb-16">
+            {title?.trim() && (
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                {title}
+              </h2>
+            )}
+            {subtitle?.trim() && (
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Steps */}
-        <div className="relative">
-          {/* Connecting Line */}
-          <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-1 bg-gray-100 -translate-y-1/2" />
+        {validSteps.length > 0 && (
+          <div className="relative">
+            {/* Connecting Line */}
+            <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-1 bg-gray-100 -translate-y-1/2" />
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8">
-            {steps.map((step, index) => (
-              <div key={index} className="relative">
-                {/* Step Card */}
-                <div className="bg-white rounded-xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all group">
-                  {/* Number Badge */}
-                  <div className="absolute -top-4 left-6 bg-[#DC2626] text-white text-sm font-bold px-3 py-1 rounded-full">
-                    {step.number}
-                  </div>
-
-                  {/* Icon */}
-                  <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-red-50 transition-colors">
-                    <div className="text-gray-600 group-hover:text-[#DC2626] transition-colors">
-                      {stepIcons[step.icon] || stepIcons.link}
+            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8">
+              {validSteps.map((step, index) => (
+                <div key={index} className="relative">
+                  {/* Step Card */}
+                  <div className="bg-white rounded-xl p-6 border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all group">
+                    {/* Number Badge */}
+                    <div className="absolute -top-4 left-6 bg-[#DC2626] text-white text-sm font-bold px-3 py-1 rounded-full">
+                      {step.number}
                     </div>
+
+                    {/* Icon */}
+                    <div className="w-16 h-16 bg-gray-50 rounded-xl flex items-center justify-center mb-4 group-hover:bg-red-50 transition-colors">
+                      <div className="text-gray-600 group-hover:text-[#DC2626] transition-colors">
+                        {stepIcons[step.icon] || stepIcons.link}
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {step.title}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {step.description}
+                    </p>
                   </div>
 
-                  {/* Content */}
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    {step.title}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {step.description}
-                  </p>
+                  {/* Arrow (between steps) */}
+                  {index < validSteps.length - 1 && (
+                    <div className="hidden lg:flex absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
+                      <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-
-                {/* Arrow (between steps) */}
-                {index < steps.length - 1 && (
-                  <div className="hidden lg:flex absolute top-1/2 -right-4 transform -translate-y-1/2 z-10">
-                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* CTA */}
-        <div className="mt-16 text-center">
-          <p className="text-gray-600 mb-6">Ready to get started?</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={() => navigate('/register')}
-              className="px-8 py-3 bg-[#DC2626] text-white font-semibold rounded-lg hover:bg-[#B91C1C] transition-colors"
-            >
-              Start Free Trial
-            </button>
-            <button
-              onClick={() => {
-                const featuresSection = document.getElementById('features');
-                if (featuresSection) {
-                  featuresSection.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-              className="px-8 py-3 bg-white text-gray-900 font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-            >
-              See All Features
-            </button>
-          </div>
-        </div>
       </div>
     </section>
   );

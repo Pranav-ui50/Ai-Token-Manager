@@ -51,14 +51,27 @@ const DEFAULT_PLANS = {
   }
 };
 
-// Initialize payment clients
-const stripeClient = config.stripe?.secretKey ? new stripe(config.stripe.secretKey) : null;
-const razorpayClient = config.razorpay?.keyId && config.razorpay?.keySecret
-  ? new Razorpay({
+// Initialize payment clients lazily
+let stripeClient = null;
+let razorpayClient = null;
+
+const getStripeClient = () => {
+  if (!stripeClient && config.stripe?.secretKey) {
+    stripeClient = new stripe(config.stripe.secretKey);
+  }
+  return stripeClient;
+};
+
+const getRazorpayClient = () => {
+  if (!razorpayClient && config.razorpay?.keyId && config.razorpay?.keySecret) {
+    razorpayClient = new Razorpay({
       key_id: config.razorpay.keyId,
       key_secret: config.razorpay.keySecret
-    })
-  : null;
+    });
+    logger.info('[RegistrationPayment] Razorpay client initialized with key:', config.razorpay.keyId);
+  }
+  return razorpayClient;
+};
 
 class RegistrationPaymentService {
   /**
@@ -137,9 +150,18 @@ class RegistrationPaymentService {
     logger.info(`[RegistrationPayment] Pending registration created: ${pendingReg._id}, amount: ${amount}, currency: ${paymentCurrency}`);
 
     // Create payment order based on provider
-    if (paymentProvider === 'razorpay' && razorpayClient) {
+    if (paymentProvider === 'razorpay') {
+      const rzpClient = getRazorpayClient();
+      if (!rzpClient) {
+        logger.error('[RegistrationPayment] Razorpay not configured. KeyId:', config.razorpay?.keyId ? 'present' : 'missing');
+        throw new AppError('Razorpay payment provider not configured. Please contact support.', 500, 'PAYMENT_NOT_CONFIGURED');
+      }
       return await this.createRazorpayOrder(pendingReg);
-    } else if (paymentProvider === 'stripe' && stripeClient) {
+    } else if (paymentProvider === 'stripe') {
+      const strClient = getStripeClient();
+      if (!strClient) {
+        throw new AppError('Stripe payment provider not configured. Please contact support.', 500, 'PAYMENT_NOT_CONFIGURED');
+      }
       return await this.createStripeSession(pendingReg);
     } else {
       throw new AppError('Payment provider not configured', 500, 'PAYMENT_NOT_CONFIGURED');
@@ -151,13 +173,18 @@ class RegistrationPaymentService {
    */
   async createRazorpayOrder(pendingReg) {
     try {
+      const rzpClient = getRazorpayClient();
+      if (!rzpClient) {
+        throw new AppError('Razorpay client not initialized', 500, 'PAYMENT_CLIENT_ERROR');
+      }
+
       // Razorpay works best with INR, use INR as default
       const currency = pendingReg.currency || 'INR';
       const amountInPaise = Math.round(pendingReg.amount * 100); // Convert to smallest currency unit
 
       logger.info(`[RegistrationPayment] Creating Razorpay order: amount=${pendingReg.amount}, currency=${currency}, paise=${amountInPaise}`);
 
-      const order = await razorpayClient.orders.create({
+      const order = await rzpClient.orders.create({
         amount: amountInPaise,
         currency: currency,
         receipt: `reg_${pendingReg._id}`,
@@ -198,7 +225,12 @@ class RegistrationPaymentService {
    */
   async createStripeSession(pendingReg) {
     try {
-      const session = await stripeClient.checkout.sessions.create({
+      const strClient = getStripeClient();
+      if (!strClient) {
+        throw new AppError('Stripe client not initialized', 500, 'PAYMENT_CLIENT_ERROR');
+      }
+
+      const session = await strClient.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
           {
@@ -393,14 +425,45 @@ class RegistrationPaymentService {
     // Generate tokens for auto-login
     const { accessToken, refreshToken, expiresIn } = generateTokens(user);
 
-    // Send welcome email
+    // Send welcome email with subscription details
     try {
+      // Send welcome email
       await emailService.sendWelcomeEmail({
         email: user.email,
-        firstName: user.firstName
+        firstName: user.firstName,
+        lastName: user.lastName,
+        organizationName: organization.name,
+        plan: {
+          name: pendingReg.planName || plan?.name || pendingReg.planId,
+          billingCycle: pendingReg.billingCycle,
+          credits: plan?.credits?.includedCredits
+        }
       });
+      logger.info(`[RegistrationPayment] Welcome email sent to: ${user.email}`);
+
+      // Send subscription confirmation email
+      await emailService.sendSubscriptionConfirmationEmail({
+        email: user.email,
+        firstName: user.firstName,
+        organizationName: organization.name,
+        plan: {
+          name: pendingReg.planName || plan?.name || pendingReg.planId,
+          billing: {
+            price: pendingReg.amount,
+            currency: pendingReg.currency
+          },
+          billingCycle: pendingReg.billingCycle,
+          credits: plan?.credits
+        },
+        paymentDetails: {
+          transactionId: paymentDetails.provider === 'razorpay' ? paymentDetails.paymentId : paymentDetails.sessionId,
+          provider: paymentDetails.provider
+        }
+      });
+      logger.info(`[RegistrationPayment] Subscription confirmation email sent to: ${user.email}`);
     } catch (error) {
-      logger.error('[RegistrationPayment] Failed to send welcome email:', error);
+      logger.error('[RegistrationPayment] Failed to send registration emails:', error);
+      // Don't throw error - registration should succeed even if email fails
     }
 
     // Return user without password
@@ -470,9 +533,17 @@ class RegistrationPaymentService {
     pendingReg.paymentProvider = paymentProvider;
     await pendingReg.save();
 
-    if (paymentProvider === 'razorpay' && razorpayClient) {
+    if (paymentProvider === 'razorpay') {
+      const rzpClient = getRazorpayClient();
+      if (!rzpClient) {
+        throw new AppError('Razorpay payment provider not configured', 500, 'PAYMENT_NOT_CONFIGURED');
+      }
       return await this.createRazorpayOrder(pendingReg);
-    } else if (paymentProvider === 'stripe' && stripeClient) {
+    } else if (paymentProvider === 'stripe') {
+      const strClient = getStripeClient();
+      if (!strClient) {
+        throw new AppError('Stripe payment provider not configured', 500, 'PAYMENT_NOT_CONFIGURED');
+      }
       return await this.createStripeSession(pendingReg);
     } else {
       throw new AppError('Payment provider not configured', 500, 'PAYMENT_NOT_CONFIGURED');

@@ -15,8 +15,11 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useOrganization } from '../../context/OrganizationContext.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import analyticsApi from '../../services/api/analytics.api.js';
+import { showToast } from '../../utils/toasts.js';
+import { formatCurrencyWithSymbol } from '../../utils/currency.js';
 
 // Tab configuration
 const TABS = [
@@ -38,9 +41,12 @@ const CHART_COLORS = {
 
 function AnalyticsPage() {
   const { user, isLoading: authLoading } = useAuth();
+  const { currentOrganization } = useOrganization();
   const [activeTab, setActiveTab] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+
+  // Get currency from organization settings
+  const currency = currentOrganization?.settings?.currency || 'USD';
 
   // Data states
   const [dashboardData, setDashboardData] = useState(null);
@@ -61,7 +67,6 @@ function AnalyticsPage() {
 
   const fetchAllData = async () => {
     setIsLoading(true);
-    setError('');
 
     try {
       const filters = projectId ? { projectId } : {};
@@ -79,7 +84,7 @@ function AnalyticsPage() {
       setMarginsData(margins?.data || margins);
     } catch (err) {
       console.error('Failed to fetch analytics:', err);
-      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to load analytics');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to load analytics');
     } finally {
       setIsLoading(false);
     }
@@ -89,21 +94,17 @@ function AnalyticsPage() {
     setIsExporting(true);
     try {
       await analyticsApi.downloadReport(activeTab === 'overview' ? 'summary' : activeTab, format);
+      showToast.analyticsExported();
     } catch (err) {
       console.error('Export failed:', err);
-      setError('Failed to export report');
+      showToast.error('Failed to export report');
     } finally {
       setIsExporting(false);
     }
   };
 
-  const formatCurrency = (amount, currency = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(amount || 0);
+  const formatCurrency = (amount) => {
+    return formatCurrencyWithSymbol(amount || 0, currency);
   };
 
   const formatNumber = (num) => {
@@ -150,23 +151,6 @@ function AnalyticsPage() {
           </button>
         </div>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200">

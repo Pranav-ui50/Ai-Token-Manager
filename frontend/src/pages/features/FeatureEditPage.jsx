@@ -9,6 +9,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
+import { useFeatureCurrency } from '../../hooks/useProjectCurrency.js';
+import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
 
 function FeatureEditPage() {
   const { id } = useParams();
@@ -19,6 +21,10 @@ function FeatureEditPage() {
   const [models, setModels] = useState([]);
   const [providers, setProviders] = useState([]);
   const [filteredModels, setFilteredModels] = useState([]);
+  const [feature, setFeature] = useState(null);
+
+  // Get currency from feature's project
+  const { currency, currencySymbol } = useFeatureCurrency(feature);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -76,6 +82,7 @@ function FeatureEditPage() {
         // Set feature data
         if (featureRes.success && featureRes.data?.feature) {
           const feature = featureRes.data.feature;
+          setFeature(feature); // Store feature for currency hook
           const providerId = feature.provider?._id || feature.provider || '';
 
           // Filter models by provider
@@ -346,7 +353,7 @@ function FeatureEditPage() {
                 <option value="">Select Model</option>
                 {filteredModels.map(model => (
                   <option key={model._id} value={model._id}>
-                    {model.displayName || model.name} {model.pricing ? `($${model.pricing.inputPrice}/$${model.pricing.outputPrice} per 1M tokens)` : ''}
+                    {model.displayName || model.name} {model.pricing ? `(${currencySymbol}${model.pricing.inputPrice}/${currencySymbol}${model.pricing.outputPrice} per 1M tokens)` : ''}
                   </option>
                 ))}
               </select>
@@ -367,13 +374,13 @@ function FeatureEditPage() {
                 <div className="bg-gray-50 rounded-lg p-3">
                   <span className="text-xs text-gray-500">Input Price</span>
                   <p className="text-lg font-semibold text-gray-900">
-                    ${(filteredModels.find(m => m._id === formData.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M tokens
+                    {currencySymbol}{(filteredModels.find(m => m._id === formData.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M tokens
                   </p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3">
                   <span className="text-xs text-gray-500">Output Price</span>
                   <p className="text-lg font-semibold text-gray-900">
-                    ${(filteredModels.find(m => m._id === formData.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M tokens
+                    {currencySymbol}{(filteredModels.find(m => m._id === formData.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M tokens
                   </p>
                 </div>
               </div>
@@ -451,10 +458,11 @@ function FeatureEditPage() {
               <p className="text-sm text-gray-600 mb-2">Estimated Cost per 1000 Requests:</p>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-2xl font-bold text-[#DC2626]">
-                  ${(
+                  {formatCurrencyWithSymbol(
                     ((filteredModels.find(m => m._id === formData.model)?.pricing?.inputPrice || 0) / 1000000) * formData.inputTokensPerRequest * 1000 +
-                    ((filteredModels.find(m => m._id === formData.model)?.pricing?.outputPrice || 0) / 1000000) * formData.outputTokensPerRequest * 1000
-                  ).toFixed(4)}
+                    ((filteredModels.find(m => m._id === formData.model)?.pricing?.outputPrice || 0) / 1000000) * formData.outputTokensPerRequest * 1000,
+                    currency
+                  )}
                 </p>
                 <p className="text-xs text-gray-500">
                   {formData.inputTokensPerRequest + formData.outputTokensPerRequest} tokens/request × 1000 requests
@@ -473,7 +481,7 @@ function FeatureEditPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fixed Cost / Request ($)
+                {getCurrencyLabel('Fixed Cost / Request', currency)}
               </label>
               <input
                 type="number"
@@ -501,7 +509,7 @@ function FeatureEditPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Fixed Cost ($)
+                {getCurrencyLabel('Monthly Fixed Cost', currency)}
               </label>
               <input
                 type="number"

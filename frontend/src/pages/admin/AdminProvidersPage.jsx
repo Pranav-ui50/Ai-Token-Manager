@@ -5,8 +5,10 @@
  */
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
+import { showToast } from '../../utils/toasts.js';
 
 const PROVIDER_COLORS = {
   openai: 'from-green-500 to-green-600',
@@ -23,7 +25,6 @@ function AdminProvidersPage() {
   const navigate = useNavigate();
   const [providers, setProviders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showModal, setShowModal] = useState(false);
@@ -42,15 +43,15 @@ function AdminProvidersPage() {
       supportsStreaming: false,
       supportsVision: false,
       supportsFunctionCalling: false,
-      requiresApiKey: true
+      requiresApiKey: false
     }
   });
+  const [formErrors, setFormErrors] = useState({});
 
   // Fetch providers
   const fetchProviders = async () => {
     try {
       setIsLoading(true);
-      setError(null);
 
       const response = await adminApi.getProviders({
         search: searchQuery || undefined,
@@ -60,7 +61,7 @@ function AdminProvidersPage() {
       setProviders(response.providers || []);
     } catch (err) {
       console.error('Failed to fetch providers:', err);
-      setError(err.response?.data?.error?.message || 'Failed to load providers');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load providers');
     } finally {
       setIsLoading(false);
     }
@@ -81,33 +82,75 @@ function AdminProvidersPage() {
   // Create provider
   const handleCreateProvider = async (e) => {
     e.preventDefault();
+
+    if (!validateForm()) return;
+
     try {
       setIsSubmitting(true);
       await adminApi.createProvider(formData);
+      showToast.providerCreated();
       setShowModal(false);
       resetForm();
       fetchProviders();
     } catch (err) {
       console.error('Failed to create provider:', err);
-      setError(err.response?.data?.error?.message || 'Failed to create provider');
+      showToast.error(err.response?.data?.error?.message || 'Failed to create provider');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Validate edit form
+  const validateEditForm = () => {
+    const errors = {};
+
+    // Display Name validation
+    if (!formData.displayName.trim()) {
+      errors.displayName = 'Display name is required';
+    } else if (formData.displayName.length > 60) {
+      errors.displayName = 'Display name cannot exceed 60 characters';
+    }
+
+    // Description validation
+    if (formData.description && formData.description.length > 200) {
+      errors.description = 'Description cannot exceed 200 characters';
+    }
+
+    // Logo URL validation
+    if (formData.logo && formData.logo.length > 255) {
+      errors.logo = 'Logo URL cannot exceed 255 characters';
+    } else if (formData.logo && !/^https?:\/\/.+/i.test(formData.logo)) {
+      errors.logo = 'Logo URL must be a valid URL starting with http:// or https://';
+    }
+
+    // Website URL validation
+    if (formData.website && formData.website.length > 255) {
+      errors.website = 'Website URL cannot exceed 255 characters';
+    } else if (formData.website && !/^https?:\/\/.+/i.test(formData.website)) {
+      errors.website = 'Website URL must be a valid URL starting with http:// or https://';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Update provider
   const handleUpdateProvider = async (e) => {
     e.preventDefault();
+
+    if (!validateEditForm()) return;
+
     try {
       setIsSubmitting(true);
       await adminApi.updateProvider(selectedProvider._id, formData);
+      showToast.providerUpdated();
       setShowEditModal(false);
       setSelectedProvider(null);
       resetForm();
       fetchProviders();
     } catch (err) {
       console.error('Failed to update provider:', err);
-      setError(err.response?.data?.error?.message || 'Failed to update provider');
+      showToast.error(err.response?.data?.error?.message || 'Failed to update provider');
     } finally {
       setIsSubmitting(false);
     }
@@ -117,10 +160,11 @@ function AdminProvidersPage() {
   const handleToggleStatus = async (provider) => {
     try {
       await adminApi.toggleProviderStatus(provider._id, !provider.isActive);
+      showToast.providerStatusChanged(provider.isActive ? 'inactive' : 'active');
       fetchProviders();
     } catch (err) {
       console.error('Failed to toggle status:', err);
-      setError(err.response?.data?.error?.message || 'Failed to update status');
+      showToast.error(err.response?.data?.error?.message || 'Failed to update status');
     }
   };
 
@@ -132,10 +176,11 @@ function AdminProvidersPage() {
 
     try {
       await adminApi.deleteProvider(provider._id);
+      showToast.providerDeleted();
       fetchProviders();
     } catch (err) {
       console.error('Failed to delete provider:', err);
-      setError(err.response?.data?.error?.message || 'Failed to delete provider');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete provider');
     }
   };
 
@@ -152,9 +197,10 @@ function AdminProvidersPage() {
         supportsStreaming: provider.settings?.supportsStreaming || false,
         supportsVision: provider.settings?.supportsVision || false,
         supportsFunctionCalling: provider.settings?.supportsFunctionCalling || false,
-        requiresApiKey: provider.settings?.requiresApiKey !== false
+        requiresApiKey: provider.settings?.requiresApiKey || false
       }
     });
+    setFormErrors({});
     setShowEditModal(true);
   };
 
@@ -170,9 +216,53 @@ function AdminProvidersPage() {
         supportsStreaming: false,
         supportsVision: false,
         supportsFunctionCalling: false,
-        requiresApiKey: true
+        requiresApiKey: false
       }
     });
+    setFormErrors({});
+  };
+
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+
+    // Name validation
+    if (!formData.name.trim()) {
+      errors.name = 'Name (slug) is required';
+    } else if (formData.name.length > 60) {
+      errors.name = 'Name cannot exceed 60 characters';
+    } else if (!/^[a-z0-9-]+$/.test(formData.name)) {
+      errors.name = 'Name can only contain lowercase letters, numbers, and hyphens';
+    }
+
+    // Display Name validation
+    if (!formData.displayName.trim()) {
+      errors.displayName = 'Display name is required';
+    } else if (formData.displayName.length > 60) {
+      errors.displayName = 'Display name cannot exceed 60 characters';
+    }
+
+    // Description validation
+    if (formData.description && formData.description.length > 200) {
+      errors.description = 'Description cannot exceed 200 characters';
+    }
+
+    // Logo URL validation
+    if (formData.logo && formData.logo.length > 255) {
+      errors.logo = 'Logo URL cannot exceed 255 characters';
+    } else if (formData.logo && !/^https?:\/\/.+/i.test(formData.logo)) {
+      errors.logo = 'Logo URL must be a valid URL starting with http:// or https://';
+    }
+
+    // Website URL validation
+    if (formData.website && formData.website.length > 255) {
+      errors.website = 'Website URL cannot exceed 255 characters';
+    } else if (formData.website && !/^https?:\/\/.+/i.test(formData.website)) {
+      errors.website = 'Website URL must be a valid URL starting with http:// or https://';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const getProviderColor = (providerName) => {
@@ -216,18 +306,6 @@ function AdminProvidersPage() {
           Add Provider
         </button>
       </div>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-800 hover:text-red-900">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -358,14 +436,17 @@ function AdminProvidersPage() {
       )}
 
       {/* Add Provider Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
+      {showModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Add Provider</h2>
               <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -373,68 +454,143 @@ function AdminProvidersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateProvider} className="space-y-4">
+            <form onSubmit={handleCreateProvider} className="p-6 space-y-5">
+              {/* Name (slug) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name (slug) *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Name (slug)<span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                  onChange={(e) => {
+                    const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                    setFormData(prev => ({ ...prev, name: value }));
+                    if (formErrors.name) setFormErrors(prev => ({ ...prev, name: '' }));
+                  }}
+                  maxLength={60}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                   placeholder="e.g., openai"
-                  required
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.name ? (
+                    <span className="text-xs text-red-500">{formErrors.name}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Lowercase letters, numbers, and hyphens only</span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.name.length}/60</span>
+                </div>
               </div>
 
+              {/* Display Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Display Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Display Name<span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={formData.displayName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, displayName: e.target.value }));
+                    if (formErrors.displayName) setFormErrors(prev => ({ ...prev, displayName: '' }));
+                  }}
+                  maxLength={60}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.displayName ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                   placeholder="e.g., OpenAI"
-                  required
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.displayName ? (
+                    <span className="text-xs text-red-500">{formErrors.displayName}</span>
+                  ) : (
+                    <span></span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.displayName.length}/60</span>
+                </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Description
+                </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  placeholder="Provider description"
-                  rows={2}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, description: e.target.value }));
+                    if (formErrors.description) setFormErrors(prev => ({ ...prev, description: '' }));
+                  }}
+                  maxLength={200}
+                  rows={3}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all resize-none overflow-y-auto ${formErrors.description ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                  placeholder="Brief description of the provider"
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.description ? (
+                    <span className="text-xs text-red-500">{formErrors.description}</span>
+                  ) : (
+                    <span></span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.description.length}/200</span>
+                </div>
               </div>
 
+              {/* Logo URL */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Logo URL
+                </label>
                 <input
-                  type="url"
+                  type="text"
                   value={formData.logo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, logo: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  placeholder="https://..."
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, logo: e.target.value }));
+                    if (formErrors.logo) setFormErrors(prev => ({ ...prev, logo: '' }));
+                  }}
+                  maxLength={255}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.logo ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                  placeholder="https://example.com/logo.png"
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.logo ? (
+                    <span className="text-xs text-red-500">{formErrors.logo}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Valid URL starting with http:// or https://</span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.logo.length}/255</span>
+                </div>
               </div>
 
+              {/* Website URL */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Website URL
+                </label>
                 <input
-                  type="url"
+                  type="text"
                   value={formData.website}
-                  onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  placeholder="https://..."
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, website: e.target.value }));
+                    if (formErrors.website) setFormErrors(prev => ({ ...prev, website: '' }));
+                  }}
+                  maxLength={255}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.website ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                  placeholder="https://example.com"
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.website ? (
+                    <span className="text-xs text-red-500">{formErrors.website}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Valid URL starting with http:// or https://</span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.website.length}/255</span>
+                </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Features</h4>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
+              {/* Features */}
+              <div className="border-t border-gray-100 pt-5">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Features</h4>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsStreaming}
@@ -442,11 +598,11 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsStreaming: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Streaming</span>
+                    <span className="text-sm text-gray-700">Supports Streaming</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsVision}
@@ -454,11 +610,11 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsVision: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Vision</span>
+                    <span className="text-sm text-gray-700">Supports Vision</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsFunctionCalling}
@@ -466,11 +622,11 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsFunctionCalling: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Function Calling</span>
+                    <span className="text-sm text-gray-700">Supports Function Calling</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.requiresApiKey}
@@ -478,25 +634,29 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, requiresApiKey: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Requires API Key</span>
+                    <span className="text-sm text-gray-700">Requires API Key</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {isSubmitting ? 'Creating...' : 'Create Provider'}
                 </button>
@@ -504,13 +664,13 @@ function AdminProvidersPage() {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Edit Provider Modal */}
-      {showEditModal && selectedProvider && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
+      {showEditModal && selectedProvider && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Edit Provider</h2>
               <button
                 onClick={() => {
@@ -518,7 +678,7 @@ function AdminProvidersPage() {
                   setSelectedProvider(null);
                   resetForm();
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -526,52 +686,128 @@ function AdminProvidersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateProvider} className="space-y-4">
+            <form onSubmit={handleUpdateProvider} className="p-6 space-y-5">
+              {/* Provider Name (read-only) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Display Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Provider Name
+                </label>
+                <input
+                  type="text"
+                  value={selectedProvider.name}
+                  disabled
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-400 mt-1">Provider name cannot be changed</p>
+              </div>
+
+              {/* Display Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Display Name<span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={formData.displayName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  required
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, displayName: e.target.value }));
+                    if (formErrors.displayName) setFormErrors(prev => ({ ...prev, displayName: '' }));
+                  }}
+                  maxLength={60}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.displayName ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.displayName ? (
+                    <span className="text-xs text-red-500">{formErrors.displayName}</span>
+                  ) : (
+                    <span></span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.displayName.length}/60</span>
+                </div>
               </div>
 
+              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Description
+                </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  rows={2}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, description: e.target.value }));
+                    if (formErrors.description) setFormErrors(prev => ({ ...prev, description: '' }));
+                  }}
+                  maxLength={200}
+                  rows={3}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all resize-none overflow-y-auto ${formErrors.description ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.description ? (
+                    <span className="text-xs text-red-500">{formErrors.description}</span>
+                  ) : (
+                    <span></span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.description.length}/200</span>
+                </div>
               </div>
 
+              {/* Logo URL */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Logo URL</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Logo URL
+                </label>
                 <input
-                  type="url"
+                  type="text"
                   value={formData.logo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, logo: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, logo: e.target.value }));
+                    if (formErrors.logo) setFormErrors(prev => ({ ...prev, logo: '' }));
+                  }}
+                  maxLength={255}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.logo ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                  placeholder="https://example.com/logo.png"
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.logo ? (
+                    <span className="text-xs text-red-500">{formErrors.logo}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Valid URL starting with http:// or https://</span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.logo.length}/255</span>
+                </div>
               </div>
 
+              {/* Website URL */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Website URL
+                </label>
                 <input
-                  type="url"
+                  type="text"
                   value={formData.website}
-                  onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, website: e.target.value }));
+                    if (formErrors.website) setFormErrors(prev => ({ ...prev, website: '' }));
+                  }}
+                  maxLength={255}
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.website ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                  placeholder="https://example.com"
                 />
+                <div className="flex justify-between items-center mt-1">
+                  {formErrors.website ? (
+                    <span className="text-xs text-red-500">{formErrors.website}</span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Valid URL starting with http:// or https://</span>
+                  )}
+                  <span className="text-xs text-gray-400">{formData.website.length}/255</span>
+                </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Features</h4>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
+              {/* Features */}
+              <div className="border-t border-gray-100 pt-5">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Features</h4>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsStreaming}
@@ -579,11 +815,11 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsStreaming: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Streaming</span>
+                    <span className="text-sm text-gray-700">Supports Streaming</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsVision}
@@ -591,11 +827,11 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsVision: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Vision</span>
+                    <span className="text-sm text-gray-700">Supports Vision</span>
                   </label>
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.supportsFunctionCalling}
@@ -603,14 +839,27 @@ function AdminProvidersPage() {
                         ...prev,
                         settings: { ...prev.settings, supportsFunctionCalling: e.target.checked }
                       }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                     />
-                    <span className="text-sm text-gray-600">Supports Function Calling</span>
+                    <span className="text-sm text-gray-700">Supports Function Calling</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.settings.requiresApiKey}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        settings: { ...prev.settings, requiresApiKey: e.target.checked }
+                      }))}
+                      className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
+                    />
+                    <span className="text-sm text-gray-700">Requires API Key</span>
                   </label>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4">
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => {
@@ -618,14 +867,14 @@ function AdminProvidersPage() {
                     setSelectedProvider(null);
                     resetForm();
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {isSubmitting ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -633,7 +882,7 @@ function AdminProvidersPage() {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }

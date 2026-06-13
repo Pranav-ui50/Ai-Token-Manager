@@ -84,6 +84,38 @@ const adminApi = {
   },
 
   /**
+   * Get user by ID
+   * @param {string} id - User ID
+   * @returns {Promise} User details
+   */
+  getUserById: async (id) => {
+    const response = await api.get(`/admin/users/${id}`);
+    return response.data.data;
+  },
+
+  /**
+   * Update user status
+   * @param {string} id - User ID
+   * @param {string} status - New status ('active' or 'inactive')
+   * @returns {Promise} Updated user
+   */
+  updateUserStatus: async (id, status) => {
+    const response = await api.patch(`/admin/users/${id}/status`, { status });
+    return response.data.data;
+  },
+
+  /**
+   * Update user role
+   * @param {string} id - User ID
+   * @param {string} roleId - New role ID
+   * @returns {Promise} Updated user
+   */
+  updateUserRole: async (id, roleId) => {
+    const response = await api.patch(`/admin/users/${id}/role`, { roleId });
+    return response.data.data;
+  },
+
+  /**
    * Get all providers with model counts
    * @param {Object} params - Query parameters
    * @returns {Promise} Providers list

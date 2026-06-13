@@ -114,11 +114,14 @@ export const DATE_FORMATS = {
 // Currency
 export const CURRENCY = {
   DEFAULT: import.meta.env.VITE_DEFAULT_CURRENCY || 'USD',
+  SUPPORTED: ['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD'],
   SYMBOLS: {
     USD: '$',
     EUR: '€',
     GBP: '£',
-    INR: '₹'
+    INR: '₹',
+    CAD: 'C$',
+    AUD: 'A$'
   }
 };
 

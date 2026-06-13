@@ -1,16 +1,21 @@
 /**
  * Product Manager Dashboard
  *
- * Product and features overview for PRODUCT_MANAGER role with real API data.
+ * Product and features overview for PRODUCT_MANAGER role.
  * Red & White theme styling.
+ *
+ * Features:
+ * - Feature Management: Create, edit, delete features
+ * - Model Mapping: Assign existing AI models to features
+ * - Token Estimates: Configure token consumption per feature
+ * - Feature Cost View: View estimated AI costs
+ * - Usage Analytics: Feature usage and token consumption metrics
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import featureApi from '../../services/api/feature.api.js';
-import planApi from '../../services/api/plan.api.js';
-import modelApi from '../../services/api/model.api.js';
 import analyticsApi from '../../services/api/analytics.api.js';
 
 // Helper to extract numeric value from potentially nested object
@@ -27,14 +32,15 @@ function ProductManagerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [stats, setStats] = useState({
-    features: 0,
-    models: 0,
-    plans: 0,
-    usageThisMonth: 0
+    totalFeatures: 0,
+    activeFeatures: 0,
+    mappedFeatures: 0,
+    unmappedFeatures: 0,
+    monthlyTokenConsumption: 0,
+    avgTokensPerRequest: 0
   });
   const [features, setFeatures] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [modelUsage, setModelUsage] = useState([]);
+  const [featureUsage, setFeatureUsage] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,11 +53,8 @@ function ProductManagerDashboard() {
       setIsLoading(true);
       setError(null);
 
-      // Fetch all data in parallel
-      const [featuresRes, plansRes, modelsRes, analyticsRes] = await Promise.allSettled([
-        featureApi.getAll({ limit: 5 }),
-        planApi.getAll({ limit: 5 }),
-        modelApi.getAll({ limit: 10 }),
+      const [featuresRes, analyticsRes] = await Promise.allSettled([
+        featureApi.getAll({ limit: 10 }),
         analyticsApi.getDashboard()
       ]);
 
@@ -59,42 +62,57 @@ function ProductManagerDashboard() {
       if (featuresRes.status === 'fulfilled') {
         const featuresData = featuresRes.value?.data || featuresRes.value || {};
         const featuresList = featuresData.features || featuresData.data || [];
-        setFeatures(Array.isArray(featuresList) ? featuresList.slice(0, 5) : []);
+        setFeatures(Array.isArray(featuresList) ? featuresList : []);
+
+        const totalFeatures = featuresData.total || featuresData.count || (Array.isArray(featuresList) ? featuresList.length : 0);
+        const activeCount = Array.isArray(featuresList)
+          ? featuresList.filter(f => f.status === 'active').length
+          : 0;
+        const mappedCount = Array.isArray(featuresList)
+          ? featuresList.filter(f => f.model && f.model._id).length
+          : 0;
+
+        let avgInputTokens = 0;
+        let avgOutputTokens = 0;
+        if (Array.isArray(featuresList) && featuresList.length > 0) {
+          const featuresWithTokens = featuresList.filter(f => f.tokenEstimates);
+          if (featuresWithTokens.length > 0) {
+            avgInputTokens = featuresWithTokens.reduce((sum, f) => sum + (f.tokenEstimates?.inputTokensPerRequest || 0), 0) / featuresWithTokens.length;
+            avgOutputTokens = featuresWithTokens.reduce((sum, f) => sum + (f.tokenEstimates?.outputTokensPerRequest || 0), 0) / featuresWithTokens.length;
+          }
+        }
+
         setStats(prev => ({
           ...prev,
-          features: featuresData.total || featuresData.count || (Array.isArray(featuresList) ? featuresList.length : 0)
+          totalFeatures,
+          activeFeatures: activeCount,
+          mappedFeatures: mappedCount,
+          unmappedFeatures: totalFeatures - mappedCount,
+          avgTokensPerRequest: Math.round(avgInputTokens + avgOutputTokens)
         }));
+
+        if (Array.isArray(featuresList)) {
+          const usageData = featuresList.slice(0, 6).map(f => ({
+            id: f._id,
+            name: f.name,
+            status: f.status,
+            model: f.model?.name || 'Not Mapped',
+            inputTokens: f.tokenEstimates?.inputTokensPerRequest || 0,
+            outputTokens: f.tokenEstimates?.outputTokensPerRequest || 0,
+            estimatedCost: f.estimatedCostPerRequest || 0,
+            category: f.category || 'other'
+          }));
+          setFeatureUsage(usageData);
+        }
       }
 
-      // Process plans
-      if (plansRes.status === 'fulfilled') {
-        const plansData = plansRes.value?.data || plansRes.value || {};
-        const plansList = plansData.plans || plansData.data || [];
-        setPlans(Array.isArray(plansList) ? plansList.slice(0, 5) : []);
-        setStats(prev => ({
-          ...prev,
-          plans: plansData.total || plansData.count || (Array.isArray(plansList) ? plansList.length : 0)
-        }));
-      }
-
-      // Process models
-      if (modelsRes.status === 'fulfilled') {
-        const modelsData = modelsRes.value?.data || modelsRes.value || {};
-        const modelsList = modelsData.models || modelsData.data || [];
-        setModelUsage(Array.isArray(modelsList) ? modelsList.slice(0, 5) : []);
-        setStats(prev => ({
-          ...prev,
-          models: modelsData.total || modelsData.count || (Array.isArray(modelsList) ? modelsList.length : 0)
-        }));
-      }
-
-      // Process analytics
+      // Process analytics for token consumption
       if (analyticsRes.status === 'fulfilled') {
         const analyticsData = analyticsRes.value?.data || analyticsRes.value || {};
         const summary = analyticsData?.summary || {};
         setStats(prev => ({
           ...prev,
-          usageThisMonth: extractNumber(summary.totalTokens || summary.tokenUsage)
+          monthlyTokenConsumption: extractNumber(summary.totalTokens || summary.tokenUsage)
         }));
       }
 
@@ -116,16 +134,18 @@ function ProductManagerDashboard() {
 
   const formatCurrency = (amount) => {
     const numValue = typeof amount === 'object' ? extractNumber(amount) : amount;
-    if (!numValue && numValue !== 0) return '$0.00';
+    if (!numValue && numValue !== 0) return '$0.0000';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'USD',
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4
     }).format(numValue);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-96">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -139,36 +159,38 @@ function ProductManagerDashboard() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-        {error}
-        <button onClick={fetchDashboardData} className="ml-4 text-red-800 hover:text-red-900 underline">
-          Retry
-        </button>
+      <div className="p-4 sm:p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+          <button onClick={fetchDashboardData} className="ml-4 text-red-800 hover:text-red-900 underline">
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Product Dashboard</h1>
-          <p className="text-sm text-gray-500">Features, models, and usage analytics</p>
+          <p className="text-sm text-gray-500">Manage features and token estimates</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
           <button
-            onClick={() => navigate('/analytics')}
-            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={() => navigate('/usage-analytics')}
+            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            Analytics
+            Usage Analytics
           </button>
           <button
             onClick={() => navigate('/features/new')}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
+            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
           >
             <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -179,96 +201,148 @@ function ProductManagerDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <Link to="/features" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Link to="/features" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
               </svg>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-gray-500 truncate">Features</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.features}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Total Features</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{stats.totalFeatures}</p>
             </div>
           </div>
         </Link>
 
-        <Link to="/models" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+        <Link to="/features?status=active" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-gray-500 truncate">Models</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.models}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Active Features</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{stats.activeFeatures}</p>
             </div>
           </div>
         </Link>
 
-        <Link to="/plans" className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
+        <Link to="/model-mapping" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-gray-500 truncate">Plans</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.plans}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Mapped Features</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{stats.mappedFeatures}</p>
             </div>
           </div>
         </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 h-full">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-50 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 sm:w-6 sm:h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
               </svg>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-gray-500 truncate">Tokens This Month</p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{formatNumber(stats.usageThisMonth)}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Monthly Tokens</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{formatNumber(stats.monthlyTokenConsumption)}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Features and Plans */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Active Features */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      {/* Secondary Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500">Avg Tokens/Request</p>
+              <p className="text-base sm:text-lg font-bold text-gray-900">{formatNumber(stats.avgTokensPerRequest)}</p>
+            </div>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500">Unmapped Features</p>
+              <p className="text-base sm:text-lg font-bold text-gray-900">{stats.unmappedFeatures}</p>
+              {stats.unmappedFeatures > 0 && (
+                <Link to="/model-mapping" className="text-xs text-[#DC2626] hover:underline mt-1 inline-block">
+                  Map now →
+                </Link>
+              )}
+            </div>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <Link to="/feature-cost" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500">Feature Cost Overview</p>
+              <p className="text-base sm:text-lg font-bold text-gray-900 hover:text-[#DC2626]">View Costs →</p>
+            </div>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Features and Cost Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        {/* Recent Features */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Active Features</h2>
-            <Link to="/features" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Recent Features</h2>
+            <Link to="/features" className="text-xs sm:text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap">
               View All
             </Link>
           </div>
           {features.length > 0 ? (
-            <div className="space-y-3">
-              {features.map((feature) => (
+            <div className="space-y-2 sm:space-y-3">
+              {features.slice(0, 5).map((feature) => (
                 <Link
                   key={feature._id}
                   to={`/features/${feature._id}`}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors"
+                  className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{feature.name}</p>
-                      <p className="text-xs text-gray-500 truncate">{feature.model?.name || feature.modelName || 'No model'}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{feature.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{feature.model?.name || 'Not Mapped'}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900 text-sm">{formatNumber(feature.estimatedTokens || feature.tokens || 0)} tokens</p>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${feature.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="font-medium text-gray-900 text-xs sm:text-sm whitespace-nowrap">
+                      {formatNumber(feature.tokenEstimates?.inputTokensPerRequest || 0) + '/' + formatNumber(feature.tokenEstimates?.outputTokensPerRequest || 0)}
+                    </p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${feature.status === 'active' ? 'bg-green-100 text-green-700' : feature.status === 'inactive' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {feature.status || 'active'}
                     </span>
                   </div>
@@ -276,81 +350,93 @@ function ProductManagerDashboard() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No features yet. <Link to="/features/new" className="text-[#DC2626] hover:underline">Create one</Link>
+            <div className="text-center py-6 sm:py-8 text-gray-500">
+              <p className="text-sm">No features yet.</p>
+              <Link to="/features/new" className="text-[#DC2626] hover:underline text-sm">Create one</Link>
             </div>
           )}
         </div>
 
-        {/* Subscription Plans */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        {/* Estimated Feature Cost */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Subscription Plans</h2>
-            <Link to="/plans" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
-              Manage Plans
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Estimated Feature Cost</h2>
+            <Link to="/feature-cost" className="text-xs sm:text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap">
+              View All
             </Link>
           </div>
-          {plans.length > 0 ? (
-            <div className="space-y-3">
-              {plans.map((plan) => (
-                <Link
-                  key={plan._id}
-                  to={`/plans/${plan._id}`}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-red-50/50 transition-colors"
+          {featureUsage.length > 0 ? (
+            <div className="space-y-2 sm:space-y-3">
+              {featureUsage.slice(0, 5).map((feature) => (
+                <div
+                  key={feature.id}
+                  className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 rounded-lg"
                 >
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{plan.name}</p>
-                    <p className="text-xs text-gray-500">{plan.features?.length || 0} features</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{feature.name}</p>
+                    <p className="text-xs text-gray-500">
+                      In: {formatNumber(feature.inputTokens)} / Out: {formatNumber(feature.outputTokens)}
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{plan.users || plan.subscriberCount || 0} users</p>
-                    <p className="text-xs text-gray-500">{formatCurrency(plan.price || 0)}/mo</p>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="font-medium text-gray-900 text-xs sm:text-sm">{formatCurrency(feature.estimatedCost)}</p>
+                    <p className="text-xs text-gray-500">per request</p>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No plans yet. <Link to="/plans" className="text-[#DC2626] hover:underline">Create one</Link>
+            <div className="text-center py-6 sm:py-8 text-gray-500">
+              <p className="text-sm">No feature cost data.</p>
+              <Link to="/features/new" className="text-[#DC2626] hover:underline text-sm">Add features</Link>
             </div>
           )}
         </div>
       </div>
 
-      {/* Model Usage */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      {/* Feature Usage Overview */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Model Performance</h2>
-          <Link to="/models" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
-            View All
+          <h2 className="text-base sm:text-lg font-semibold text-gray-900">Feature Usage Overview</h2>
+          <Link to="/usage-analytics" className="text-xs sm:text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap">
+            View Analytics
           </Link>
         </div>
-        {modelUsage.length > 0 ? (
-          <div className="overflow-x-auto">
+        {features.length > 0 ? (
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Model</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Provider</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Feature</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden sm:table-cell">Model</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden md:table-cell">Category</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Tokens</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {modelUsage.map((model) => (
-                  <tr key={model._id} className="hover:bg-red-50/30 transition-colors">
+                {features.slice(0, 6).map((feature) => (
+                  <tr key={feature._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <p className="font-medium text-gray-900">{model.name || model.displayName}</p>
+                      <Link to={`/features/${feature._id}`} className="font-medium text-gray-900 text-sm hover:text-[#DC2626] truncate block max-w-[150px] sm:max-w-none">
+                        {feature.name}
+                      </Link>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
-                      {model.provider?.name || model.providerName || '-'}
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-sm hidden sm:table-cell">
+                      {feature.model?.name || <span className="text-yellow-600">Not Mapped</span>}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
-                      {model.type || '-'}
+                    <td className="px-4 py-3 whitespace-nowrap hidden md:table-cell">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">
+                        {feature.category || 'other'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right text-gray-600 text-sm">
+                      <span className="hidden sm:inline">In: {formatNumber(feature.tokenEstimates?.inputTokensPerRequest || 0)} / </span>
+                      Out: {formatNumber(feature.tokenEstimates?.outputTokensPerRequest || 0)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${model.isActive !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                        {model.isActive !== false ? 'Active' : 'Inactive'}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${feature.status === 'active' ? 'bg-green-100 text-green-700' : feature.status === 'inactive' ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {feature.status || 'active'}
                       </span>
                     </td>
                   </tr>
@@ -359,66 +445,67 @@ function ProductManagerDashboard() {
             </table>
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
-            No models configured yet. <Link to="/models" className="text-[#DC2626] hover:underline">Configure models</Link>
+          <div className="text-center py-6 sm:py-8 text-gray-500">
+            <p className="text-sm">No features to display.</p>
+            <Link to="/features/new" className="text-[#DC2626] hover:underline text-sm">Create your first feature</Link>
           </div>
         )}
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+        <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <button
             onClick={() => navigate('/features/new')}
-            className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
+            className="p-3 sm:p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left h-full"
           >
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
-              <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-2 sm:mb-3">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </div>
-            <p className="font-medium text-gray-900">Add Feature</p>
-            <p className="text-xs text-gray-500 mt-1">Configure new feature</p>
+            <p className="font-medium text-gray-900 text-sm sm:text-base">Add Feature</p>
+            <p className="text-xs text-gray-500 mt-1 hidden sm:block">Create new feature</p>
           </button>
 
           <button
-            onClick={() => navigate('/plans')}
-            className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
+            onClick={() => navigate('/model-mapping')}
+            className="p-3 sm:p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left h-full"
           >
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
-              <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-2 sm:mb-3">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
             </div>
-            <p className="font-medium text-gray-900">Create Plan</p>
-            <p className="text-xs text-gray-500 mt-1">Build subscription tier</p>
+            <p className="font-medium text-gray-900 text-sm sm:text-base">Model Mapping</p>
+            <p className="text-xs text-gray-500 mt-1 hidden sm:block">Assign models to features</p>
           </button>
 
           <button
-            onClick={() => navigate('/analytics')}
-            className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
+            onClick={() => navigate('/token-estimates')}
+            className="p-3 sm:p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left h-full"
           >
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
-              <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-2 sm:mb-3">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-            <p className="font-medium text-gray-900">View Analytics</p>
-            <p className="text-xs text-gray-500 mt-1">Usage statistics</p>
+            <p className="font-medium text-gray-900 text-sm sm:text-base">Token Estimates</p>
+            <p className="text-xs text-gray-500 mt-1 hidden sm:block">Configure token usage</p>
           </button>
 
           <button
-            onClick={() => navigate('/models')}
-            className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
+            onClick={() => navigate('/feature-cost')}
+            className="p-3 sm:p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left h-full"
           >
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
-              <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-2 sm:mb-3">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="font-medium text-gray-900">Model Catalog</p>
-            <p className="text-xs text-gray-500 mt-1">Browse AI models</p>
+            <p className="font-medium text-gray-900 text-sm sm:text-base">Feature Cost</p>
+            <p className="text-xs text-gray-500 mt-1 hidden sm:block">View cost estimates</p>
           </button>
         </div>
       </div>

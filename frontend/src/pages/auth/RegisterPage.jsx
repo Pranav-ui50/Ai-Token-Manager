@@ -2,11 +2,13 @@
  * Register Page
  *
  * Modern Red & White themed registration page with organization creation.
- * Supports plan preselection via URL parameter.
+ * Users can select a plan directly on this page or via URL parameter.
  *
  * Flow:
- * - Free plan: Direct registration (account created immediately)
- * - Paid plan: Payment first, account created only after successful payment
+ * - User can come with a pre-selected plan from pricing page
+ * - OR user can select a plan directly on this page
+ * - Payment is required before account creation
+ * - Account is created only after successful payment
  */
 
 import { useState, useEffect } from 'react';
@@ -16,19 +18,56 @@ import { storage } from '../../utils/helpers.js';
 import { AUTH_KEYS } from '../../utils/constants.js';
 import publicApi from '../../services/api/public.api.js';
 import registrationPaymentApi from '../../services/api/registrationPayment.api.js';
+import { showToast } from '../../utils/toasts.js';
+
+// Default plans as fallback
+const DEFAULT_PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    tier: 'starter',
+    description: 'Great for small teams exploring AI APIs',
+    billing: { price: 29, yearlyPrice: 278.4, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 500000, creditType: 'token' },
+    limits: { maxUsers: 3, maxApiCalls: 10000 },
+    isPopular: false
+  },
+  {
+    id: 'professional',
+    name: 'Professional',
+    tier: 'professional',
+    description: 'Ideal for growing teams with advanced AI needs',
+    billing: { price: 99, yearlyPrice: 950.4, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 2000000, creditType: 'token' },
+    limits: { maxUsers: 10, maxApiCalls: 50000 },
+    isPopular: true
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    tier: 'business',
+    description: 'For organizations with heavy AI API usage',
+    billing: { price: 299, yearlyPrice: 2870.4, currency: 'USD', interval: 'month', trialDays: 14 },
+    credits: { includedCredits: 10000000, creditType: 'token' },
+    limits: { maxUsers: 50, maxApiCalls: 200000 },
+    isPopular: false
+  }
+];
 
 const RegisterPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { register, isLoading: authLoading, error, clearError, isAuthenticated } = useAuth();
+  const { isLoading: authLoading, error, clearError, isAuthenticated } = useAuth();
 
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [availablePlans, setAvailablePlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const planId = searchParams.get('plan');
 
-  // Currency from URL (read-only, passed from landing page)
-  const currency = searchParams.get('currency') || 'USD';
+  // Currency state - can be changed by user
+  const [selectedCurrency, setSelectedCurrency] = useState(searchParams.get('currency') || 'USD');
   const billingParam = searchParams.get('billing') || 'month';
 
   // Currency conversion rates (approximate)
@@ -63,12 +102,36 @@ const RegisterPage = () => {
 
   // Helper to format price with currency conversion
   const formatPrice = (price) => {
-    const symbol = currencySymbols[currency] || '$';
-    const convertedPrice = Math.round(price * (conversionRates[currency] || 1));
+    const symbol = currencySymbols[selectedCurrency] || '$';
+    const convertedPrice = Math.round(price * (conversionRates[selectedCurrency] || 1));
     return `${symbol}${convertedPrice.toLocaleString('en-US')}`;
   };
 
-  // Fetch selected plan details if plan ID is provided
+  // Fetch all available plans
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setLoadingPlans(true);
+        const response = await publicApi.getPlans();
+        if (response.success && response.data && response.data.length > 0) {
+          // Filter out free plans
+          const paidPlans = response.data.filter(plan => plan.tier !== 'free' && plan.tier !== 'enterprise');
+          setAvailablePlans(paidPlans.length > 0 ? paidPlans : DEFAULT_PLANS);
+        } else {
+          setAvailablePlans(DEFAULT_PLANS);
+        }
+      } catch (err) {
+        console.error('Failed to fetch plans:', err);
+        setAvailablePlans(DEFAULT_PLANS);
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+
+    fetchPlans();
+  }, []);
+
+  // Fetch selected plan details if plan ID is provided in URL
   useEffect(() => {
     if (planId) {
       fetchPlanDetails();
@@ -89,7 +152,12 @@ const RegisterPage = () => {
     }
   };
 
-  // Redirect to dashboard when authenticated (for free plans)
+  // Handle plan selection
+  const handleSelectPlan = (plan) => {
+    setSelectedPlan(plan);
+  };
+
+  // Redirect to dashboard when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
@@ -124,16 +192,22 @@ const RegisterPage = () => {
       errors.firstName = 'First name is required';
     } else if (formData.firstName.length < 2) {
       errors.firstName = 'First name must be at least 2 characters';
+    } else if (formData.firstName.length > 50) {
+      errors.firstName = 'First name cannot exceed 50 characters';
     }
 
     if (!formData.lastName) {
       errors.lastName = 'Last name is required';
     } else if (formData.lastName.length < 2) {
       errors.lastName = 'Last name must be at least 2 characters';
+    } else if (formData.lastName.length > 50) {
+      errors.lastName = 'Last name cannot exceed 50 characters';
     }
 
     if (!formData.email) {
       errors.email = 'Email is required';
+    } else if (formData.email.length > 60) {
+      errors.email = 'Email cannot exceed 60 characters';
     } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
       errors.email = 'Please enter a valid Email ID';
     }
@@ -142,6 +216,8 @@ const RegisterPage = () => {
       errors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length > 100) {
+      errors.password = 'Password cannot exceed 100 characters';
     } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
       errors.password = 'Password must contain uppercase, lowercase, and number';
     }
@@ -156,6 +232,8 @@ const RegisterPage = () => {
       errors.organizationName = 'Organization name is required';
     } else if (formData.organizationName.length < 2) {
       errors.organizationName = 'Organization name must be at least 2 characters';
+    } else if (formData.organizationName.length > 100) {
+      errors.organizationName = 'Organization name cannot exceed 100 characters';
     }
 
     if (!agreeTerms) {
@@ -166,35 +244,19 @@ const RegisterPage = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Handle free plan registration
-  const handleFreeRegistration = async () => {
-    const result = await register({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      password: formData.password,
-      organizationName: formData.organizationName,
-      planId: 'free',
-      billingCycle: 'monthly'
-    });
-
-    if (result.success) {
-      // AuthContext will handle login and redirect
-      console.log('[Register] Free plan registration successful');
-    }
-    return result;
-  };
-
-  // Handle paid plan registration with payment
-  const handlePaidRegistration = async () => {
+  // Handle plan registration with payment
+  const handlePlanRegistration = async () => {
     const planToSend = selectedPlan?.slug || selectedPlan?.id || planId;
 
-    // Calculate the converted price based on selected currency
+    // Razorpay only supports INR for UPI/Netbanking - auto-switch to INR
+    const paymentCurrency = 'INR'; // Force INR for UPI/Netbanking support
+
+    // Calculate the converted price based on INR
     const basePrice = selectedPlan?.billing?.price || 0;
-    const convertedPrice = Math.round(basePrice * (conversionRates[currency] || 1));
+    const convertedPrice = Math.round(basePrice * (conversionRates[paymentCurrency] || conversionRates.INR));
 
     try {
-      console.log('[Register] Initiating payment for paid plan:', planToSend, 'currency:', currency, 'amount:', convertedPrice);
+      console.log('[Register] Initiating payment for plan:', planToSend, 'currency:', paymentCurrency, 'amount:', convertedPrice);
 
       // Call API to initiate payment
       const result = await registrationPaymentApi.initiatePayment({
@@ -206,91 +268,130 @@ const RegisterPage = () => {
         planId: planToSend,
         billingCycle: billingCycle,
         paymentProvider: 'razorpay', // Default to Razorpay
-        currency: currency,
-        amount: convertedPrice // Send converted amount
+        currency: paymentCurrency, // Always use INR for Razorpay (UPI/Netbanking)
+        amount: convertedPrice // Send converted amount in INR
       });
 
       console.log('[Register] Payment initiation result:', result);
 
-      if (!result.success) {
-        setFormErrors({ submit: result.error?.message || 'Failed to initiate payment' });
+      // Handle different response structures
+      const paymentData = result.data || result;
+
+      if (!result.success && !paymentData.requiresPayment) {
+        showToast.error(result.error?.message || result.message || 'Failed to initiate payment');
         return;
       }
 
-      // If no payment required (free plan), this shouldn't happen but handle it
-      if (!result.data?.requiresPayment) {
-        // Account was created directly (free plan fallback)
-        if (result.data?.accessToken) {
-          storage.set(AUTH_KEYS.TOKEN, result.data.accessToken);
-          storage.set(AUTH_KEYS.REFRESH_TOKEN, result.data.refreshToken);
-          storage.set(AUTH_KEYS.USER, result.data.user);
+      // If no payment required (shouldn't happen with paid plans only)
+      if (!paymentData.requiresPayment) {
+        if (paymentData.accessToken) {
+          storage.set(AUTH_KEYS.TOKEN, paymentData.accessToken);
+          storage.set(AUTH_KEYS.REFRESH_TOKEN, paymentData.refreshToken);
+          storage.set(AUTH_KEYS.USER, paymentData.user);
           navigate('/dashboard', { replace: true });
         }
         return;
       }
 
       // Open payment gateway
-      if (result.data.paymentProvider === 'razorpay') {
-        await openRazorpayCheckout(result.data);
-      } else if (result.data.paymentProvider === 'stripe') {
+      if (paymentData.paymentProvider === 'razorpay') {
+        await openRazorpayCheckout(paymentData);
+      } else if (paymentData.paymentProvider === 'stripe') {
         // Redirect to Stripe checkout
-        window.location.href = result.data.checkoutUrl;
+        window.location.href = paymentData.checkoutUrl;
       }
 
     } catch (err) {
       console.error('[Register] Payment initiation error:', err);
-      setFormErrors({ submit: err.response?.data?.error?.message || 'Failed to initiate payment' });
+      console.error('[Register] Error response:', err.response);
+      console.error('[Register] Error data:', err.response?.data);
+
+      // Show more detailed error message
+      let errorMessage = 'Failed to initiate payment';
+      if (err.response?.data?.error?.message) {
+        errorMessage = err.response.data.error.message;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+
+      console.error('[Register] Showing error:', errorMessage);
+      showToast.error(errorMessage);
+      setSubmitting(false);
     }
   };
 
   // Open Razorpay checkout
   const openRazorpayCheckout = async (paymentData) => {
     try {
+      console.log('[Register] Opening Razorpay checkout with data:', paymentData);
+
       // Load Razorpay SDK
       if (!window.Razorpay) {
+        console.log('[Register] Loading Razorpay SDK...');
         const script = document.createElement('script');
         script.src = 'https://checkout.razorpay.com/v1/checkout.js';
         script.async = true;
         document.body.appendChild(script);
         await new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
+          script.onload = () => {
+            console.log('[Register] Razorpay SDK loaded successfully');
+            resolve();
+          };
+          script.onerror = (err) => {
+            console.error('[Register] Failed to load Razorpay SDK:', err);
+            reject(new Error('Failed to load Razorpay SDK. Please check your internet connection.'));
+          };
         });
       }
 
+      // Validate required fields
+      if (!paymentData.key) {
+        throw new Error('Razorpay key not configured. Please contact support.');
+      }
+      if (!paymentData.orderId) {
+        throw new Error('Payment order not created. Please try again.');
+      }
+
+      // Amount should already be in the smallest currency unit from backend
+      // But backend sends regular amount, so we need to multiply by 100 for INR
+      const amountInSmallestUnit = paymentData.amount * 100;
+
+      console.log('[Register] Razorpay options:', {
+        key: paymentData.key,
+        amount: amountInSmallestUnit,
+        currency: paymentData.currency || 'INR',
+        order_id: paymentData.orderId
+      });
+
       const options = {
         key: paymentData.key,
-        amount: paymentData.amount * 100, // Convert to paise
+        amount: amountInSmallestUnit, // Convert to paise
         currency: paymentData.currency || 'INR',
         order_id: paymentData.orderId,
         name: 'API Token Manager',
         description: `${selectedPlan?.name || 'Subscription'} - ${billingCycle}`,
-        // Enable all payment methods
+        // Enable all payment methods - UPI and Netbanking first
         method: {
           upi: true,
           netbanking: true,
           card: true,
           wallet: true,
-          emi: true,
-          paylater: true
+          emi: false, // Disable EMI for simpler checkout
+          paylater: false // Disable paylater for simpler checkout
         },
-        // Configure payment method order (optional - shows most relevant first)
+        // Configure payment methods display - UPI and Bank first
         config: {
           display: {
             blocks: {
               upi: {
                 name: 'Pay via UPI',
                 instruments: [
-                  { method: 'upi' },
-                  { method: 'upi', flows: ['collect', 'qr'] }
-                ]
-              },
-              cards: {
-                name: 'Pay with Card',
-                instruments: [
-                  { method: 'card' },
-                  { method: 'emi' },
-                  { method: 'cardless_emi' }
+                  { method: 'upi', flows: ['collect', 'qr'] },
+                  { method: 'upi' }
                 ]
               },
               netbanking: {
@@ -299,15 +400,21 @@ const RegisterPage = () => {
                   { method: 'netbanking' }
                 ]
               },
-              wallets: {
-                name: 'Wallets & Pay Later',
+              cards: {
+                name: 'Pay with Card',
                 instruments: [
-                  { method: 'wallet' },
-                  { method: 'paylater' }
+                  { method: 'card' }
+                ]
+              },
+              wallets: {
+                name: 'Wallets',
+                instruments: [
+                  { method: 'wallet' }
                 ]
               }
             },
-            sequence: ['block.upi', 'block.cards', 'block.netbanking', 'block.wallets'],
+            // Show UPI and Bank options first
+            sequence: ['block.upi', 'block.netbanking', 'block.cards', 'block.wallets'],
             preferences: {
               show_default_blocks: true
             }
@@ -316,6 +423,7 @@ const RegisterPage = () => {
         handler: async (response) => {
           try {
             console.log('[Register] Razorpay payment successful:', response);
+            setSubmitting(true);
 
             // Verify payment and complete registration
             const result = await registrationPaymentApi.verifyRazorpayPayment(
@@ -337,19 +445,23 @@ const RegisterPage = () => {
                 storage.set(AUTH_KEYS.USER, responseData.user);
 
                 console.log('[Register] Tokens stored, redirecting to dashboard');
+                showToast.paymentSuccess();
 
                 // Redirect directly to dashboard
                 window.location.href = '/dashboard';
               } else {
                 console.error('[Register] No access token in response:', responseData);
-                setFormErrors({ submit: 'Payment successful but login failed. Please try logging in.' });
+                showToast.error('Payment successful but login failed. Please try logging in.');
+                setSubmitting(false);
               }
             } else {
-              setFormErrors({ submit: result.error?.message || 'Payment verification failed' });
+              showToast.error(result.error?.message || result.message || 'Payment verification failed');
+              setSubmitting(false);
             }
           } catch (err) {
             console.error('[Register] Payment verification error:', err);
-            setFormErrors({ submit: err.response?.data?.error?.message || err.message || 'Payment verification failed' });
+            showToast.error(err.response?.data?.error?.message || err.message || 'Payment verification failed');
+            setSubmitting(false);
           }
         },
         prefill: {
@@ -375,13 +487,20 @@ const RegisterPage = () => {
 
     } catch (err) {
       console.error('[Register] Razorpay error:', err);
-      setFormErrors({ submit: 'Failed to open payment gateway' });
+      showToast.error(err.message || 'Failed to open payment gateway');
+      setSubmitting(false);
     }
   };
 
   // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Check if plan is selected
+    if (!selectedPlan) {
+      showToast.error('Please select a plan to continue');
+      return;
+    }
 
     if (!validateForm()) {
       return;
@@ -390,15 +509,8 @@ const RegisterPage = () => {
     setSubmitting(true);
     setFormErrors({});
 
-    // Check if it's a free plan or paid plan
-    const isPaidPlan = selectedPlan && selectedPlan.billing?.price > 0;
-
     try {
-      if (isPaidPlan) {
-        await handlePaidRegistration();
-      } else {
-        await handleFreeRegistration();
-      }
+      await handlePlanRegistration();
     } finally {
       setSubmitting(false);
     }
@@ -428,7 +540,39 @@ const RegisterPage = () => {
   };
 
   const passwordStrength = getPasswordStrength();
-  const isPaidPlan = selectedPlan && selectedPlan.billing?.price > 0;
+
+  // Get tier styling
+  const getTierColor = (tier) => {
+    const colors = {
+      starter: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700' },
+      professional: { bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700' },
+      business: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700' },
+      enterprise: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700' }
+    };
+    return colors[tier] || colors.starter;
+  };
+
+  const getTierName = (tier) => {
+    const names = {
+      starter: 'Starter',
+      professional: 'Professional',
+      business: 'Business',
+      enterprise: 'Enterprise'
+    };
+    return names[tier] || tier;
+  };
+
+  // Get display price based on billing cycle
+  const getDisplayPrice = (plan) => {
+    const basePrice = plan.billing?.price || 0;
+    if (billingCycle === 'yearly' && plan.billing?.yearlyPrice) {
+      return plan.billing.yearlyPrice;
+    }
+    if (billingCycle === 'yearly') {
+      return basePrice * 12 * 0.8; // 20% discount
+    }
+    return basePrice;
+  };
 
   return (
     <div className="min-h-screen flex bg-[#F8FAFC]">
@@ -486,44 +630,44 @@ const RegisterPage = () => {
             </div>
           </div>
 
-          {/* Payment Notice for Paid Plans */}
-          {isPaidPlan && (
-            <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
-              <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-white mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <div className="text-xs text-white">
-                  <p className="font-semibold">Secure Payment Required</p>
-                  <p className="mt-0.5 text-white/80">Your account will be created after successful payment.</p>
-                </div>
+          {/* Payment Notice */}
+          <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+            <div className="flex items-start gap-2">
+              <svg className="w-4 h-4 text-white mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <div className="text-xs text-white">
+                <p className="font-semibold">Secure Payment Required</p>
+                <p className="mt-0.5 text-white/80">Your account will be created after successful payment.</p>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* Right Side - Register Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-8">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-md">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
-            <div className="w-10 h-10 bg-[#DC2626] rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
+          {/* Form Container with Border for Tablet/Mobile */}
+          <div className="bg-white rounded-2xl border-2 border-[#DC2626] shadow-lg shadow-[#DC2626]/10 lg:bg-transparent lg:border-0 lg:shadow-none p-5 sm:p-6 lg:p-0">
+            {/* Mobile Logo */}
+            <div className="lg:hidden flex items-center justify-center gap-2 mb-5">
+              <div className="w-10 h-10 bg-[#DC2626] rounded-xl flex items-center justify-center shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <span className="text-xl font-bold text-gray-900">API Token Manager</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">API Token Manager</span>
-          </div>
 
-          {/* Header */}
-          <div className="text-center lg:text-left mb-5">
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Create your account</h2>
-            <p className="text-sm text-gray-500">Join thousands of developers managing API tokens</p>
-          </div>
+            {/* Header */}
+            <div className="text-center lg:text-left mb-4 lg:mb-5">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Create your account</h2>
+              <p className="text-xs sm:text-sm text-gray-500">Join thousands of developers managing API tokens</p>
+            </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-3" noValidate>
             {/* Error Message */}
             {(error || formErrors.submit) && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg flex items-center gap-2">
@@ -534,13 +678,14 @@ const RegisterPage = () => {
               </div>
             )}
 
-            {/* Selected Plan Banner */}
+            {/* Plan Selection */}
             {loadingPlan ? (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#DC2626]"></div>
                 <span className="text-sm text-gray-600">Loading plan details...</span>
               </div>
             ) : selectedPlan ? (
+              /* Selected Plan Banner */
               <div className="bg-gradient-to-r from-[#DC2626]/10 to-[#DC2626]/5 border border-[#DC2626]/20 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -566,15 +711,116 @@ const RegisterPage = () => {
                     )}
                   </div>
                 </div>
-                <Link to="/pricing" className="text-xs text-[#DC2626] hover:underline mt-1 inline-block">
-                  Change plan
-                </Link>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlan(null)}
+                  className="text-xs text-[#DC2626] hover:underline mt-1"
+                >
+                  Choose a different plan
+                </button>
               </div>
-            ) : null}
+            ) : (
+              /* Plan Selection Grid */
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium text-gray-700">Choose your plan</p>
+                  {/* Currency Selector */}
+                  <div className="flex items-center gap-1">
+                    {['USD', 'INR', 'EUR', 'GBP'].map((curr) => (
+                      <button
+                        key={curr}
+                        type="button"
+                        onClick={() => setSelectedCurrency(curr)}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                          selectedCurrency === curr
+                            ? 'bg-[#DC2626] text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {curr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {loadingPlans ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {availablePlans.map((plan) => {
+                      const tierStyle = getTierColor(plan.tier);
+                      const isPopular = plan.isPopular || plan.tier === 'professional';
 
-            {/* Billing Cycle Toggle - Show for paid plans */}
-            {isPaidPlan && (
+                      return (
+                        <div
+                          key={plan.id || plan._id}
+                          onClick={() => handleSelectPlan(plan)}
+                          className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            isPopular
+                              ? 'border-[#DC2626] bg-[#DC2626]/5'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          {isPopular && (
+                            <span className="absolute -top-2 right-2 bg-[#DC2626] text-white text-xs font-medium px-2 py-0.5 rounded">
+                              Popular
+                            </span>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-gray-900">{plan.name}</p>
+                              <p className="text-xs text-gray-500">{plan.description}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-gray-900">
+                                {formatPrice(getDisplayPrice(plan))}
+                                <span className="text-xs font-normal text-gray-500">/{billingCycle === 'yearly' ? 'yr' : 'mo'}</span>
+                              </p>
+                              {plan.credits?.includedCredits && (
+                                <p className="text-xs text-gray-500">{(plan.credits.includedCredits / 1000).toFixed(0)}K tokens</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Billing Cycle Toggle - Show when plan is selected */}
+            {selectedPlan && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {/* Currency Selector - for display only */}
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-medium text-gray-700">View price in</p>
+                  <div className="flex items-center gap-1">
+                    {['USD', 'INR', 'EUR', 'GBP'].map((curr) => (
+                      <button
+                        key={curr}
+                        type="button"
+                        onClick={() => setSelectedCurrency(curr)}
+                        className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                          selectedCurrency === curr
+                            ? 'bg-[#DC2626] text-white'
+                            : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {curr}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Currency Note */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-3">
+                  <p className="text-xs text-blue-700">
+                    <span className="font-medium">💳 Payment:</span> UPI, Net Banking & Cards accepted. All payments processed in <strong>₹ (INR)</strong>.
+                  </p>
+                </div>
+
                 <p className="text-xs font-medium text-gray-700 mb-2">Billing Cycle</p>
                 <div className="flex gap-2">
                   <button
@@ -612,7 +858,7 @@ const RegisterPage = () => {
             {/* Organization Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Organization Name
+                Organization Name<span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -625,12 +871,11 @@ const RegisterPage = () => {
                   name="organizationName"
                   value={formData.organizationName}
                   onChange={handleChange}
-                  placeholder="Your company or team name"
+                  placeholder="Your Company Name"
                   maxLength={100}
                   className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     formErrors.organizationName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  required
                 />
               </div>
               {formErrors.organizationName && (
@@ -642,7 +887,7 @@ const RegisterPage = () => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name
+                  First Name<span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -656,11 +901,10 @@ const RegisterPage = () => {
                     value={formData.firstName}
                     onChange={handleChange}
                     placeholder="First name"
-                    maxLength={100}
+                    maxLength={50}
                     className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.firstName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    required
                   />
                 </div>
                 {formErrors.firstName && (
@@ -670,7 +914,7 @@ const RegisterPage = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name
+                  Last Name<span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -684,11 +928,10 @@ const RegisterPage = () => {
                     value={formData.lastName}
                     onChange={handleChange}
                     placeholder="Last name"
-                    maxLength={100}
+                    maxLength={50}
                     className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.lastName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    required
                   />
                 </div>
                 {formErrors.lastName && (
@@ -700,7 +943,7 @@ const RegisterPage = () => {
             {/* Email Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email ID
+                Email id<span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -713,12 +956,11 @@ const RegisterPage = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="Enter your email"
-                  maxLength={100}
+                  placeholder="admin@gmail.com"
+                  maxLength={60}
                   className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  required
                 />
               </div>
               {formErrors.email && (
@@ -729,7 +971,7 @@ const RegisterPage = () => {
             {/* Password Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
+                Password<span className="text-red-500">*</span>
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -743,12 +985,11 @@ const RegisterPage = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    placeholder="Create a password"
+                    placeholder="Admin@123"
                     maxLength={100}
                     className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    required
                   />
                 </div>
                 <button
@@ -791,7 +1032,7 @@ const RegisterPage = () => {
             {/* Confirm Password Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Confirm Password
+                Confirm Password<span className="text-red-500">*</span>
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -805,12 +1046,11 @@ const RegisterPage = () => {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    placeholder="Confirm your password"
+                    placeholder="Admin@123"
                     maxLength={100}
                     className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
-                    required
                   />
                 </div>
                 <button
@@ -855,11 +1095,11 @@ const RegisterPage = () => {
                 </div>
                 <span className="text-sm text-gray-600">
                   I agree to the{' '}
-                  <Link to="#" className="text-[#DC2626] hover:text-[#B91C1C] font-medium">
+                  <Link to="/terms" className="text-[#DC2626] hover:text-[#B91C1C] font-medium">
                     Terms of Service
                   </Link>{' '}
                   and{' '}
-                  <Link to="#" className="text-[#DC2626] hover:text-[#B91C1C] font-medium">
+                  <Link to="/privacy" className="text-[#DC2626] hover:text-[#B91C1C] font-medium">
                     Privacy Policy
                   </Link>
                 </span>
@@ -872,7 +1112,7 @@ const RegisterPage = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting || authLoading}
+              disabled={submitting || authLoading || !selectedPlan}
               className="w-full py-2.5 bg-[#DC2626] text-white font-semibold rounded-lg hover:bg-[#B91C1C] focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {submitting || authLoading ? (
@@ -881,11 +1121,13 @@ const RegisterPage = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  {isPaidPlan ? 'Processing...' : 'Creating account...'}
+                  Processing...
                 </>
+              ) : !selectedPlan ? (
+                'Please select a plan above'
               ) : (
                 <>
-                  {isPaidPlan ? 'Proceed to Payment' : 'Create Account'}
+                  Proceed to Payment
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                   </svg>
@@ -904,6 +1146,7 @@ const RegisterPage = () => {
               </Link>
             </p>
           </form>
+          </div>
         </div>
       </div>
     </div>

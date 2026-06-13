@@ -10,12 +10,12 @@ import { Link } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
 import Button from '../../components/common/Button.jsx';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const FeaturesPage = () => {
   const { canManageFeatures, canManagePlans, canRunSimulations, canViewAnalytics } = usePermissions();
   const [features, setFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     status: '',
     category: '',
@@ -43,7 +43,7 @@ const FeaturesPage = () => {
         setPagination(response.data.pagination);
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to fetch features');
+      showToast.error(err.response?.data?.error?.message || 'Failed to fetch features');
     } finally {
       setLoading(false);
     }
@@ -67,9 +67,10 @@ const FeaturesPage = () => {
 
     try {
       await featureApi.delete(id);
+      showToast.featureDeleted();
       fetchFeatures();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete feature');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete feature');
     }
   };
 
@@ -127,13 +128,6 @@ const FeaturesPage = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
-            {error}
-          </div>
-        )}
-
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-soft p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

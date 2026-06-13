@@ -11,6 +11,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import integrationApi from '../../services/api/integration.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const INTEGRATION_TYPES = [
   { value: 'openai', label: 'OpenAI', icon: '🤖' },
@@ -35,8 +36,6 @@ function IntegrationsPage() {
   const { canManageIntegrations, canViewIntegrations } = usePermissions();
   const [integrations, setIntegrations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
@@ -89,7 +88,7 @@ function IntegrationsPage() {
       setIntegrations(response.data || []);
     } catch (err) {
       console.error('Failed to fetch integrations:', err);
-      setError(err.response?.data?.error?.message || 'Failed to load integrations');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load integrations');
     } finally {
       setIsLoading(false);
     }
@@ -97,10 +96,9 @@ function IntegrationsPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (!orgId) {
-      setError('Organization required to create integrations');
+      showToast.error('Organization required to create integrations');
       return;
     }
 
@@ -112,15 +110,14 @@ function IntegrationsPage() {
       setIntegrations(prev => [response.data, ...prev]);
       setShowCreateModal(false);
       resetForm();
-      setSuccess('Integration created successfully');
+      showToast.integrationCreated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create integration');
+      showToast.error(err.response?.data?.error?.message || 'Failed to create integration');
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    setError('');
 
     try {
       const response = await integrationApi.update(selectedIntegration._id, formData);
@@ -128,9 +125,9 @@ function IntegrationsPage() {
       setShowEditModal(false);
       setSelectedIntegration(null);
       resetForm();
-      setSuccess('Integration updated successfully');
+      showToast.integrationUpdated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to update integration');
+      showToast.error(err.response?.data?.error?.message || 'Failed to update integration');
     }
   };
 
@@ -140,9 +137,9 @@ function IntegrationsPage() {
     try {
       await integrationApi.delete(integration._id);
       setIntegrations(prev => prev.filter(i => i._id !== integration._id));
-      setSuccess('Integration deleted successfully');
+      showToast.integrationDeleted();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete integration');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete integration');
     }
   };
 
@@ -154,11 +151,13 @@ function IntegrationsPage() {
     try {
       const response = await integrationApi.testConnection(integration._id);
       setTestResult(response.data);
+      showToast.success('Connection test successful');
     } catch (err) {
       setTestResult({
         success: false,
         message: err.response?.data?.error?.message || 'Connection test failed'
       });
+      showToast.error(err.response?.data?.error?.message || 'Connection test failed');
     }
   };
 
@@ -168,19 +167,19 @@ function IntegrationsPage() {
     try {
       const response = await integrationApi.toggleStatus(integration._id, newStatus);
       setIntegrations(prev => prev.map(i => i._id === integration._id ? response.data : i));
-      setSuccess(`Integration ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+      showToast.integrationToggled(newStatus);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to toggle status');
+      showToast.error(err.response?.data?.error?.message || 'Failed to toggle status');
     }
   };
 
   const handleSync = async (integration) => {
     try {
       const response = await integrationApi.sync(integration._id);
-      setSuccess(response.message || 'Sync completed successfully');
+      showToast.integrationSynced();
       fetchIntegrations();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to sync integration');
+      showToast.error(err.response?.data?.error?.message || 'Failed to sync integration');
     }
   };
 
@@ -302,29 +301,6 @@ function IntegrationsPage() {
           </select>
         </div>
       </div>
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Integrations List */}
       {isLoading ? (

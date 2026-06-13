@@ -45,8 +45,8 @@ const defaultFaqs = [
 const FAQSection = () => {
   const [openIndex, setOpenIndex] = useState(null);
   const [faqs, setFaqs] = useState(defaultFaqs);
-  const [title, setTitle] = useState('Frequently Asked Questions');
-  const [subtitle, setSubtitle] = useState('Find answers to common questions about TokenManager.');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
 
   // Fetch dynamic content from API
   useEffect(() => {
@@ -76,12 +76,9 @@ const FAQSection = () => {
               setFaqs([{ category: 'General', questions: items }]);
             }
           }
-          if (response.data.title) {
-            setTitle(response.data.title);
-          }
-          if (response.data.subtitle) {
-            setSubtitle(response.data.subtitle);
-          }
+          // Update title/subtitle - use empty string if not provided to allow hiding
+          setTitle(response.data.title ?? '');
+          setSubtitle(response.data.subtitle ?? '');
         }
       } catch (error) {
         console.log('Using default FAQs:', error);
@@ -95,22 +92,44 @@ const FAQSection = () => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
+  // Filter FAQs that have both question and answer
+  const validFaqs = faqs.map(category => ({
+    ...category,
+    questions: category.questions.filter(
+      q => q.question?.trim() && q.answer?.trim()
+    )
+  })).filter(category => category.questions.length > 0);
+
+  // Check if we should show the header
+  const showHeader = title?.trim() || subtitle?.trim();
+
+  // If no valid FAQs, don't render the section
+  if (validFaqs.length === 0) {
+    return null;
+  }
+
   return (
     <section id="faq" className="py-20 bg-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            {title}
-          </h2>
-          <p className="text-lg text-gray-600">
-            {subtitle}
-          </p>
-        </div>
+        {/* Section Header - Only show if title or subtitle exists */}
+        {showHeader && (
+          <div className="text-center mb-12">
+            {title?.trim() && (
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                {title}
+              </h2>
+            )}
+            {subtitle?.trim() && (
+              <p className="text-lg text-gray-600">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* FAQ Categories */}
         <div className="space-y-8">
-          {faqs.map((category, categoryIndex) => (
+          {validFaqs.map((category, categoryIndex) => (
             <div key={categoryIndex}>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 {category.category}

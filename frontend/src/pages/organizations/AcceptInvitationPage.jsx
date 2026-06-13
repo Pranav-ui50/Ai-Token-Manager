@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import organizationApi from '../../services/api/organization.api.js';
 import Button from '../../components/common/Button.jsx';
+import { showToast } from '../../utils/toasts.js';
 
 function AcceptInvitationPage() {
   const { token } = useParams();
@@ -36,9 +37,12 @@ function AcceptInvitationPage() {
       const result = await organizationApi.acceptInvitation(token, email);
       setOrganization(result.organization);
       setStatus('success');
+      showToast.invitationAccepted();
     } catch (err) {
       setStatus('error');
-      setError(err.response?.data?.message || 'Failed to accept invitation');
+      const errorMessage = err.response?.data?.message || 'Failed to accept invitation';
+      setError(errorMessage);
+      showToast.error(errorMessage);
     }
   };
 

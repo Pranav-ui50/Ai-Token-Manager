@@ -11,6 +11,7 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import settingsApi from '../../services/api/settings.api.js';
 import organizationApi from '../../services/api/organization.api.js';
 import Modal from '../../components/common/Modal.jsx';
+import { showToast } from '../../utils/toasts.js';
 
 const SETTINGS_TABS = [
   { id: 'organization', label: 'Organization', icon: 'building' },
@@ -25,8 +26,6 @@ function SettingsPage() {
   const { currentOrganization, updateOrganization } = useOrganization();
   const [activeTab, setActiveTab] = useState('organization');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   // Organization settings form
   const [orgForm, setOrgForm] = useState({
@@ -113,17 +112,20 @@ function SettingsPage() {
   const handleOrgSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError('');
-    setSuccess('');
 
     try {
       await settingsApi.updateOrganizationSettings(currentOrganization._id || currentOrganization.id, orgForm);
-      setSuccess('Organization settings updated successfully');
+      showToast.settingsSaved();
       if (updateOrganization) {
         await updateOrganization();
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update organization settings');
+      console.error('Organization settings error:', err);
+      const errorMessage = err?.response?.data?.error?.message
+        || err?.response?.data?.message
+        || (err?.response?.data?.error?.details?.[0]?.message)
+        || 'Failed to update organization settings';
+      showToast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -132,14 +134,12 @@ function SettingsPage() {
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError('');
-    setSuccess('');
 
     try {
       await settingsApi.updateProfile(profileForm);
-      setSuccess('Profile updated successfully');
+      showToast.profileUpdated();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      showToast.error(err.response?.data?.message || 'Failed to update profile');
     } finally {
       setIsSubmitting(false);
     }
@@ -148,11 +148,9 @@ function SettingsPage() {
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError('');
-    setSuccess('');
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setError('Passwords do not match');
+      showToast.error('Passwords do not match');
       setIsSubmitting(false);
       return;
     }
@@ -163,10 +161,10 @@ function SettingsPage() {
         passwordForm.newPassword,
         passwordForm.confirmPassword
       );
-      setSuccess('Password changed successfully');
+      showToast.passwordChanged();
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to change password');
+      showToast.error(err.response?.data?.message || 'Failed to change password');
     } finally {
       setIsSubmitting(false);
     }
@@ -174,7 +172,7 @@ function SettingsPage() {
 
   const handleDeleteOrganization = async () => {
     if (deleteConfirmation !== currentOrganization?.name) {
-      setError('Please type the organization name correctly');
+      showToast.error('Please type the organization name correctly');
       return;
     }
 
@@ -182,10 +180,11 @@ function SettingsPage() {
     try {
       await organizationApi.delete(currentOrganization._id || currentOrganization.id);
       setShowDeleteModal(false);
+      showToast.organizationDeleted();
       // Redirect to organizations list
       window.location.href = '/organizations';
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete organization');
+      showToast.error(err.response?.data?.message || 'Failed to delete organization');
     } finally {
       setIsSubmitting(false);
     }
@@ -622,39 +621,6 @@ function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500">Manage your organization and account settings</p>
       </div>
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm">{success}</span>
-          </div>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Settings Layout */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

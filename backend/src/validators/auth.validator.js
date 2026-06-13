@@ -33,6 +33,8 @@ export const registerValidation = [
     .trim()
     .notEmpty()
     .withMessage('Email is required')
+    .isLength({ max: 60 })
+    .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),
@@ -40,8 +42,8 @@ export const registerValidation = [
   body('password')
     .notEmpty()
     .withMessage('Password is required')
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters')
+    .isLength({ min: 8, max: 100 })
+    .withMessage('Password must be between 8 and 100 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
 
@@ -87,13 +89,17 @@ export const loginValidation = [
     .trim()
     .notEmpty()
     .withMessage('Email is required')
+    .isLength({ max: 60 })
+    .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),
 
   body('password')
     .notEmpty()
-    .withMessage('Password is required'),
+    .withMessage('Password is required')
+    .isLength({ max: 100 })
+    .withMessage('Password cannot exceed 100 characters'),
 
   validate
 ];
@@ -119,6 +125,8 @@ export const forgotPasswordValidation = [
     .trim()
     .notEmpty()
     .withMessage('Email is required')
+    .isLength({ max: 60 })
+    .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),
@@ -140,6 +148,8 @@ export const resetPasswordValidation = [
     .trim()
     .notEmpty()
     .withMessage('Email is required')
+    .isLength({ max: 60 })
+    .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),
@@ -147,8 +157,8 @@ export const resetPasswordValidation = [
   body('password')
     .notEmpty()
     .withMessage('Password is required')
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters')
+    .isLength({ min: 8, max: 100 })
+    .withMessage('Password must be between 8 and 100 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
 
@@ -161,13 +171,15 @@ export const resetPasswordValidation = [
 export const changePasswordValidation = [
   body('currentPassword')
     .notEmpty()
-    .withMessage('Current password is required'),
+    .withMessage('Current password is required')
+    .isLength({ max: 100 })
+    .withMessage('Current password cannot exceed 100 characters'),
 
   body('newPassword')
     .notEmpty()
     .withMessage('New password is required')
-    .isLength({ min: 8 })
-    .withMessage('New password must be at least 8 characters')
+    .isLength({ min: 8, max: 100 })
+    .withMessage('New password must be between 8 and 100 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('New password must contain at least one uppercase letter, one lowercase letter, and one number')
     .custom((value, { req }) => {
@@ -201,6 +213,8 @@ export const resendVerificationValidation = [
     .trim()
     .notEmpty()
     .withMessage('Email is required')
+    .isLength({ max: 60 })
+    .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
     .normalizeEmail(),

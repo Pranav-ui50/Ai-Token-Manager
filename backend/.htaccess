@@ -1,0 +1,97 @@
+# ===========================================
+# Node.js Backend - .htaccess Configuration
+# For MilesWeb cPanel with Passenger
+# ===========================================
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Force HTTPS (uncomment in production)
+# RewriteCond %{HTTPS} off
+# RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Handle CORS preflight requests
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
+
+# Set environment variables for Node.js
+# Pass authorization headers to Node.js
+RewriteCond %{HTTP:Authorization} ^(.*)
+RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]
+
+# ===========================================
+# Passenger Configuration for Node.js
+# ===========================================
+# Uncomment and update the Node.js path from your cPanel Node.js App settings
+
+# PassengerEnabled On
+# PassengerNodePath /home/vxmpqxaa/nodevenv/backpilottoken.b100x.in/20/bin/node
+# PassengerAppType node
+# PassengerStartupFile src/index.cjs
+
+# ===========================================
+# Security Headers
+# ===========================================
+
+# Prevent directory listing
+Options -Indexes
+
+# Protect sensitive files
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to .env file
+<FilesMatch "\.env$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to config files
+<FilesMatch "(package\.json|package-lock\.json|\.gitignore|\.htaccess)">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to source files (optional - uncomment if needed)
+# <FilesMatch "\.(js|ts|json)$">
+#     Order allow,deny
+#     Deny from all
+# </FilesMatch>
+
+# ===========================================
+# CORS Headers
+# ===========================================
+
+<IfModule mod_headers.c>
+    # Allow from your frontend domain (update in production)
+    # Header set Access-Control-Allow-Origin "https://yourdomain.com"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Organization-ID, X-Requested-With"
+    Header set Access-Control-Allow-Credentials "true"
+    Header set Access-Control-Max-Age "86400"
+</IfModule>
+
+# ===========================================
+# Cache Control
+# ===========================================
+
+<IfModule mod_expires.c>
+    # Don't cache API responses
+    <FilesMatch "\.(json)$">
+        ExpiresActive Off
+        Header set Cache-Control "no-store, no-cache, must-revalidate"
+        Header set Pragma "no-cache"
+    </FilesMatch>
+</IfModule>
+
+# ===========================================
+# Error Handling
+# ===========================================
+
+# Custom error pages (optional)
+# ErrorDocument 500 /500.html
+# ErrorDocument 502 /502.html
+# ErrorDocument 503 /503.html

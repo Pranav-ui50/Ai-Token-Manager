@@ -12,6 +12,7 @@ import Select from '../common/Select.jsx';
 import Input from '../common/Input.jsx';
 import Avatar from '../common/Avatar.jsx';
 import roleApi from '../../services/api/role.api.js';
+import { showToast } from '../../utils/toasts.js';
 
 function MembersTab({ organization, organizationId }) {
   const { addMember, removeMember, updateMemberRole, leaveOrganization, getOrganization, clearError } = useOrganization();
@@ -22,7 +23,6 @@ function MembersTab({ organization, organizationId }) {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
 
   // Current user info
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -118,8 +118,6 @@ function MembersTab({ organization, organizationId }) {
     if (!validateInviteForm()) return;
 
     setIsLoading(true);
-    setError('');
-    clearError?.();
 
     try {
       await addMember(organizationId, inviteForm);
@@ -127,8 +125,7 @@ function MembersTab({ organization, organizationId }) {
       setShowInviteModal(false);
       setInviteForm({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
       setInviteErrors({});
-      setError('');
-      clearError?.();
+      showToast.memberAdded();
       // Refresh organization data to show new member
       if (getOrganization) {
         getOrganization(organizationId);
@@ -141,14 +138,13 @@ function MembersTab({ organization, organizationId }) {
 
       // Show user-friendly error messages based on error code
       if (errorCode === 'ALREADY_MEMBER') {
-        setError('This user is already a member of this organization.');
+        showToast.error('This user is already a member of this organization.');
       } else if (errorCode === 'INVITATION_EXISTS') {
-        setError('An invitation has already been sent to this email address.');
+        showToast.error('An invitation has already been sent to this email address.');
       } else if (errorMessage) {
-        // Use the server's error message if available
-        setError(errorMessage);
+        showToast.error(errorMessage);
       } else {
-        setError('Failed to add member. Please try again.');
+        showToast.error('Failed to add member. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -160,14 +156,14 @@ function MembersTab({ organization, organizationId }) {
     if (!selectedMember) return;
 
     setIsLoading(true);
-    setError('');
 
     try {
       await updateMemberRole(organizationId, selectedMember.user._id, selectedMember.newRole);
       setShowRoleModal(false);
       setSelectedMember(null);
+      showToast.roleUpdated();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update role');
+      showToast.error(err.response?.data?.message || 'Failed to update role');
     } finally {
       setIsLoading(false);
     }
@@ -179,8 +175,9 @@ function MembersTab({ organization, organizationId }) {
     setIsLoading(true);
     try {
       await removeMember(organizationId, memberId);
+      showToast.memberRemoved();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to remove member');
+      showToast.error(err.response?.data?.message || 'Failed to remove member');
     } finally {
       setIsLoading(false);
     }
@@ -190,9 +187,10 @@ function MembersTab({ organization, organizationId }) {
     setIsLoading(true);
     try {
       await leaveOrganization(organizationId);
+      showToast.leftOrganization();
       window.location.href = '/organizations';
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to leave organization');
+      showToast.error(err.response?.data?.message || 'Failed to leave organization');
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +202,6 @@ function MembersTab({ organization, organizationId }) {
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium text-gray-900">Members</h3>
         <Button onClick={() => {
-          setError('');
           clearError?.();
           setShowInviteModal(true);
         }}>
@@ -319,19 +316,11 @@ function MembersTab({ organization, organizationId }) {
           setShowInviteModal(false);
           setInviteForm({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
           setInviteErrors({});
-          setError('');
           clearError?.();
         }}
         title="Add Team Member"
       >
         <form onSubmit={handleInvite} className="space-y-4">
-          {/* Error message inside modal */}
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
-
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"

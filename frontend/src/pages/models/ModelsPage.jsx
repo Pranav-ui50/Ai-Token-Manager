@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const MODEL_TYPES = {
   chat: { label: 'Chat', color: 'bg-blue-100 text-blue-800' },
@@ -35,7 +36,6 @@ function ModelsPage() {
   const [providers, setProviders] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [liveModels, setLiveModels] = useState([]);
   const [isLoadingLive, setIsLoadingLive] = useState(false);
   const [showLiveModels, setShowLiveModels] = useState(false);
@@ -75,7 +75,7 @@ function ModelsPage() {
       setModels(response.data);
       setPagination(prev => ({ ...prev, ...response.pagination }));
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch models');
+      showToast.error(err.response?.data?.message || 'Failed to fetch models');
     } finally {
       setIsLoading(false);
     }
@@ -84,7 +84,7 @@ function ModelsPage() {
   // Fetch live models from provider's API
   const fetchLiveModels = async () => {
     if (!selectedProvider) {
-      alert('Please select a provider first');
+      showToast.warning('Please select a provider first');
       return;
     }
 
@@ -104,9 +104,10 @@ function ModelsPage() {
       }));
 
       setLiveModels(processed);
+      showToast.success('Live models fetched successfully');
     } catch (err) {
       console.error('Failed to fetch live models:', err);
-      alert('Failed to fetch live models from provider API. Please check if the provider has API credentials configured.');
+      showToast.error('Failed to fetch live models from provider API. Please check if the provider has API credentials configured.');
       setShowLiveModels(false);
     } finally {
       setIsLoadingLive(false);
@@ -314,18 +315,6 @@ function ModelsPage() {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm">{error}</span>
             </div>
           </div>
         )}

@@ -10,23 +10,27 @@
  */
 
 import mongoose from 'mongoose';
-import { createRequire } from 'module';
+import ExcelJS from 'exceljs';
 import Feature from '../models/Feature.js';
 import Project from '../models/Project.js';
 import Organization from '../models/Organization.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
-const require = createRequire(import.meta.url);
-const ExcelJS = require('exceljs');
-
-// Try to load PDFKit, fallback if not available
+// Lazy-load PDFKit only when needed (optional dependency)
 let PDFDocument = null;
-try {
-  PDFDocument = require('pdfkit').default;
-} catch (e) {
-  logger.warn('[AnalyticsService] PDFKit not installed - PDF generation will use fallback');
-}
+const loadPDFKit = async () => {
+  if (PDFDocument === null) {
+    try {
+      const pdfkitModule = await import('pdfkit');
+      PDFDocument = pdfkitModule.default || pdfkitModule;
+    } catch (e) {
+      PDFDocument = false; // Mark as unavailable
+      logger.warn('[AnalyticsService] PDFKit not installed - PDF generation will use fallback');
+    }
+  }
+  return PDFDocument;
+};
 
 class AnalyticsService {
   /**
@@ -752,8 +756,11 @@ class AnalyticsService {
    * @returns {Buffer} PDF buffer
    */
   async _generatePdfReport(reportType, data) {
+    // Load PDFKit (optional dependency)
+    const PDFKit = await loadPDFKit();
+
     // If PDFKit is not available, return JSON fallback
-    if (!PDFDocument) {
+    if (!PDFKit) {
       logger.warn('[AnalyticsService] PDFKit not available, returning JSON fallback');
       return Buffer.from(JSON.stringify({
         reportType,
@@ -765,7 +772,7 @@ class AnalyticsService {
 
     return new Promise((resolve, reject) => {
       try {
-        const doc = new PDFDocument({
+        const doc = new PDFKit({
           size: 'A4',
           margin: 50,
           info: {

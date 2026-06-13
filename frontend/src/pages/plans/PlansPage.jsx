@@ -9,12 +9,12 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import planApi from '../../services/api/plan.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const PlansPage = () => {
   const { canManagePlans, canViewPlans } = usePermissions();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     status: '',
     tier: ''
@@ -41,7 +41,7 @@ const PlansPage = () => {
         setPagination(response.data.pagination);
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to fetch plans');
+      showToast.error(err.response?.data?.error?.message || 'Failed to fetch plans');
     } finally {
       setLoading(false);
     }
@@ -59,9 +59,10 @@ const PlansPage = () => {
 
     try {
       await planApi.delete(id);
+      showToast.planDeleted();
       fetchPlans();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete plan');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete plan');
     }
   };
 
@@ -69,9 +70,10 @@ const PlansPage = () => {
   const handleClone = async (id) => {
     try {
       await planApi.clone(id);
+      showToast.success('Plan cloned successfully');
       fetchPlans();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to clone plan');
+      showToast.error(err.response?.data?.error?.message || 'Failed to clone plan');
     }
   };
 
@@ -135,13 +137,6 @@ const PlansPage = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
-            {error}
-          </div>
-        )}
-
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-soft p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -17,7 +17,6 @@ import featureApi from './feature.api.js';
 import planApi from './plan.api.js';
 import pricingHistoryApi from './pricingHistory.api.js';
 import projectApi from './project.api.js';
-import notificationApi from './notification.api.js';
 import analyticsApi from './analytics.api.js';
 import auditApi from './audit.api.js';
 import billingApi from './billing.api.js';
@@ -43,7 +42,6 @@ export {
   planApi,
   pricingHistoryApi,
   projectApi,
-  notificationApi,
   analyticsApi,
   auditApi,
   billingApi,
@@ -68,7 +66,6 @@ export default {
   planApi,
   pricingHistoryApi,
   projectApi,
-  notificationApi,
   analyticsApi,
   auditApi,
   billingApi,

@@ -132,7 +132,6 @@ const WebhooksPage = lazy(() => import('../pages/webhooks/WebhooksPage.jsx'));
 const ReportsPage = lazy(() => import('../pages/reports/ReportsPage.jsx'));
 const ReportDetailPage = lazy(() => import('../pages/reports/ReportDetailPage.jsx'));
 const AuditLogsPage = lazy(() => import('../pages/audit/AuditLogsPage.jsx'));
-const NotificationsPage = lazy(() => import('../pages/notifications/NotificationsPage.jsx'));
 const ProfilePage = lazy(() => import('../pages/profile/ProfilePage.jsx'));
 const NotFoundPage = lazy(() => import('../pages/errors/NotFoundPage.jsx'));
 const ErrorPage = lazy(() => import('../pages/errors/ErrorPage.jsx'));
@@ -148,12 +147,26 @@ const AdminSettingsPage = lazy(() => import('../pages/admin/AdminSettingsPage.js
 const AdminSystemHealthPage = lazy(() => import('../pages/admin/AdminSystemHealthPage.jsx'));
 const AdminLandingPageContent = lazy(() => import('../pages/admin/AdminLandingPageContent.jsx'));
 const AdminPlansPage = lazy(() => import('../pages/admin/AdminPlansPage.jsx'));
+const AdminTestimonialsPage = lazy(() => import('../pages/admin/AdminTestimonialsPage.jsx'));
+const AdminPlatformStatsPage = lazy(() => import('../pages/admin/AdminPlatformStatsPage.jsx'));
+const AdminPricingPage = lazy(() => import('../pages/admin/AdminPricingPage.jsx'));
 
 // Usage page
 const UsagePage = lazy(() => import('../pages/usage/UsagePage.jsx'));
 
+// Product Manager pages
+const ModelMappingPage = lazy(() => import('../pages/model-mapping/ModelMappingPage.jsx'));
+const TokenEstimatesPage = lazy(() => import('../pages/token-estimates/TokenEstimatesPage.jsx'));
+const FeatureCostPage = lazy(() => import('../pages/feature-cost/FeatureCostPage.jsx'));
+const UsageAnalyticsPage = lazy(() => import('../pages/usage-analytics/UsageAnalyticsPage.jsx'));
+const ProfitAnalysisPage = lazy(() => import('../pages/profit-analysis/ProfitAnalysisPage.jsx'));
+
 // Docs page
 const DocsPage = lazy(() => import('../pages/docs/DocsPage.jsx'));
+
+// Legal pages
+const TermsOfServicePage = lazy(() => import('../pages/legal/TermsOfServicePage.jsx'));
+const PrivacyPolicyPage = lazy(() => import('../pages/legal/PrivacyPolicyPage.jsx'));
 
 // Payment pages
 const CheckoutPage = lazy(() => import('../pages/checkout/CheckoutPage.jsx'));
@@ -580,6 +593,70 @@ const routes = [
   },
 
   // ===========================================
+  // Product Manager Routes
+  // ===========================================
+  {
+    path: '/model-mapping',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <ModelMappingPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/token-estimates',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <TokenEstimatesPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/feature-cost',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <FeatureCostPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/usage-analytics',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <UsageAnalyticsPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/profit-analysis',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <ProfitAnalysisPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
   // Documentation Routes
   // ===========================================
   {
@@ -792,22 +869,6 @@ const routes = [
   },
 
   // ===========================================
-  // Notifications Routes
-  // ===========================================
-  {
-    path: '/notifications',
-    element: (
-      <ProtectedRoute>
-        <DashboardLayout>
-          <PageWrapper>
-            <NotificationsPage />
-          </PageWrapper>
-        </DashboardLayout>
-      </ProtectedRoute>
-    )
-  },
-
-  // ===========================================
   // Profile Routes
   // ===========================================
   {
@@ -946,6 +1007,42 @@ const routes = [
       </ProtectedRoute>
     )
   },
+  {
+    path: '/admin/testimonials',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminTestimonialsPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/admin/platform-stats',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminPlatformStatsPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: '/admin/pricing',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <AdminPricingPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
 
   // ===========================================
   // Error Routes
@@ -961,6 +1058,26 @@ const routes = [
   {
     path: '*',
     element: <NotFoundPage />
+  },
+
+  // ===========================================
+  // Legal Pages (Public)
+  // ===========================================
+  {
+    path: '/terms',
+    element: (
+      <PageWrapper>
+        <TermsOfServicePage />
+      </PageWrapper>
+    )
+  },
+  {
+    path: '/privacy',
+    element: (
+      <PageWrapper>
+        <PrivacyPolicyPage />
+      </PageWrapper>
+    )
   },
 
   // ===========================================

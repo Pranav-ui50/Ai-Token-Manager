@@ -397,6 +397,7 @@ auditLogSchema.statics.findByUser = function (userId, options = {}) {
     .sort(sort)
     .skip((page - 1) * limit)
     .limit(limit)
+    .populate('user', 'firstName lastName email')
     .populate('organization', 'name');
 };
 

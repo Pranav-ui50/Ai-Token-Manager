@@ -32,8 +32,8 @@ const defaultFeatures = [
 
 const AnalyticsSection = () => {
   const [activeChart, setActiveChart] = useState('usage');
-  const [title, setTitle] = useState('Powerful Analytics at Your Fingertips');
-  const [subtitle, setSubtitle] = useState('Visualize your AI usage, costs, and trends with interactive charts and detailed insights.');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [features, setFeatures] = useState(defaultFeatures);
 
   // Fetch dynamic content from API
@@ -42,12 +42,9 @@ const AnalyticsSection = () => {
       try {
         const response = await publicApi.getLandingSection('analytics');
         if (response.success && response.data) {
-          if (response.data.title) {
-            setTitle(response.data.title);
-          }
-          if (response.data.subtitle) {
-            setSubtitle(response.data.subtitle);
-          }
+          // Update title/subtitle - use empty string if not provided to allow hiding
+          setTitle(response.data.title ?? '');
+          setSubtitle(response.data.subtitle ?? '');
           if (response.data.features) {
             setFeatures(response.data.features);
           }
@@ -118,18 +115,32 @@ const AnalyticsSection = () => {
     )
   };
 
+  // Filter features that have both title and description
+  const validFeatures = features.filter(
+    feature => feature.title?.trim() && feature.description?.trim()
+  );
+
+  // Check if we should show the header
+  const showHeader = title?.trim() || subtitle?.trim();
+
   return (
     <section id="analytics" className="py-20 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            {title}
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            {subtitle}
-          </p>
-        </div>
+        {/* Section Header - Only show if title or subtitle exists */}
+        {showHeader && (
+          <div className="text-center mb-12">
+            {title?.trim() && (
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                {title}
+              </h2>
+            )}
+            {subtitle?.trim() && (
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Chart Tabs */}
         <div className="flex flex-wrap justify-center gap-2 mb-8">
@@ -287,27 +298,29 @@ const AnalyticsSection = () => {
           )}
         </div>
 
-        {/* Features List */}
-        <div className="grid md:grid-cols-3 gap-6 mt-8">
-          {features.map((feature, index) => {
-            const colors = colorClasses[feature.color] || colorClasses.blue;
-            const icon = featureIcons[feature.icon] || featureIcons.chart;
+        {/* Features List - Only show features with title and description */}
+        {validFeatures.length > 0 && (
+          <div className="grid md:grid-cols-3 gap-6 mt-8">
+            {validFeatures.map((feature, index) => {
+              const colors = colorClasses[feature.color] || colorClasses.blue;
+              const icon = featureIcons[feature.icon] || featureIcons.chart;
 
-            return (
-              <div key={index} className="bg-white p-6 rounded-xl border border-gray-200">
-                <div className={`w-12 h-12 ${colors.bg} rounded-lg flex items-center justify-center mb-4`}>
-                  <div className={colors.text}>
-                    {icon}
+              return (
+                <div key={index} className="bg-white p-6 rounded-xl border border-gray-200">
+                  <div className={`w-12 h-12 ${colors.bg} rounded-lg flex items-center justify-center mb-4`}>
+                    <div className={colors.text}>
+                      {icon}
+                    </div>
                   </div>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h4>
+                  <p className="text-gray-600">
+                    {feature.description}
+                  </p>
                 </div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h4>
-                <p className="text-gray-600">
-                  {feature.description}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );

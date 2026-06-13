@@ -19,10 +19,22 @@
     <meta name="twitter:title" content="API Token Manager - SaaS Pricing Calculator" />
     <meta name="twitter:description" content="Calculate, optimize, and forecast your AI operational costs" />
 
-    <!-- Fonts -->
+    <!-- Fonts - with display=swap for faster loading and fallback -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- Fallback font if Google Fonts fails to load -->
+    <style>
+      /* Use system fonts as immediate fallback while Google Fonts loads */
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      }
+      /* Fallback for code */
+      code, pre {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+      }
+    </style>
 
     <title>API Token Manager - SaaS Pricing Calculator</title>
   </head>

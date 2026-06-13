@@ -318,84 +318,6 @@ export const usePricingStore = create(
 );
 
 /**
- * Notification Store
- */
-export const useNotificationStore = create(
-  devtools(
-    (set) => ({
-      notifications: [],
-      unreadCount: 0,
-      loading: false,
-      error: null,
-
-      fetchNotifications: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await fetch('/api/notifications');
-          if (!response.ok) throw new Error('Failed to fetch notifications');
-          const data = await response.json();
-          set({
-            notifications: data,
-            unreadCount: data.filter((n) => !n.read).length,
-            loading: false
-          });
-          return data;
-        } catch (error) {
-          set({ error: error.message, loading: false });
-          throw error;
-        }
-      },
-
-      markAsRead: async (notificationId) => {
-        try {
-          const response = await fetch(`/api/notifications/${notificationId}/read`, {
-            method: 'PUT'
-          });
-          if (!response.ok) throw new Error('Failed to mark as read');
-
-          set((state) => ({
-            notifications: state.notifications.map((n) =>
-              n.id === notificationId ? { ...n, read: true } : n
-            ),
-            unreadCount: Math.max(0, state.unreadCount - 1)
-          }));
-        } catch (error) {
-          set({ error: error.message });
-          throw error;
-        }
-      },
-
-      markAllAsRead: async () => {
-        try {
-          const response = await fetch('/api/notifications/read-all', {
-            method: 'PUT'
-          });
-          if (!response.ok) throw new Error('Failed to mark all as read');
-
-          set((state) => ({
-            notifications: state.notifications.map((n) => ({ ...n, read: true })),
-            unreadCount: 0
-          }));
-        } catch (error) {
-          set({ error: error.message });
-          throw error;
-        }
-      },
-
-      addNotification: (notification) => {
-        set((state) => ({
-          notifications: [notification, ...state.notifications],
-          unreadCount: state.unreadCount + 1
-        }));
-      },
-
-      clearNotifications: () => set({ notifications: [], unreadCount: 0 })
-    }),
-    { name: 'notification-store' }
-  )
-);
-
-/**
  * Settings Store
  */
 export const useSettingsStore = create(
@@ -441,7 +363,6 @@ export const stores = {
   useOrganizationStore,
   useUsageStore,
   usePricingStore,
-  useNotificationStore,
   useSettingsStore
 };
 

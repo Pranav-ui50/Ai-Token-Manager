@@ -4,6 +4,7 @@ import reportApi from '../../services/api/report.api';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import ReportForm from '../../components/reports/ReportForm';
+import { showToast } from '../../utils/toasts.js';
 
 const REPORT_TYPES = [
   { value: 'cost_analysis', label: 'Cost Analysis', description: 'Analyze API and infrastructure costs' },
@@ -28,7 +29,6 @@ function ReportsPage() {
   const [templates, setTemplates] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -62,7 +62,7 @@ function ReportsPage() {
       const response = await reportApi.getReports(params);
       setReports(response.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load reports');
+      showToast.error(err.response?.data?.message || 'Failed to load reports');
     } finally {
       setLoading(false);
     }
@@ -100,9 +100,10 @@ function ReportsPage() {
   const handleGenerateReport = async (id) => {
     try {
       await reportApi.generateReport(id);
+      showToast.reportGenerated();
       loadReports();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to generate report');
+      showToast.error(err.response?.data?.message || 'Failed to generate report');
     }
   };
 
@@ -113,10 +114,11 @@ function ReportsPage() {
       await reportApi.deleteReport(reportToDelete._id);
       setShowDeleteModal(false);
       setReportToDelete(null);
+      showToast.reportDeleted();
       loadReports();
       loadStats();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete report');
+      showToast.error(err.response?.data?.message || 'Failed to delete report');
     }
   };
 
@@ -132,17 +134,19 @@ function ReportsPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      showToast.reportExported(format);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to export report');
+      showToast.error(err.response?.data?.message || 'Failed to export report');
     }
   };
 
   const handleDuplicateReport = async (id) => {
     try {
       await reportApi.duplicateReport(id);
+      showToast.success('Report duplicated successfully');
       loadReports();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to duplicate report');
+      showToast.error(err.response?.data?.message || 'Failed to duplicate report');
     }
   };
 
@@ -195,14 +199,6 @@ function ReportsPage() {
             <p className="text-sm text-gray-500">Templates</p>
             <p className="text-2xl font-semibold text-blue-600">{stats.templates}</p>
           </div>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-          <button onClick={() => setError(null)} className="float-right font-bold">&times;</button>
         </div>
       )}
 

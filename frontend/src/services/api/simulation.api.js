@@ -59,7 +59,8 @@ const simulationApi = {
    * @returns {Promise}
    */
   delete: async (simulationId) => {
-    await api.delete(`/simulations/${simulationId}`);
+    const response = await api.delete(`/simulations/${simulationId}`);
+    return response.data;
   },
 
   /**

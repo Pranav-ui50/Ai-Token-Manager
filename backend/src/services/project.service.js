@@ -279,11 +279,20 @@ class ProjectService {
       throw new AppError('Project not found', 404, 'NOT_FOUND');
     }
 
-    // Verify user is organization owner
-    const organization = await Organization.findById(project.organization);
+    // Verify user is organization owner or admin
+    // Populate role to check admin permissions
+    const organization = await Organization.findById(project.organization)
+      .populate('members.role', 'name');
 
-    if (!organization || !organization.isOwner(userId)) {
-      throw new AppError('Only the organization owner can archive projects', 403, 'FORBIDDEN');
+    if (!organization) {
+      throw new AppError('Organization not found', 404, 'NOT_FOUND');
+    }
+
+    const isOwner = organization.isOwner(userId);
+    const isAdmin = organization.isAdmin(userId);
+
+    if (!isOwner && !isAdmin) {
+      throw new AppError('Only the organization owner or admin can archive projects', 403, 'FORBIDDEN');
     }
 
     project.isActive = !archive;

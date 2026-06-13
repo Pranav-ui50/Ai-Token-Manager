@@ -76,12 +76,12 @@ landingPageContentSchema.statics.getDefaultContent = () => ({
     titleHighlight: 'Management Platform',
     subtitle: 'Track token usage, optimize AI costs, and scale your infrastructure efficiently. Get real-time analytics and forecasting for OpenAI, Anthropic, and 15+ AI providers.',
     stats: [
-      { label: 'Cost Reduction', value: '40%', icon: '💰', description: 'Average savings' },
-      { label: 'API Calls Tracked', value: '10M+', icon: '📊', description: 'Monthly volume' },
-      { label: 'Providers Supported', value: '15+', icon: '🔌', description: 'AI integrations' },
-      { label: 'Uptime', value: '99.9%', icon: '⚡', description: 'Reliability' }
+      { label: 'Cost Reduction', value: '40', suffix: '%', icon: '💰', description: 'Average savings' },
+      { label: 'API Calls Tracked', value: '10', suffix: 'M+', icon: '📊', description: 'Monthly volume' },
+      { label: 'Providers Supported', value: '15', suffix: '+', icon: '🔌', description: 'AI integrations' },
+      { label: 'Uptime', value: '99.9', suffix: '%', icon: '⚡', description: 'Reliability' }
     ],
-    ctaButton: 'Start Free Trial',
+    ctaButton: 'Get Started',
     secondaryCta: 'View Pricing'
   },
   howItWorks: {
@@ -297,29 +297,10 @@ landingPageContentSchema.statics.getDefaultContent = () => ({
     ]
   },
   footer: {
-    companyName: 'TokenManager',
-    tagline: 'The complete platform for managing AI token usage, costs, and subscriptions.',
     socialLinks: [
       { name: 'Twitter', url: 'https://twitter.com/tokenmanager', icon: 'twitter' },
       { name: 'LinkedIn', url: 'https://linkedin.com/company/tokenmanager', icon: 'linkedin' },
       { name: 'GitHub', url: 'https://github.com/tokenmanager', icon: 'github' }
-    ],
-    productLinks: [
-      { label: 'Features', url: '/#features' },
-      { label: 'Pricing', url: '/#pricing' },
-      { label: 'Providers', url: '/#providers' },
-      { label: 'API Documentation', url: '/docs' }
-    ],
-    companyLinks: [
-      { label: 'About Us', url: '/about' },
-      { label: 'Careers', url: '/careers' },
-      { label: 'Blog', url: '/blog' },
-      { label: 'Contact', url: '/contact' }
-    ],
-    legalLinks: [
-      { label: 'Privacy Policy', url: '/privacy' },
-      { label: 'Terms of Service', url: '/terms' },
-      { label: 'Cookie Policy', url: '/cookies' }
     ]
   }
 });

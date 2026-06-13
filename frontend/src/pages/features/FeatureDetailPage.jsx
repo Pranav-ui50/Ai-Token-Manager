@@ -7,6 +7,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
+import { useFeatureCurrency } from '../../hooks/useProjectCurrency.js';
+import { formatCurrencyWithSymbol, getCurrencySymbol } from '../../utils/currency.js';
 
 const FeatureDetailPage = () => {
   const { id } = useParams();
@@ -20,6 +22,9 @@ const FeatureDetailPage = () => {
     requests: 1000,
     users: 1
   });
+
+  // Get currency from feature's project
+  const { currency, currencySymbol } = useFeatureCurrency(feature);
 
   // Profit margin state
   const [profitParams, setProfitParams] = useState({
@@ -147,11 +152,8 @@ const FeatureDetailPage = () => {
   };
 
   // Format currency
-  const formatCurrency = (amount, currency = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency
-    }).format(amount);
+  const formatCurrency = (amount) => {
+    return formatCurrencyWithSymbol(amount, currency);
   };
 
   // Format number with commas
@@ -533,11 +535,11 @@ const FeatureDetailPage = () => {
                   <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                     <div>
                       <span className="text-xs text-gray-500">Input Price</span>
-                      <p className="text-lg font-bold text-gray-900">${(feature.model.pricing.inputPrice || 0).toFixed(4)}/1M tokens</p>
+                      <p className="text-lg font-bold text-gray-900">{currencySymbol}{(feature.model.pricing.inputPrice || 0).toFixed(4)}/1M tokens</p>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500">Output Price</span>
-                      <p className="text-lg font-bold text-gray-900">${(feature.model.pricing.outputPrice || 0).toFixed(4)}/1M tokens</p>
+                      <p className="text-lg font-bold text-gray-900">{currencySymbol}{(feature.model.pricing.outputPrice || 0).toFixed(4)}/1M tokens</p>
                     </div>
                   </div>
                 )}
@@ -830,7 +832,7 @@ const FeatureDetailPage = () => {
                   {profitParams.billingModel === 'per_request' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Selling Price per Request ($)
+                        Selling Price per Request ({currencySymbol})
                       </label>
                       <input
                         type="number"
@@ -857,7 +859,7 @@ const FeatureDetailPage = () => {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Price per Request ($)
+                          Price per Request ({currencySymbol})
                         </label>
                         <input
                           type="number"
@@ -886,7 +888,7 @@ const FeatureDetailPage = () => {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Monthly Price ($)
+                          Monthly Price ({currencySymbol})
                         </label>
                         <input
                           type="number"
@@ -1158,13 +1160,13 @@ const FeatureDetailPage = () => {
                   <div>
                     <span className="text-xs text-blue-600">Input Price</span>
                     <p className="text-lg font-bold text-blue-900">
-                      ${((feature.model.pricing.inputPrice || 0)).toFixed(4)}/1M tokens
+                      {currencySymbol}{((feature.model.pricing.inputPrice || 0)).toFixed(4)}/1M tokens
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-blue-600">Output Price</span>
                     <p className="text-lg font-bold text-blue-900">
-                      ${((feature.model.pricing.outputPrice || 0)).toFixed(4)}/1M tokens
+                      {currencySymbol}{((feature.model.pricing.outputPrice || 0)).toFixed(4)}/1M tokens
                     </p>
                   </div>
                 </div>

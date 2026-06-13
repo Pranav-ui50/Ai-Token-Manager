@@ -151,15 +151,17 @@ class AdminController {
       const { id } = req.params;
       const { status } = req.body;
 
-      if (!['active', 'trial', 'suspended', 'cancelled'].includes(status)) {
-        throw new AppError('Invalid status', 400, 'INVALID_STATUS');
+      // Valid subscription statuses from Organization schema
+      const validStatuses = ['active', 'trial', 'pending_payment', 'past_due', 'expired', 'cancelled'];
+      if (!validStatuses.includes(status)) {
+        throw new AppError(`Invalid status. Valid statuses are: ${validStatuses.join(', ')}`, 400, 'INVALID_STATUS');
       }
 
       const organization = await Organization.findByIdAndUpdate(
         id,
         {
           'subscription.status': status,
-          isActive: status !== 'suspended'
+          isActive: status !== 'expired' && status !== 'cancelled'
         },
         { new: true }
       );
@@ -189,8 +191,10 @@ class AdminController {
       const { id } = req.params;
       const { plan } = req.body;
 
-      if (!['free', 'starter', 'professional', 'enterprise'].includes(plan)) {
-        throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
+      // Valid plans in the system
+      const validPlans = ['starter', 'professional', 'business'];
+      if (!validPlans.includes(plan)) {
+        throw new AppError('Invalid plan. Valid plans are: starter, professional, business', 400, 'INVALID_PLAN');
       }
 
       const organization = await Organization.findByIdAndUpdate(
@@ -334,12 +338,117 @@ class AdminController {
   }
 
   /**
+   * Get user by ID
+   * @route GET /api/admin/users/:id
+   */
+  async getUserById(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const user = await User.findById(id)
+        .populate('organization', 'name slug')
+        .populate('role', 'name permissions');
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      res.json({
+        success: true,
+        data: { user }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update user status
+   * @route PATCH /api/admin/users/:id/status
+   */
+  async updateUserStatus(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['active', 'inactive'].includes(status)) {
+        throw new AppError('Invalid status. Use "active" or "inactive"', 400, 'INVALID_STATUS');
+      }
+
+      const user = await User.findByIdAndUpdate(
+        id,
+        { isActive: status === 'active' },
+        { new: true }
+      ).populate('organization', 'name slug').populate('role', 'name');
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      logger.info(`Admin updated user ${id} status to ${status}`);
+
+      res.json({
+        success: true,
+        message: 'User status updated',
+        data: { user }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update user role
+   * @route PATCH /api/admin/users/:id/role
+   */
+  async updateUserRole(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { roleId } = req.body;
+
+      if (!roleId) {
+        throw new AppError('Role ID is required', 400, 'ROLE_REQUIRED');
+      }
+
+      const user = await User.findByIdAndUpdate(
+        id,
+        { role: roleId },
+        { new: true }
+      ).populate('organization', 'name slug').populate('role', 'name');
+
+      if (!user) {
+        throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+      }
+
+      logger.info(`Admin updated user ${id} role to ${roleId}`);
+
+      res.json({
+        success: true,
+        message: 'User role updated',
+        data: { user }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * Create organization (admin)
    * @route POST /api/admin/organizations
+   *
+   * According to SRS:
+   * - Super Admin can create Organization
+   * - Do NOT make Super Admin pay subscription
+   * - Subscription belongs to Organization
+   * - Set subscription status as Trial until Organization Owner completes payment
    */
   async createOrganization(req, res, next) {
     try {
-      const { name, description, plan, ownerEmail, ownerFirstName, ownerLastName } = req.body;
+      const { name, description, plan, ownerEmail, ownerFirstName, ownerLastName, ownerPassword, sendInvitation } = req.body;
+
+      // Validate plan - only allow valid plans that exist in the system
+      const validPlans = ['starter', 'professional', 'business'];
+      const selectedPlan = validPlans.includes(plan) ? plan : 'starter';
 
       // Check if organization name already exists
       const existingOrg = await Organization.findOne({ name });
@@ -347,24 +456,47 @@ class AdminController {
         throw new AppError('Organization with this name already exists', 400, 'DUPLICATE_NAME');
       }
 
+      // Generate slug from name
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+      // Check if slug already exists
+      const existingSlug = await Organization.findOne({ slug });
+      if (existingSlug) {
+        throw new AppError('Organization slug already exists', 400, 'DUPLICATE_SLUG');
+      }
+
       // Find or create owner user
-      let owner = await User.findOne({ email: ownerEmail });
+      let owner = await User.findOne({ email: ownerEmail.toLowerCase() });
+      let isNewUser = false;
+      let userPassword = ownerPassword; // Store the password to return
 
       if (!owner) {
-        // Create owner user
+        // Validate password is provided for new user
+        if (!ownerPassword || ownerPassword.length < 8) {
+          throw new AppError('Password must be at least 8 characters for new users', 400, 'INVALID_PASSWORD');
+        }
+
+        // Create owner user with provided password
         owner = await User.create({
           firstName: ownerFirstName,
           lastName: ownerLastName,
-          email: ownerEmail,
-          password: 'TempPassword123!', // User should change this
+          email: ownerEmail.toLowerCase(),
+          password: ownerPassword,
           isActive: true,
           isFirstLogin: true
         });
+        isNewUser = true;
+        logger.info(`Created new user for organization owner: ${ownerEmail}`);
+      } else {
+        // Existing user - they will use their existing password
+        userPassword = null; // Don't return password for existing users
       }
 
-      // Create organization
+      // Create organization with Trial status
+      // Super Admin creates org - no payment required, set to trial
       const organization = await Organization.create({
         name,
+        slug,
         description: description || '',
         owner: owner._id,
         members: [{
@@ -372,20 +504,38 @@ class AdminController {
           role: owner.role || null
         }],
         subscription: {
-          plan: plan || 'free',
-          status: 'active'
-        }
+          plan: selectedPlan,
+          status: 'trial', // Set to trial - owner completes payment separately
+          startDate: new Date(),
+          // Trial period: 14 days for the owner to set up payment
+          trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        },
+        isActive: true
       });
 
       // Update user's organization
       await User.findByIdAndUpdate(owner._id, { organization: organization._id });
 
-      logger.info(`Admin created organization: ${name}`);
+      logger.info(`Admin created organization: ${name} with plan: ${selectedPlan}, status: trial`);
+
+      // TODO: Send invitation email to owner if sendInvitation is true
+      // This would be implemented with an email service
 
       res.status(201).json({
         success: true,
-        message: 'Organization created successfully',
-        data: { organization }
+        message: isNewUser
+          ? 'Organization created successfully. Share the credentials with the owner.'
+          : 'Organization created successfully. Existing user assigned as owner.',
+        data: {
+          organization,
+          owner: {
+            id: owner._id,
+            email: owner.email,
+            firstName: owner.firstName,
+            lastName: owner.lastName,
+            isNewUser
+          }
+        }
       });
     } catch (error) {
       next(error);

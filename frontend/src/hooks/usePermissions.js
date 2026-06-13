@@ -142,18 +142,16 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.MANAGE_REPORTS
   ],
 
-  // Product Manager - Manages feature economics
+  // Product Manager - Manages features, token estimates, and model mapping
+  // Note: Cannot create/edit/delete AI models - that's admin only
+  // Note: Cannot run simulations - that's finance/admin role
   product_manager: [
     PERMISSIONS.VIEW_PROVIDERS,
-    PERMISSIONS.VIEW_MODELS,
-    PERMISSIONS.MANAGE_FEATURES,
+    PERMISSIONS.VIEW_MODELS,  // Can only view models for mapping to features
+    PERMISSIONS.MANAGE_FEATURES,  // Create, edit, delete features
     PERMISSIONS.VIEW_FEATURES,
-    PERMISSIONS.MANAGE_PLANS,
-    PERMISSIONS.VIEW_PLANS,
     PERMISSIONS.VIEW_PROJECTS,
-    PERMISSIONS.RUN_SIMULATIONS,
-    PERMISSIONS.VIEW_SIMULATIONS,
-    PERMISSIONS.VIEW_ANALYTICS,
+    PERMISSIONS.VIEW_ANALYTICS,  // Product analytics only (feature usage, token consumption)
     PERMISSIONS.VIEW_DASHBOARD,
     PERMISSIONS.VIEW_REPORTS,
     PERMISSIONS.EXPORT_REPORTS

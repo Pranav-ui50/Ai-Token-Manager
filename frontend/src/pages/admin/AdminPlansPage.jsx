@@ -6,18 +6,19 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import api from '../../services/api/axios.js';
+import { showToast } from '../../utils/toasts.js';
 
 const AdminPlansPage = () => {
   const navigate = useNavigate();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
 
   // Form state for create/edit
   const [showModal, setShowModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -56,7 +57,6 @@ const AdminPlansPage = () => {
   });
 
   const tiers = [
-    { value: 'free', label: 'Free' },
     { value: 'starter', label: 'Starter' },
     { value: 'professional', label: 'Professional' },
     { value: 'business', label: 'Business' }
@@ -78,7 +78,7 @@ const AdminPlansPage = () => {
         setPlans(response.data.data.plans || []);
       }
     } catch (err) {
-      setError('Failed to fetch plans');
+      showToast.error('Failed to fetch plans');
       console.error(err);
     } finally {
       setLoading(false);
@@ -127,6 +127,7 @@ const AdminPlansPage = () => {
         allowDowngrade: true
       }
     });
+    setFormErrors({});
     setEditingPlan(null);
   };
 
@@ -175,6 +176,7 @@ const AdminPlansPage = () => {
         allowDowngrade: plan.settings?.allowDowngrade ?? true
       }
     });
+    setFormErrors({});
     setShowModal(true);
   };
 
@@ -210,41 +212,115 @@ const AdminPlansPage = () => {
     }));
   };
 
+  // Validate form
+  const validateForm = () => {
+    const errors = {};
+
+    // Name validation
+    if (!formData.name.trim()) {
+      errors.name = 'Plan name is required';
+    } else if (formData.name.length > 60) {
+      errors.name = 'Plan name cannot exceed 60 characters';
+    }
+
+    // Description validation
+    if (formData.description && formData.description.length > 200) {
+      errors.description = 'Description cannot exceed 200 characters';
+    }
+
+    // Price validation
+    if (formData.billing.price < 0) {
+      errors.price = 'Price cannot be negative';
+    }
+
+    // Credits validation
+    if (formData.credits.includedCredits < 0) {
+      errors.credits = 'Included credits cannot be negative';
+    }
+
+    // Max users validation
+    if (formData.limits.maxUsers && formData.limits.maxUsers < 1) {
+      errors.maxUsers = 'Max users must be at least 1';
+    }
+
+    // Max API calls validation
+    if (formData.limits.maxApiCalls && formData.limits.maxApiCalls < 1) {
+      errors.maxApiCalls = 'Max API calls must be at least 1';
+    }
+
+    // Trial days validation
+    if (formData.billing.trialDays < 0) {
+      errors.trialDays = 'Trial days cannot be negative';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Save plan (create or update)
   const handleSave = async () => {
+    if (!validateForm()) return;
+
     try {
       setLoading(true);
-      setError(null);
 
       // Auto-generate slug from name
       const slug = formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+      // Prepare data with proper nested structure
       const planData = {
-        ...formData,
+        name: formData.name,
         slug,
-        'billing.price': Number(formData.billing.price),
-        'billing.trialDays': Number(formData.billing.trialDays),
-        'credits.includedCredits': Number(formData.credits.includedCredits),
-        'limits.maxUsers': formData.limits.maxUsers ? Number(formData.limits.maxUsers) : null,
-        'limits.maxApiCalls': formData.limits.maxApiCalls ? Number(formData.limits.maxApiCalls) : null,
-        'limits.maxTokens': formData.limits.maxTokens ? Number(formData.limits.maxTokens) : null
+        description: formData.description,
+        tier: formData.tier,
+        status: formData.status,
+        isPopular: formData.isPopular,
+        billing: {
+          price: Number(formData.billing.price),
+          currency: formData.billing.currency,
+          interval: formData.billing.interval,
+          trialDays: Number(formData.billing.trialDays)
+        },
+        pricingModel: {
+          type: formData.pricingModel.type,
+          usageBased: {
+            includedTokens: Number(formData.pricingModel.usageBased.includedTokens) || 0,
+            includedRequests: Number(formData.pricingModel.usageBased.includedRequests) || 0
+          }
+        },
+        credits: {
+          includedCredits: Number(formData.credits.includedCredits) || 0,
+          creditType: formData.credits.creditType
+        },
+        limits: {
+          maxUsers: formData.limits.maxUsers ? Number(formData.limits.maxUsers) : null,
+          maxApiCalls: formData.limits.maxApiCalls ? Number(formData.limits.maxApiCalls) : null,
+          maxTokens: formData.limits.maxTokens ? Number(formData.limits.maxTokens) : null
+        },
+        settings: {
+          isPublic: formData.settings.isPublic,
+          isDefault: formData.settings.isDefault,
+          allowUpgrade: formData.settings.allowUpgrade,
+          allowDowngrade: formData.settings.allowDowngrade
+        }
       };
 
       if (editingPlan) {
         // Update existing plan
         await api.put(`/admin/plans/${editingPlan._id}`, planData);
-        setSuccess('Plan updated successfully!');
+        showToast.planUpdated();
       } else {
         // Create new plan
         await api.post('/admin/plans', planData);
-        setSuccess('Plan created successfully!');
+        showToast.planCreated();
       }
 
       setShowModal(false);
+      resetForm();
       fetchPlans();
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to save plan');
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to save plan';
+      showToast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -259,11 +335,11 @@ const AdminPlansPage = () => {
     try {
       setLoading(true);
       await api.delete(`/admin/plans/${planId}`);
-      setSuccess('Plan deleted successfully!');
+      showToast.planDeleted();
       fetchPlans();
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete plan');
+      const errorMessage = err.response?.data?.error?.message || 'Failed to delete plan';
+      showToast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -276,7 +352,7 @@ const AdminPlansPage = () => {
       await api.patch(`/admin/plans/${plan._id}/status`, { status: newStatus });
       fetchPlans();
     } catch (err) {
-      setError('Failed to update plan status');
+      showToast.error('Failed to update plan status');
     }
   };
 
@@ -288,7 +364,7 @@ const AdminPlansPage = () => {
       });
       fetchPlans();
     } catch (err) {
-      setError('Failed to update plan visibility');
+      showToast.error('Failed to update plan visibility');
     }
   };
 
@@ -353,28 +429,6 @@ const AdminPlansPage = () => {
       </div>
 
       {/* Notifications */}
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span>{success}</span>
-          <button onClick={() => setSuccess(null)} className="text-green-500 hover:text-green-700">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
       {/* Plans Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -475,48 +529,64 @@ const AdminPlansPage = () => {
       </div>
 
       {/* Create/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => setShowModal(false)}></div>
-
-            <div className="inline-block w-full max-w-2xl px-4 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white rounded-lg shadow-xl sm:my-8 sm:align-middle">
-              <div className="absolute top-0 right-0 pt-4 pr-4">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
+      {showModal && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">
                 {editingPlan ? 'Edit Plan' : 'Create New Plan'}
-              </h3>
+              </h2>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-5">
                 {/* Basic Info */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Plan Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Plan Name<span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       name="name"
                       value={formData.name}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                      placeholder="Professional"
+                      onChange={(e) => {
+                        handleChange(e);
+                        if (formErrors.name) setFormErrors(prev => ({ ...prev, name: '' }));
+                      }}
+                      maxLength={60}
+                      className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                      placeholder="e.g., Professional"
                     />
+                    <div className="flex justify-between items-center mt-1">
+                      {formErrors.name ? (
+                        <span className="text-xs text-red-500">{formErrors.name}</span>
+                      ) : (
+                        <span></span>
+                      )}
+                      <span className="text-xs text-gray-400">{formData.name.length}/60</span>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tier *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Tier<span className="text-red-500">*</span>
+                    </label>
                     <select
                       name="tier"
                       value={formData.tier}
                       onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
                     >
                       {tiers.map(t => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -526,23 +596,37 @@ const AdminPlansPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Description
+                  </label>
                   <textarea
                     name="description"
                     value={formData.description}
-                    onChange={handleChange}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                    placeholder="Ideal for growing teams..."
+                    onChange={(e) => {
+                      handleChange(e);
+                      if (formErrors.description) setFormErrors(prev => ({ ...prev, description: '' }));
+                    }}
+                    maxLength={200}
+                    rows={3}
+                    className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all resize-none overflow-y-auto ${formErrors.description ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                    placeholder="Brief description of the plan (e.g., Ideal for growing teams...)"
                   />
+                  <div className="flex justify-between items-center mt-1">
+                    {formErrors.description ? (
+                      <span className="text-xs text-red-500">{formErrors.description}</span>
+                    ) : (
+                      <span></span>
+                    )}
+                    <span className="text-xs text-gray-400">{formData.description.length}/200</span>
+                  </div>
                 </div>
 
                 {/* Pricing */}
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Pricing</h4>
-                  <div className="grid grid-cols-3 gap-4">
+                <div className="border-t border-gray-100 pt-5">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Pricing</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Price</label>
                       <input
                         type="number"
                         name="billing.price"
@@ -550,16 +634,19 @@ const AdminPlansPage = () => {
                         onChange={handleChange}
                         min="0"
                         step="0.01"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.price ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                       />
+                      {formErrors.price && (
+                        <span className="text-xs text-red-500 mt-1">{formErrors.price}</span>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Currency</label>
                       <select
                         name="billing.currency"
                         value={formData.billing.currency}
                         onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
                       >
                         <option value="USD">USD ($)</option>
                         <option value="INR">INR (₹)</option>
@@ -568,12 +655,12 @@ const AdminPlansPage = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Interval</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Billing Interval</label>
                       <select
                         name="billing.interval"
                         value={formData.billing.interval}
                         onChange={handleChange}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
                       >
                         <option value="month">Monthly</option>
                         <option value="year">Yearly</option>
@@ -581,25 +668,42 @@ const AdminPlansPage = () => {
                       </select>
                     </div>
                   </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Trial Days</label>
+                    <input
+                      type="number"
+                      name="billing.trialDays"
+                      value={formData.billing.trialDays}
+                      onChange={handleChange}
+                      min="0"
+                      className={`w-full sm:w-1/3 px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.trialDays ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                    />
+                    {formErrors.trialDays && (
+                      <span className="text-xs text-red-500 mt-1 block">{formErrors.trialDays}</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Credits & Limits */}
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Credits & Limits</h4>
-                  <div className="grid grid-cols-3 gap-4">
+                <div className="border-t border-gray-100 pt-5">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Credits & Limits</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Included Credits</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Included Credits</label>
                       <input
                         type="number"
                         name="credits.includedCredits"
                         value={formData.credits.includedCredits}
                         onChange={handleChange}
                         min="0"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.credits ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                       />
+                      {formErrors.credits && (
+                        <span className="text-xs text-red-500 mt-1">{formErrors.credits}</span>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Max Users</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Users</label>
                       <input
                         type="number"
                         name="limits.maxUsers"
@@ -607,11 +711,14 @@ const AdminPlansPage = () => {
                         onChange={handleChange}
                         min="1"
                         placeholder="Unlimited"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxUsers ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                       />
+                      {formErrors.maxUsers && (
+                        <span className="text-xs text-red-500 mt-1">{formErrors.maxUsers}</span>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Max API Calls</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Max API Calls</label>
                       <input
                         type="number"
                         name="limits.maxApiCalls"
@@ -619,57 +726,80 @@ const AdminPlansPage = () => {
                         onChange={handleChange}
                         min="1"
                         placeholder="Unlimited"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxApiCalls ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                       />
+                      {formErrors.maxApiCalls && (
+                        <span className="text-xs text-red-500 mt-1">{formErrors.maxApiCalls}</span>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Settings */}
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Settings</h4>
+                <div className="border-t border-gray-100 pt-5">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Settings</h4>
                   <div className="space-y-3">
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         name="settings.isPublic"
                         checked={formData.settings.isPublic}
                         onChange={handleChange}
-                        className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                        className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                       />
                       <span className="text-sm text-gray-700">Show on landing page</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         name="isPopular"
                         checked={formData.isPopular}
                         onChange={handleChange}
-                        className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                        className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                       />
                       <span className="text-sm text-gray-700">Mark as "Most Popular"</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         name="settings.isDefault"
                         checked={formData.settings.isDefault}
                         onChange={handleChange}
-                        className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                        className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
                       />
                       <span className="text-sm text-gray-700">Default plan for new users</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="settings.allowUpgrade"
+                        checked={formData.settings.allowUpgrade}
+                        onChange={handleChange}
+                        className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-gray-700">Allow upgrade</span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="settings.allowDowngrade"
+                        checked={formData.settings.allowDowngrade}
+                        onChange={handleChange}
+                        className="w-4 h-4 rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-gray-700">Allow downgrade</span>
                     </label>
                   </div>
                 </div>
 
                 {/* Status */}
-                <div className="border-t pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <div className="border-t border-gray-100 pt-5">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                   <select
                     name="status"
                     value={formData.status}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                    className="w-full sm:w-1/2 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
                   >
                     {statuses.map(s => (
                       <option key={s.value} value={s.value}>{s.label}</option>
@@ -677,27 +807,30 @@ const AdminPlansPage = () => {
                   </select>
                 </div>
               </div>
+            </div>
 
-              {/* Modal Actions */}
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={!formData.name}
-                  className="px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingPlan ? 'Update Plan' : 'Create Plan'}
-                </button>
-              </div>
+            {/* Modal Actions */}
+            <div className="sticky bottom-0 bg-white px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  resetForm();
+                }}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="flex-1 px-4 py-2.5 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {loading ? 'Saving...' : (editingPlan ? 'Update Plan' : 'Create Plan')}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 };

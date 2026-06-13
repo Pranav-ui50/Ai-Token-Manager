@@ -11,6 +11,7 @@ import Modal from '../../components/common/Modal.jsx';
 import simulationApi from '../../services/api/simulation.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
 import ForecastCharts from '../../components/simulations/ForecastCharts.jsx';
+import { showToast } from '../../utils/toasts.js';
 
 const SIMULATION_TYPES = [
   { value: 'growth', label: 'User Growth Scenario', description: 'Model user growth and token usage projections' },
@@ -26,8 +27,6 @@ function SimulationsPage() {
   const [simulations, setSimulations] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   // Get organization ID from user
   const orgId = user?.organization?._id || user?.organization;
@@ -113,7 +112,6 @@ function SimulationsPage() {
 
   const handleCreateSimulation = async (e) => {
     e.preventDefault();
-    setError('');
 
     try {
       const simulation = await simulationApi.create({
@@ -123,24 +121,23 @@ function SimulationsPage() {
       setSimulations(prev => [simulation, ...prev]);
       setShowCreateModal(false);
       resetForm();
-      setSuccess('Simulation created successfully');
+      showToast.success('Simulation created successfully');
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create simulation');
+      showToast.error(err.response?.data?.error?.message || 'Failed to create simulation');
     }
   };
 
   const handleRunSimulation = async (simulationId) => {
     setRunningId(simulationId);
-    setError('');
 
     try {
       const result = await simulationApi.run(simulationId);
       setSimulations(prev => prev.map(s => s._id === simulationId ? result : s));
       setSelectedSimulation(result);
       setShowResultsModal(true);
-      setSuccess('Simulation completed successfully');
+      showToast.success('Simulation completed successfully');
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to run simulation');
+      showToast.error(err.response?.data?.error?.message || 'Failed to run simulation');
     } finally {
       setRunningId(null);
     }
@@ -149,12 +146,30 @@ function SimulationsPage() {
   const handleDeleteSimulation = async (simulation) => {
     if (!confirm(`Are you sure you want to delete "${simulation.name}"?`)) return;
 
+    const simulationId = simulation._id || simulation.id;
+    if (!simulationId) {
+      showToast.error('Invalid simulation ID');
+      return;
+    }
+
+    console.log('[SimulationsPage] Deleting simulation:', simulationId);
+
     try {
-      await simulationApi.delete(simulation._id);
-      setSimulations(prev => prev.filter(s => s._id !== simulation._id));
-      setSuccess('Simulation deleted successfully');
+      const response = await simulationApi.delete(simulationId);
+      console.log('[SimulationsPage] Delete response:', response);
+
+      // Update state to remove the deleted simulation
+      setSimulations(prev => prev.filter(s => (s._id || s.id) !== simulationId));
+
+      console.log('[SimulationsPage] State updated, showing success toast');
+      showToast.success('Simulation deleted successfully');
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete simulation');
+      console.error('[SimulationsPage] Delete simulation error:', err);
+      console.error('[SimulationsPage] Error response:', err?.response);
+      console.error('[SimulationsPage] Error data:', err?.response?.data);
+
+      const errorMessage = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to delete simulation';
+      showToast.error(errorMessage);
     }
   };
 
@@ -162,9 +177,10 @@ function SimulationsPage() {
     try {
       const duplicate = await simulationApi.duplicate(simulation._id);
       setSimulations(prev => [duplicate, ...prev]);
-      setSuccess('Simulation duplicated successfully');
+      showToast.success('Simulation duplicated successfully');
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to duplicate simulation');
+      console.error('Duplicate simulation error:', err);
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to duplicate simulation');
     }
   };
 
@@ -338,29 +354,6 @@ function SimulationsPage() {
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
       )}
 

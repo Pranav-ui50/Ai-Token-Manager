@@ -130,11 +130,11 @@ router.put(
 /**
  * @route   DELETE /api/features/:id
  * @desc    Delete feature
- * @access  Private (super_admin, org_owner)
+ * @access  Private (super_admin, org_owner, product_manager)
  */
 router.delete(
   '/:id',
-  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER),
+  restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER),
   featureController.deleteFeature
 );
 

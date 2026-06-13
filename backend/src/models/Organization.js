@@ -361,6 +361,33 @@ organizationSchema.methods.isOwner = function (userId) {
   return this.owner.toString() === userId.toString();
 };
 
+// Method to check if user is admin (has admin role or is owner)
+organizationSchema.methods.isAdmin = function (userId) {
+  // Owner is always admin
+  if (this.isOwner(userId)) {
+    return true;
+  }
+
+  // Check if user has admin role
+  const member = this.members.find(m => {
+    const memberId = m.user?._id ? m.user._id.toString() : m.user?.toString();
+    return memberId === userId.toString();
+  });
+
+  if (!member) {
+    return false;
+  }
+
+  // Check if role is admin-level (handle both populated and unpopulated role)
+  const roleName = member.role?.name?.toLowerCase() ||
+                   (typeof member.role === 'object' ? member.role.name?.toLowerCase() : null);
+
+  // Admin roles include: super_admin, org_owner, finance_admin
+  // These roles have elevated permissions to manage projects
+  const adminRoles = ['super_admin', 'org_owner', 'finance_admin'];
+  return adminRoles.includes(roleName);
+};
+
 // Method to get member role
 organizationSchema.methods.getMemberRole = function (userId) {
   const member = this.members.find(m => m.user.toString() === userId.toString());

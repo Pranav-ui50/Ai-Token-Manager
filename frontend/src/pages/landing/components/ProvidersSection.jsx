@@ -11,10 +11,26 @@ const ProvidersSection = () => {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
 
   useEffect(() => {
     fetchProviders();
+    fetchSectionContent();
   }, []);
+
+  const fetchSectionContent = async () => {
+    try {
+      const response = await publicApi.getLandingSection('providers');
+      if (response.success && response.data) {
+        // Update title/subtitle - use empty string if not provided to allow hiding
+        setTitle(response.data.title ?? '');
+        setSubtitle(response.data.subtitle ?? '');
+      }
+    } catch (err) {
+      console.log('Using default providers content:', err);
+    }
+  };
 
   const fetchProviders = async () => {
     try {
@@ -31,23 +47,15 @@ const ProvidersSection = () => {
     }
   };
 
-  // Fallback providers if API fails or returns empty
-  const fallbackProviders = [
-    { id: 'openai', name: 'OpenAI', displayName: 'OpenAI', modelCount: 20, capabilities: { supportsVision: true, supportsFunctionCalling: true } },
-    { id: 'anthropic', name: 'Anthropic', displayName: 'Anthropic', modelCount: 5, capabilities: { supportsVision: true, supportsFunctionCalling: true } },
-    { id: 'google', name: 'Google', displayName: 'Google AI', modelCount: 8, capabilities: { supportsVision: true, supportsFunctionCalling: true } },
-    { id: 'meta', name: 'Meta', displayName: 'Meta AI', modelCount: 6, capabilities: { supportsVision: false, supportsFunctionCalling: false } },
-    { id: 'mistral', name: 'Mistral', displayName: 'Mistral AI', modelCount: 7, capabilities: { supportsVision: false, supportsFunctionCalling: true } },
-    { id: 'cohere', name: 'Cohere', displayName: 'Cohere', modelCount: 4, capabilities: { supportsVision: false, supportsFunctionCalling: true } },
-    { id: 'stability', name: 'Stability', displayName: 'Stability AI', modelCount: 3, capabilities: { supportsVision: true, supportsFunctionCalling: false } },
-    { id: 'perplexity', name: 'Perplexity', displayName: 'Perplexity', modelCount: 2, capabilities: { supportsVision: false, supportsFunctionCalling: true } },
-    { id: 'huggingface', name: 'HuggingFace', displayName: 'Hugging Face', modelCount: 10, capabilities: { supportsVision: true, supportsFunctionCalling: false } },
-    { id: 'replicate', name: 'Replicate', displayName: 'Replicate', modelCount: 15, capabilities: { supportsVision: true, supportsFunctionCalling: true } },
-    { id: 'alephalpha', name: 'AlephAlpha', displayName: 'Aleph Alpha', modelCount: 3, capabilities: { supportsVision: true, supportsFunctionCalling: true } },
-    { id: 'midjourney', name: 'Midjourney', displayName: 'Midjourney', modelCount: 2, capabilities: { supportsVision: true, supportsFunctionCalling: false } }
-  ];
+  // Calculate dynamic stats from providers
+  const stats = {
+    providers: providers.filter(p => p.isActive !== false).length,
+    models: providers.reduce((sum, p) => sum + (p.modelCount || 0), 0),
+    uptime: '99.9%'
+  };
 
-  const displayProviders = providers.length > 0 ? providers : fallbackProviders;
+  // Filter active providers
+  const activeProviders = providers.filter(p => p.isActive !== false);
 
   // Get single initial for provider
   const getInitial = (provider) => {
@@ -58,52 +66,66 @@ const ProvidersSection = () => {
   // Get color for provider card (multiple colors)
   const getProviderColor = (provider, index) => {
     const colors = [
-      { bg: 'bg-red-500', gradient: 'from-red-500 to-red-600', text: 'text-white' },           // Red
-      { bg: 'bg-orange-500', gradient: 'from-orange-500 to-orange-600', text: 'text-white' }, // Orange
-      { bg: 'bg-amber-500', gradient: 'from-amber-500 to-amber-600', text: 'text-white' },    // Yellow/Amber
-      { bg: 'bg-green-500', gradient: 'from-green-500 to-green-600', text: 'text-white' },    // Green
-      { bg: 'bg-emerald-500', gradient: 'from-emerald-500 to-emerald-600', text: 'text-white' }, // Emerald
-      { bg: 'bg-teal-500', gradient: 'from-teal-500 to-teal-600', text: 'text-white' },       // Teal
-      { bg: 'bg-cyan-500', gradient: 'from-cyan-500 to-cyan-600', text: 'text-white' },       // Cyan
-      { bg: 'bg-sky-500', gradient: 'from-sky-500 to-sky-600', text: 'text-white' },          // Light Blue
-      { bg: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600', text: 'text-white' },       // Blue
-      { bg: 'bg-indigo-500', gradient: 'from-indigo-500 to-indigo-600', text: 'text-white' }, // Indigo
-      { bg: 'bg-violet-500', gradient: 'from-violet-500 to-violet-600', text: 'text-white' }, // Violet
-      { bg: 'bg-purple-500', gradient: 'from-purple-500 to-purple-600', text: 'text-white' }, // Purple
-      { bg: 'bg-fuchsia-500', gradient: 'from-fuchsia-500 to-fuchsia-600', text: 'text-white' }, // Fuchsia
-      { bg: 'bg-pink-500', gradient: 'from-pink-500 to-pink-600', text: 'text-white' },       // Pink
-      { bg: 'bg-rose-500', gradient: 'from-rose-500 to-rose-600', text: 'text-white' },      // Rose
+      { bg: 'bg-red-500', gradient: 'from-red-500 to-red-600', text: 'text-white' },
+      { bg: 'bg-orange-500', gradient: 'from-orange-500 to-orange-600', text: 'text-white' },
+      { bg: 'bg-amber-500', gradient: 'from-amber-500 to-amber-600', text: 'text-white' },
+      { bg: 'bg-green-500', gradient: 'from-green-500 to-green-600', text: 'text-white' },
+      { bg: 'bg-emerald-500', gradient: 'from-emerald-500 to-emerald-600', text: 'text-white' },
+      { bg: 'bg-teal-500', gradient: 'from-teal-500 to-teal-600', text: 'text-white' },
+      { bg: 'bg-cyan-500', gradient: 'from-cyan-500 to-cyan-600', text: 'text-white' },
+      { bg: 'bg-sky-500', gradient: 'from-sky-500 to-sky-600', text: 'text-white' },
+      { bg: 'bg-blue-500', gradient: 'from-blue-500 to-blue-600', text: 'text-white' },
+      { bg: 'bg-indigo-500', gradient: 'from-indigo-500 to-indigo-600', text: 'text-white' },
+      { bg: 'bg-violet-500', gradient: 'from-violet-500 to-violet-600', text: 'text-white' },
+      { bg: 'bg-purple-500', gradient: 'from-purple-500 to-purple-600', text: 'text-white' },
+      { bg: 'bg-fuchsia-500', gradient: 'from-fuchsia-500 to-fuchsia-600', text: 'text-white' },
+      { bg: 'bg-pink-500', gradient: 'from-pink-500 to-pink-600', text: 'text-white' },
+      { bg: 'bg-rose-500', gradient: 'from-rose-500 to-rose-600', text: 'text-white' },
     ];
     // Use provider id or index to pick a color
     const hash = provider.id ? provider.id.charCodeAt(0) % colors.length : index % colors.length;
     return colors[hash];
   };
 
+  // Check if we should show the header
+  const showHeader = title?.trim() || subtitle?.trim();
+
+  // If no providers and not loading, don't render the section
+  if (activeProviders.length === 0 && !loading && !error) {
+    return null;
+  }
+
   return (
     <section id="providers" className="py-20 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            Support for All Major AI Providers
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Track and manage AI models from leading providers in one unified platform.
-          </p>
-        </div>
+        {/* Section Header - Only show if title or subtitle exists */}
+        {showHeader && (
+          <div className="text-center mb-12">
+            {title?.trim() && (
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                {title}
+              </h2>
+            )}
+            {subtitle?.trim() && (
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
 
-        {/* Stats */}
+        {/* Dynamic Stats */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100">
-            <div className="text-4xl font-bold text-[#DC2626] mb-2">15+</div>
+            <div className="text-4xl font-bold text-[#DC2626] mb-2">{stats.providers}+</div>
             <div className="text-gray-600">AI Providers</div>
           </div>
           <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100">
-            <div className="text-4xl font-bold text-[#DC2626] mb-2">100+</div>
+            <div className="text-4xl font-bold text-[#DC2626] mb-2">{stats.models}+</div>
             <div className="text-gray-600">AI Models</div>
           </div>
           <div className="bg-white rounded-xl p-6 text-center shadow-sm border border-gray-100">
-            <div className="text-4xl font-bold text-[#DC2626] mb-2">99.9%</div>
+            <div className="text-4xl font-bold text-[#DC2626] mb-2">{stats.uptime}</div>
             <div className="text-gray-600">Uptime SLA</div>
           </div>
         </div>
@@ -123,19 +145,40 @@ const ProvidersSection = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-12">
-            {displayProviders.map((provider, index) => {
+            {activeProviders.map((provider, index) => {
               const color = getProviderColor(provider, index);
               return (
                 <div
-                  key={provider.id || index}
+                  key={provider._id || provider.id || index}
                   className="bg-white rounded-xl p-5 border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all group cursor-pointer"
                 >
                   {/* Provider Logo Container */}
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
-                    <span className="text-white text-2xl font-bold">
-                      {getInitial(provider)}
-                    </span>
-                  </div>
+                  {provider.logo ? (
+                    <div className="w-14 h-14 rounded-xl overflow-hidden mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                      <img
+                        src={provider.logo}
+                        alt={provider.displayName || provider.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div
+                        className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color.gradient} items-center justify-center hidden`}
+                      >
+                        <span className="text-white text-2xl font-bold">
+                          {getInitial(provider)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${color.gradient} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm`}>
+                      <span className="text-white text-2xl font-bold">
+                        {getInitial(provider)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Provider Info */}
                   <h3 className="font-semibold text-gray-900 mb-1 text-sm">
@@ -147,12 +190,12 @@ const ProvidersSection = () => {
 
                   {/* Capability Badges */}
                   <div className="flex flex-wrap gap-1">
-                    {provider.capabilities?.supportsVision && (
+                    {provider.settings?.supportsVision && (
                       <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-medium rounded">
                         Vision
                       </span>
                     )}
-                    {provider.capabilities?.supportsFunctionCalling && (
+                    {provider.settings?.supportsFunctionCalling && (
                       <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-medium rounded">
                         Functions
                       </span>
@@ -220,18 +263,6 @@ const ProvidersSection = () => {
           </div>
         </div>
 
-        {/* CTA */}
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">
-            Don't see your provider? We're constantly adding new integrations.
-          </p>
-          <button
-            onClick={() => window.location.href = '/contact'}
-            className="px-6 py-2 text-[#DC2626] font-medium hover:underline"
-          >
-            Request a Provider →
-          </button>
-        </div>
       </div>
     </section>
   );

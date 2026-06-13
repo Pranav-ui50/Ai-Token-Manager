@@ -11,6 +11,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import webhookApi from '../../services/api/webhook.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
+import { showToast } from '../../utils/toasts.js';
 
 const WEBHOOK_EVENTS = [
   { value: 'provider.created', label: 'Provider Created', category: 'Providers' },
@@ -43,8 +44,6 @@ function WebhooksPage() {
   const { canManageWebhooks } = usePermissions();
   const [webhooks, setWebhooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
@@ -86,7 +85,7 @@ function WebhooksPage() {
       setWebhooks(response.data || []);
     } catch (err) {
       console.error('Failed to fetch webhooks:', err);
-      setError(err.response?.data?.error?.message || 'Failed to load webhooks');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load webhooks');
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +93,6 @@ function WebhooksPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    setError('');
 
     try {
       const response = await webhookApi.create({
@@ -105,15 +103,14 @@ function WebhooksPage() {
       setNewSecret(response.data.secret);
       setShowCreateModal(false);
       resetForm();
-      setSuccess('Webhook created successfully. Save the secret now - it won\'t be shown again!');
+      showToast.webhookCreated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create webhook');
+      showToast.error(err.response?.data?.error?.message || 'Failed to create webhook');
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    setError('');
 
     try {
       const response = await webhookApi.update(selectedWebhook._id, formData);
@@ -121,9 +118,9 @@ function WebhooksPage() {
       setShowEditModal(false);
       setSelectedWebhook(null);
       resetForm();
-      setSuccess('Webhook updated successfully');
+      showToast.webhookUpdated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to update webhook');
+      showToast.error(err.response?.data?.error?.message || 'Failed to update webhook');
     }
   };
 
@@ -133,9 +130,9 @@ function WebhooksPage() {
     try {
       await webhookApi.delete(webhook._id);
       setWebhooks(prev => prev.filter(w => w._id !== webhook._id));
-      setSuccess('Webhook deleted successfully');
+      showToast.webhookDeleted();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to delete webhook');
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete webhook');
     }
   };
 
@@ -147,6 +144,7 @@ function WebhooksPage() {
     try {
       const response = await webhookApi.test(webhook._id);
       setTestResult(response.data);
+      showToast.webhookTested();
     } catch (err) {
       setTestResult({
         success: false,
@@ -161,9 +159,9 @@ function WebhooksPage() {
     try {
       const response = await webhookApi.toggleStatus(webhook._id, newStatus);
       setWebhooks(prev => prev.map(w => w._id === webhook._id ? response.data : w));
-      setSuccess(`Webhook ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+      showToast.webhookToggled(newStatus);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to toggle status');
+      showToast.error(err.response?.data?.error?.message || 'Failed to toggle status');
     }
   };
 
@@ -173,9 +171,9 @@ function WebhooksPage() {
     try {
       const response = await webhookApi.regenerateSecret(webhook._id);
       setNewSecret(response.data.secret);
-      setSuccess('Secret regenerated successfully. Save it now - it won\'t be shown again!');
+      showToast.webhookSecretRegenerated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to regenerate secret');
+      showToast.error(err.response?.data?.error?.message || 'Failed to regenerate secret');
     }
   };
 
@@ -188,7 +186,7 @@ function WebhooksPage() {
       const response = await webhookApi.getDeliveryHistory(webhook._id);
       setDeliveryHistory(response.data || []);
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to load delivery history');
+      showToast.error(err.response?.data?.error?.message || 'Failed to load delivery history');
     }
   };
 
@@ -262,7 +260,7 @@ function WebhooksPage() {
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    setSuccess('Copied to clipboard!');
+    showToast.copied('Webhook secret');
   };
 
   const formatDate = (date) => {
@@ -325,29 +323,6 @@ function WebhooksPage() {
           </button>
         )}
       </div>
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <span>{success}</span>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* New Secret Display */}
       {newSecret && (

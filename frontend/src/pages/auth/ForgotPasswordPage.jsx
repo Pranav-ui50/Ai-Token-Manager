@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { showToast } from '../../utils/toasts.js';
 
 const ForgotPasswordPage = () => {
   const { forgotPassword, isLoading, error, clearError } = useAuth();
@@ -35,6 +36,10 @@ const ForgotPasswordPage = () => {
       setEmailError('Email is required');
       return false;
     }
+    if (email.length > 60) {
+      setEmailError('Email cannot exceed 60 characters');
+      return false;
+    }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       setEmailError('Please enter a valid Email ID');
       return false;
@@ -53,11 +58,14 @@ const ForgotPasswordPage = () => {
     const result = await forgotPassword(email);
 
     if (result.success) {
+      showToast.passwordResetSent();
       setSubmitted(true);
       // In development, show the reset link
       if (result.resetLink) {
         setResetLink(result.resetLink);
       }
+    } else {
+      showToast.error(result.error?.message || 'Failed to send reset link. Please try again.');
     }
   };
 
@@ -273,6 +281,7 @@ const ForgotPasswordPage = () => {
                   value={email}
                   onChange={handleChange}
                   placeholder="Enter your email"
+                  maxLength={60}
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     emailError ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}

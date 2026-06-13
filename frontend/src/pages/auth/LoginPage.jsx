@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { showToast } from '../../utils/toasts.js';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -19,9 +20,7 @@ const LoginPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
 
   // Redirect to dashboard when authenticated after login
@@ -51,11 +50,6 @@ const LoginPage = () => {
         [name]: ''
       }));
     }
-
-    // Clear submit error when user starts typing
-    if (submitError) {
-      setSubmitError(null);
-    }
   };
 
   // Validate form
@@ -64,6 +58,8 @@ const LoginPage = () => {
 
     if (!formData.email) {
       errors.email = 'Email is required';
+    } else if (formData.email.length > 60) {
+      errors.email = 'Email cannot exceed 60 characters';
     } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
       errors.email = 'Please enter a valid Email ID';
     }
@@ -72,6 +68,8 @@ const LoginPage = () => {
       errors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length > 100) {
+      errors.password = 'Password cannot exceed 100 characters';
     }
 
     setFormErrors(errors);
@@ -81,10 +79,6 @@ const LoginPage = () => {
   // Handle form submit
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Clear previous messages
-    setSubmitError(null);
-    setSuccessMessage(null);
 
     // Validate form
     if (!validateForm()) {
@@ -108,29 +102,24 @@ const LoginPage = () => {
 
       if (result && result.success) {
         console.log('[Login] Login successful, navigating to dashboard');
-        setSuccessMessage('Login successful! Redirecting...');
+        showToast.loginSuccess();
         setLoginSuccess(true);
       } else {
         // Handle login failure
         const errorMessage = result?.error || 'Login failed. Please check your credentials and try again.';
         console.log('[Login] Login failed with error:', errorMessage);
-        setSubmitError(errorMessage);
+        showToast.loginError(errorMessage);
       }
     } catch (err) {
       // This should not happen as login() catches errors internally
       console.error('[Login] ========== UNEXPECTED ERROR ==========');
       console.error('[Login] Error:', err);
       console.error('[Login] Error message:', err?.message);
-      setSubmitError('An unexpected error occurred. Please try again.');
+      showToast.error('An unexpected error occurred. Please try again.');
     } finally {
       console.log('[Login] Setting isSubmitting to false');
       setIsSubmitting(false);
     }
-  };
-
-  // Dismiss error
-  const dismissError = () => {
-    setSubmitError(null);
   };
 
   const isButtonDisabled = isSubmitting || authLoading;
@@ -194,62 +183,32 @@ const LoginPage = () => {
       </div>
 
       {/* Right Side - Login Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-md">
-          {/* Mobile Logo */}
-          <div className="lg:hidden flex items-center justify-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-[#DC2626] rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-            </div>
-            <span className="text-xl font-bold text-gray-900">API Token Manager</span>
-          </div>
-
-          {/* Header */}
-          <div className="text-center lg:text-left mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back</h2>
-            <p className="text-gray-500">Sign in to your account to continue</p>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Success Message */}
-            {successMessage && (
-              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center gap-2">
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          {/* Form Container with Border for Tablet/Mobile */}
+          <div className="bg-white rounded-2xl border-2 border-[#DC2626] shadow-lg shadow-[#DC2626]/10 lg:bg-transparent lg:border-0 lg:shadow-none p-6 sm:p-8 lg:p-0">
+            {/* Mobile Logo */}
+            <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
+              <div className="w-10 h-10 bg-[#DC2626] rounded-xl flex items-center justify-center shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                 </svg>
-                <span className="text-sm">{successMessage}</span>
               </div>
-            )}
+              <span className="text-xl font-bold text-gray-900">API Token Manager</span>
+            </div>
 
-            {/* Error Message */}
-            {submitError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 flex-1">
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="text-sm">{submitError}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={dismissError}
-                  className="text-red-500 hover:text-red-700 transition-colors flex-shrink-0 p-1"
-                  aria-label="Dismiss error"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
+            {/* Header */}
+            <div className="text-center lg:text-left mb-6 lg:mb-8">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">Welcome back</h2>
+              <p className="text-sm sm:text-base text-gray-500">Sign in to your account to continue</p>
+            </div>
 
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-5">
             {/* Email Input */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email ID
+                Email id<span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -263,8 +222,8 @@ const LoginPage = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="Enter your email"
-                  maxLength={100}
+                  placeholder="admin@gmail.com"
+                  maxLength={60}
                   className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -285,7 +244,7 @@ const LoginPage = () => {
             {/* Password Input */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
+                Password<span className="text-red-500">*</span>
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -300,7 +259,7 @@ const LoginPage = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    placeholder="Enter your password"
+                    placeholder="Admin@123"
                     maxLength={100}
                     className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
@@ -402,6 +361,7 @@ const LoginPage = () => {
               </Link>
             </p>
           </form>
+          </div>
         </div>
       </div>
     </div>

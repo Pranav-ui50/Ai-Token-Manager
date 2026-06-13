@@ -14,11 +14,14 @@ import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
+import { useProjectCurrency } from '../../hooks/useProjectCurrency.js';
+import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
 
 function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentOrganization } = useOrganization();
+  const { currency, currencySymbol } = useProjectCurrency();
   const [project, setProject] = useState(null);
   const [stats, setStats] = useState(null);
   const [features, setFeatures] = useState([]);
@@ -216,11 +219,8 @@ function ProjectDetailPage() {
     }
   };
 
-  const formatCurrency = (amount, currency = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency
-    }).format(amount);
+  const formatCurrency = (amount) => {
+    return formatCurrencyWithSymbol(amount, currency);
   };
 
   const formatDate = (date) => {
@@ -1120,7 +1120,7 @@ function ProjectDetailPage() {
                     </option>
                     {filteredModels.map(model => (
                       <option key={model._id || model.id} value={model._id || model.id}>
-                        {model.displayName || model.name} {model.pricing?.inputPrice ? `($${model.pricing.inputPrice}/$${model.pricing.outputPrice || 0}/1M)` : ''}
+                        {model.displayName || model.name} {model.pricing?.inputPrice ? `(${currencySymbol}${model.pricing.inputPrice}/${currencySymbol}${model.pricing.outputPrice || 0}/1M)` : ''}
                       </option>
                     ))}
                   </select>
@@ -1161,11 +1161,11 @@ function ProjectDetailPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-gray-50 rounded p-2">
                       <span className="text-xs text-gray-500">Input</span>
-                      <p className="text-sm font-semibold">${(filteredModels.find(m => m._id === featureForm.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M</p>
+                      <p className="text-sm font-semibold">{currencySymbol}{(filteredModels.find(m => m._id === featureForm.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M</p>
                     </div>
                     <div className="bg-gray-50 rounded p-2">
                       <span className="text-xs text-gray-500">Output</span>
-                      <p className="text-sm font-semibold">${(filteredModels.find(m => m._id === featureForm.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M</p>
+                      <p className="text-sm font-semibold">{currencySymbol}{(filteredModels.find(m => m._id === featureForm.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M</p>
                     </div>
                   </div>
                 </div>
@@ -1230,10 +1230,11 @@ function ProjectDetailPage() {
                   <p className="text-xs text-gray-500 mb-2">Estimated Cost per 1000 Requests:</p>
                   <div className="bg-red-50 rounded p-2">
                     <p className="text-lg font-bold text-[#DC2626]">
-                      ${(
+                      {formatCurrencyWithSymbol(
                         ((filteredModels.find(m => m._id === featureForm.model)?.pricing?.inputPrice || 0) / 1000000) * featureForm.inputTokensPerRequest * 1000 +
-                        ((filteredModels.find(m => m._id === featureForm.model)?.pricing?.outputPrice || 0) / 1000000) * featureForm.outputTokensPerRequest * 1000
-                      ).toFixed(4)}
+                        ((filteredModels.find(m => m._id === featureForm.model)?.pricing?.outputPrice || 0) / 1000000) * featureForm.outputTokensPerRequest * 1000,
+                        currency
+                      )}
                     </p>
                     <p className="text-xs text-gray-500">
                       {(Number(featureForm.inputTokensPerRequest) + Number(featureForm.outputTokensPerRequest))} tokens/request × 1000 requests
@@ -1248,7 +1249,7 @@ function ProjectDetailPage() {
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Infrastructure Costs (Optional)</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fixed Cost/Req ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{getCurrencyLabel('Fixed Cost/Req', currency)}</label>
                   <input
                     type="number"
                     value={featureForm.fixedCostPerRequest}
@@ -1272,7 +1273,7 @@ function ProjectDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Fixed ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{getCurrencyLabel('Monthly Fixed', currency)}</label>
                   <input
                     type="number"
                     value={featureForm.monthlyFixedCost}

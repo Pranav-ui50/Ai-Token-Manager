@@ -12,6 +12,7 @@ import billingApi from '../../services/api/billing.api.js';
 import publicApi from '../../services/api/public.api.js';
 import Modal from '../../components/common/Modal.jsx';
 import Button from '../../components/common/Button.jsx';
+import { showToast } from '../../utils/toasts.js';
 
 const STATUS_COLORS = {
   active: 'bg-green-100 text-green-700',
@@ -77,7 +78,6 @@ const DEFAULT_PLANS = [
 function BillingPage() {
   const { currentOrganization } = useOrganization();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [billingData, setBillingData] = useState(null);
   const [usageData, setUsageData] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -142,7 +142,6 @@ function BillingPage() {
   const loadBillingData = async () => {
     try {
       setLoading(true);
-      setError('');
 
       const [billingRes, usageRes, invoicesRes] = await Promise.all([
         billingApi.getBilling(organizationId),
@@ -158,7 +157,7 @@ function BillingPage() {
         setBillingDetails(billingRes.data.billingDetails);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load billing data');
+      showToast.error(err.response?.data?.message || 'Failed to load billing data');
     } finally {
       setLoading(false);
     }
@@ -241,15 +240,15 @@ function BillingPage() {
 
   const handlePlanChange = async (plan) => {
     setIsSubmitting(true);
-    setError('');
     try {
       await billingApi.updateSubscription(organizationId, {
         plan: plan.id || plan.tier,
         billingCycle: billingInterval === 'year' ? 'yearly' : 'monthly'
       });
+      showToast.subscriptionUpdated();
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to change plan');
+      showToast.error(err.response?.data?.message || 'Failed to change plan');
     } finally {
       setIsSubmitting(false);
     }
@@ -257,13 +256,13 @@ function BillingPage() {
 
   const handleCancelSubscription = async (reason) => {
     setIsSubmitting(true);
-    setError('');
     try {
       await billingApi.cancelSubscription(organizationId, reason);
       setShowCancelModal(false);
+      showToast.subscriptionCancelled();
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to cancel subscription');
+      showToast.error(err.response?.data?.message || 'Failed to cancel subscription');
     } finally {
       setIsSubmitting(false);
     }
@@ -271,12 +270,12 @@ function BillingPage() {
 
   const handleReactivate = async () => {
     setIsSubmitting(true);
-    setError('');
     try {
       await billingApi.reactivateSubscription(organizationId);
+      showToast.subscriptionReactivated();
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reactivate subscription');
+      showToast.error(err.response?.data?.message || 'Failed to reactivate subscription');
     } finally {
       setIsSubmitting(false);
     }
@@ -296,9 +295,10 @@ function BillingPage() {
         expiryMonth: '',
         expiryYear: ''
       });
+      showToast.success('Payment method added successfully');
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add payment method');
+      showToast.error(err.response?.data?.message || 'Failed to add payment method');
     } finally {
       setIsSubmitting(false);
     }
@@ -308,31 +308,33 @@ function BillingPage() {
     if (!confirm('Are you sure you want to remove this payment method?')) return;
     try {
       await billingApi.removePaymentMethod(organizationId, methodId);
+      showToast.success('Payment method removed successfully');
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to remove payment method');
+      showToast.error(err.response?.data?.message || 'Failed to remove payment method');
     }
   };
 
   const handleSetDefaultPaymentMethod = async (methodId) => {
     try {
       await billingApi.setDefaultPaymentMethod(organizationId, methodId);
+      showToast.success('Default payment method updated');
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to set default payment method');
+      showToast.error(err.response?.data?.message || 'Failed to set default payment method');
     }
   };
 
   const handleUpdateBillingDetails = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setError('');
     try {
       await billingApi.updateBillingDetails(organizationId, billingDetails);
       setShowBillingDetailsModal(false);
+      showToast.success('Billing details updated successfully');
       await loadBillingData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update billing details');
+      showToast.error(err.response?.data?.message || 'Failed to update billing details');
     } finally {
       setIsSubmitting(false);
     }
@@ -349,8 +351,9 @@ function BillingPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      showToast.invoiceDownloaded();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to download invoice');
+      showToast.error(err.response?.data?.message || 'Failed to download invoice');
     }
   };
 
@@ -400,23 +403,6 @@ function BillingPage() {
           </Button>
         </div>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Current Plan Summary */}
       {billingData && (

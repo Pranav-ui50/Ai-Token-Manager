@@ -171,7 +171,7 @@ function SettingsTab({ organization, organizationId }) {
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowDeleteModal(false)} />
+            <div className="fixed inset-0 bg-black/50" onClick={() => setShowDeleteModal(false)} />
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 Delete Organization

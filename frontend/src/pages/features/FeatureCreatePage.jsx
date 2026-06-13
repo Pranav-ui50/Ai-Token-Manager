@@ -10,10 +10,16 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
+import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
 
 function FeatureCreatePage() {
   const navigate = useNavigate();
   const { currentOrganization } = useOrganization();
+
+  // Get currency from organization settings or default to USD
+  const currency = currentOrganization?.settings?.currency || 'USD';
+  const currencySymbol = getCurrencySymbol(currency);
+
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [providers, setProviders] = useState([]);
@@ -421,7 +427,7 @@ function FeatureCreatePage() {
                   const modelValue = model.isDatabaseModel ? model._id : (model.rawId || model.id);
                   const isBest = modelValue === bestModelId;
                   const pricingInfo = model.pricing?.inputPrice
-                    ? `($${model.pricing.inputPrice}/$${model.pricing.outputPrice || 0} per 1M)`
+                    ? `(${currencySymbol}${model.pricing.inputPrice}/${currencySymbol}${model.pricing.outputPrice || 0} per 1M)`
                     : '';
                   const contextInfo = model.capabilities?.contextWindow
                     ? `${Math.round(model.capabilities.contextWindow / 1000)}K ctx`
@@ -552,13 +558,13 @@ function FeatureCreatePage() {
                 <div className="bg-gray-50 rounded-lg p-3">
                   <span className="text-xs text-gray-500">Input Price</span>
                   <p className="text-lg font-semibold text-gray-900">
-                    ${(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M tokens
+                    {currencySymbol}{(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M tokens
                   </p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-3">
                   <span className="text-xs text-gray-500">Output Price</span>
                   <p className="text-lg font-semibold text-gray-900">
-                    ${(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M tokens
+                    {currencySymbol}{(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M tokens
                   </p>
                 </div>
               </div>
@@ -648,10 +654,11 @@ function FeatureCreatePage() {
               <p className="text-sm text-gray-600 mb-2">Estimated Cost per 1000 Requests:</p>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-2xl font-bold text-[#DC2626]">
-                  ${(
+                  {formatCurrencyWithSymbol(
                     ((filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.inputPrice || 0) / 1000000) * formData.inputTokensPerRequest * 1000 +
-                    ((filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0) / 1000000) * formData.outputTokensPerRequest * 1000
-                  ).toFixed(4)}
+                    ((filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0) / 1000000) * formData.outputTokensPerRequest * 1000,
+                    currency
+                  )}
                 </p>
                 <p className="text-xs text-gray-500">
                   {formData.inputTokensPerRequest + formData.outputTokensPerRequest} tokens/request × 1000 requests
@@ -670,7 +677,7 @@ function FeatureCreatePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Fixed Cost / Request ($)
+                {getCurrencyLabel('Fixed Cost / Request', currency)}
               </label>
               <input
                 type="number"
@@ -700,7 +707,7 @@ function FeatureCreatePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Monthly Fixed Cost ($)
+                {getCurrencyLabel('Monthly Fixed Cost', currency)}
               </label>
               <input
                 type="number"

@@ -92,11 +92,46 @@ function AuditLogsPage() {
     try {
       setLoading(true);
       setError(null);
+
+      // Validate and format dates
       const params = {
         ...filters,
         page,
         limit
       };
+
+      // Validate startDate format
+      if (params.startDate) {
+        const startDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!startDateRegex.test(params.startDate)) {
+          console.warn('Invalid start date format:', params.startDate);
+          delete params.startDate;
+        } else {
+          // Ensure year is 4 digits and within valid range
+          const year = parseInt(params.startDate.split('-')[0]);
+          if (year < 2020 || year > new Date().getFullYear()) {
+            console.warn('Start year out of range:', year);
+            delete params.startDate;
+          }
+        }
+      }
+
+      // Validate endDate format
+      if (params.endDate) {
+        const endDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!endDateRegex.test(params.endDate)) {
+          console.warn('Invalid end date format:', params.endDate);
+          delete params.endDate;
+        } else {
+          // Ensure year is 4 digits and within valid range
+          const year = parseInt(params.endDate.split('-')[0]);
+          if (year < 2020 || year > new Date().getFullYear()) {
+            console.warn('End year out of range:', year);
+            delete params.endDate;
+          }
+        }
+      }
+
       // Remove empty values
       Object.keys(params).forEach(key => {
         if (!params[key]) delete params[key];
@@ -184,6 +219,42 @@ function AuditLogsPage() {
     });
   };
 
+  // Format user display
+  const formatUser = (log) => {
+    // If no user object, check for userId (might be just an ID)
+    if (!log.user) {
+      // If there's a userId field, show it
+      if (log.userId) {
+        return { name: `User ID: ${log.userId}`, email: null };
+      }
+      return { name: 'System', email: null };
+    }
+
+    // If user is populated (object with properties)
+    if (typeof log.user === 'object' && log.user !== null) {
+      const firstName = log.user.firstName || '';
+      const lastName = log.user.lastName || '';
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      // If we have a name, use it
+      if (fullName) {
+        return { name: fullName, email: log.user.email || null };
+      }
+
+      // If we only have email, use email username
+      if (log.user.email) {
+        return { name: log.user.email.split('@')[0], email: log.user.email };
+      }
+
+      // User object exists but no useful info
+      if (log.user._id) {
+        return { name: `User`, email: null };
+      }
+    }
+
+    return { name: 'System', email: null };
+  };
+
   const formatAction = (action) => {
     return ACTION_LABELS[action] || action?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || action;
   };
@@ -199,6 +270,24 @@ function AuditLogsPage() {
       search: ''
     });
     setPage(1);
+  };
+
+  // Handle date change with validation
+  const handleDateChange = (field, value) => {
+    // Validate date format YYYY-MM-DD
+    if (value) {
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (dateRegex.test(value)) {
+        const year = parseInt(value.split('-')[0]);
+        const currentYear = new Date().getFullYear();
+        // Only allow years from 2020 to current year
+        if (year >= 2020 && year <= currentYear) {
+          setFilters({ ...filters, [field]: value });
+        }
+      }
+    } else {
+      setFilters({ ...filters, [field]: '' });
+    }
   };
 
   return (
@@ -319,8 +408,10 @@ function AuditLogsPage() {
             <input
               type="date"
               value={filters.startDate}
-              onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+              onChange={(e) => handleDateChange('startDate', e.target.value)}
+              min="2020-01-01"
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent text-gray-900"
             />
           </div>
           <div>
@@ -328,8 +419,10 @@ function AuditLogsPage() {
             <input
               type="date"
               value={filters.endDate}
-              onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+              onChange={(e) => handleDateChange('endDate', e.target.value)}
+              min="2020-01-01"
+              max={new Date().toISOString().split('T')[0]}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent text-gray-900"
             />
           </div>
         </div>
@@ -382,18 +475,20 @@ function AuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {logs.map((log) => (
-                  <tr key={log._id} className="hover:bg-gray-50">
+                {logs.map((log, index) => (
+                  <tr key={log._id || `log-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(log.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {log.user ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() : 'System'}
+                      <div className="text-sm">
+                        <span className="font-medium text-gray-900">
+                          {formatUser(log).name}
+                        </span>
+                        {formatUser(log).email && (
+                          <p className="text-xs text-gray-500">{formatUser(log).email}</p>
+                        )}
                       </div>
-                      {log.user?.email && (
-                        <p className="text-xs text-gray-500">{log.user.email}</p>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-gray-900">{formatAction(log.action)}</span>
@@ -459,7 +554,7 @@ function AuditLogsPage() {
 
       {/* Detail Modal */}
       {showDetailModal && selectedLog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <h2 className="text-xl font-bold text-gray-900">Log Details</h2>
@@ -481,8 +576,11 @@ function AuditLogsPage() {
                 <div>
                   <p className="text-sm text-gray-500">User</p>
                   <p className="font-medium text-gray-900">
-                    {selectedLog.user ? `${selectedLog.user.firstName || ''} ${selectedLog.user.lastName || ''}`.trim() || 'System' : 'System'}
+                    {formatUser(selectedLog).name}
                   </p>
+                  {formatUser(selectedLog).email && (
+                    <p className="text-xs text-gray-500">{formatUser(selectedLog).email}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Action</p>
@@ -534,7 +632,7 @@ function AuditLogsPage() {
                   <p className="text-sm text-gray-500 mb-2">Changes</p>
                   <div className="bg-gray-50 rounded-lg p-4">
                     {selectedLog.changes.map((change, index) => (
-                      <div key={index} className="mb-2 last:mb-0">
+                      <div key={change.field || `change-${index}`} className="mb-2 last:mb-0">
                         <p className="text-sm font-medium text-gray-900">{change.field}</p>
                         <p className="text-xs text-gray-500">
                           <span className="text-red-600">Old: {JSON.stringify(change.oldValue)}</span>

@@ -6,6 +6,7 @@
  */
 
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const WEBHOOK_EVENTS = [
   // Provider events
@@ -378,7 +379,6 @@ webhookSchema.methods.generateSignature = function (payload) {
     return null;
   }
 
-  const crypto = require('crypto');
   const hmac = crypto.createHmac('sha256', this.secretKey);
   hmac.update(JSON.stringify(payload));
   return `sha256=${hmac.digest('hex')}`;

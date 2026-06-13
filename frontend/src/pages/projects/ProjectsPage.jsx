@@ -11,6 +11,7 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import projectApi from '../../services/api/project.api.js';
+import { showToast } from '../../utils/toasts.js';
 
 function ProjectsPage() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
@@ -20,8 +21,6 @@ function ProjectsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
 
@@ -50,7 +49,7 @@ function ProjectsPage() {
       setProjects(data || []);
     } catch (err) {
       console.error('Failed to fetch projects:', err);
-      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to load projects');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to load projects');
     } finally {
       setIsLoading(false);
     }
@@ -75,15 +74,14 @@ function ProjectsPage() {
 
   const handleCreateProject = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (!currentOrganization) {
-      setError('No organization selected. Please select an organization first.');
+      showToast.error('No organization selected. Please select an organization first.');
       return;
     }
 
     if (!formData.name.trim()) {
-      setError('Project name is required');
+      showToast.error('Project name is required');
       return;
     }
 
@@ -95,18 +93,17 @@ function ProjectsPage() {
       setProjects(prev => [newProject, ...prev]);
       setShowCreateModal(false);
       resetForm();
-      setSuccess('Project created successfully');
+      showToast.projectCreated();
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to create project');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to create project');
     }
   };
 
   const handleUpdateProject = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (!formData.name.trim()) {
-      setError('Project name is required');
+      showToast.error('Project name is required');
       return;
     }
 
@@ -118,9 +115,9 @@ function ProjectsPage() {
       setShowEditModal(false);
       setSelectedProject(null);
       resetForm();
-      setSuccess('Project updated successfully');
+      showToast.projectUpdated();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update project');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update project');
     }
   };
 
@@ -132,9 +129,9 @@ function ProjectsPage() {
     try {
       await projectApi.delete(project._id);
       setProjects(prev => prev.filter(p => p._id !== project._id));
-      setSuccess('Project deleted successfully');
+      showToast.projectDeleted();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete project');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to delete project');
     }
   };
 
@@ -146,17 +143,17 @@ function ProjectsPage() {
         setProjects(prev => prev.map(p =>
           p._id === project._id ? { ...p, isActive: true } : p
         ));
-        setSuccess('Project activated successfully');
+        showToast.success('Project activated successfully');
       } else {
         // Deactivate active project
         await projectApi.archive(project._id);
         setProjects(prev => prev.map(p =>
           p._id === project._id ? { ...p, isActive: false } : p
         ));
-        setSuccess('Project deactivated successfully');
+        showToast.success('Project deactivated successfully');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update project status');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to update project status');
     }
   };
 
@@ -170,7 +167,6 @@ function ProjectsPage() {
         infrastructureCostPerMonth: 0
       }
     });
-    setError('');
   };
 
   const openEditModal = (project) => {
@@ -391,39 +387,6 @@ function ProjectsPage() {
           </div>
         </div>
       </div>
-
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm">{success}</span>
-          </div>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Projects Grid */}
       {isLoading ? (

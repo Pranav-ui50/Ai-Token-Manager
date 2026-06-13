@@ -64,6 +64,27 @@ router.patch('/organizations/:id/plan', adminController.updateOrganizationPlan);
 router.get('/users', adminController.getUsers);
 
 /**
+ * @route   GET /api/admin/users/:id
+ * @desc    Get user by ID
+ * @access  Private (Super Admin)
+ */
+router.get('/users/:id', adminController.getUserById);
+
+/**
+ * @route   PATCH /api/admin/users/:id/status
+ * @desc    Update user status
+ * @access  Private (Super Admin)
+ */
+router.patch('/users/:id/status', adminController.updateUserStatus);
+
+/**
+ * @route   PATCH /api/admin/users/:id/role
+ * @desc    Update user role
+ * @access  Private (Super Admin)
+ */
+router.patch('/users/:id/role', adminController.updateUserRole);
+
+/**
  * @route   GET /api/admin/providers
  * @desc    Get all providers
  * @access  Private (Super Admin)

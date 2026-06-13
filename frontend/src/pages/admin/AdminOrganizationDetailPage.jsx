@@ -101,22 +101,39 @@ function AdminOrganizationDetailPage() {
     const colors = {
       active: 'bg-green-100 text-green-700',
       trial: 'bg-yellow-100 text-yellow-700',
-      suspended: 'bg-red-100 text-red-700',
-      cancelled: 'bg-gray-100 text-gray-700',
-      expired: 'bg-orange-100 text-orange-700'
+      pending_payment: 'bg-blue-100 text-blue-700',
+      past_due: 'bg-orange-100 text-orange-700',
+      expired: 'bg-red-100 text-red-700',
+      cancelled: 'bg-gray-100 text-gray-700'
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
   };
 
   const getPlanBadge = (plan) => {
     const colors = {
-      free: 'bg-gray-100 text-gray-700',
       starter: 'bg-blue-100 text-blue-700',
       professional: 'bg-purple-100 text-purple-700',
-      enterprise: 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700'
+      business: 'bg-amber-100 text-amber-700'
     };
     return colors[plan] || 'bg-gray-100 text-gray-700';
   };
+
+  // Available plans (excluding free and enterprise)
+  const AVAILABLE_PLANS = [
+    { value: 'starter', label: 'Starter' },
+    { value: 'professional', label: 'Professional' },
+    { value: 'business', label: 'Business' }
+  ];
+
+  // Subscription status options matching Organization schema
+  const SUBSCRIPTION_STATUSES = [
+    { value: 'trial', label: 'Trial' },
+    { value: 'active', label: 'Active' },
+    { value: 'pending_payment', label: 'Pending Payment' },
+    { value: 'past_due', label: 'Past Due' },
+    { value: 'expired', label: 'Expired' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ];
 
   if (isLoading) {
     return (
@@ -164,24 +181,22 @@ function AdminOrganizationDetailPage() {
         </div>
         <div className="flex items-center gap-3">
           <select
-            value={organization?.subscription?.status || 'active'}
+            value={organization?.subscription?.status || 'trial'}
             onChange={(e) => handleUpdateStatus(e.target.value)}
             className={`px-3 py-2 rounded-lg border border-gray-200 ${getStatusBadge(organization?.subscription?.status)}`}
           >
-            <option value="active">Active</option>
-            <option value="trial">Trial</option>
-            <option value="suspended">Suspend</option>
-            <option value="cancelled">Cancelled</option>
+            {SUBSCRIPTION_STATUSES.map(status => (
+              <option key={status.value} value={status.value}>{status.label}</option>
+            ))}
           </select>
           <select
-            value={organization?.subscription?.plan || 'free'}
+            value={organization?.subscription?.plan || 'starter'}
             onChange={(e) => handleUpdatePlan(e.target.value)}
             className={`px-3 py-2 rounded-lg border border-gray-200 ${getPlanBadge(organization?.subscription?.plan)}`}
           >
-            <option value="free">Free</option>
-            <option value="starter">Starter</option>
-            <option value="professional">Professional</option>
-            <option value="enterprise">Enterprise</option>
+            {AVAILABLE_PLANS.map(plan => (
+              <option key={plan.value} value={plan.value}>{plan.label}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -279,7 +294,7 @@ function AdminOrganizationDetailPage() {
                 <dt className="text-sm text-gray-500">Plan</dt>
                 <dd>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPlanBadge(organization?.subscription?.plan)}`}>
-                    {organization?.subscription?.plan || 'free'}
+                    {organization?.subscription?.plan || 'starter'}
                   </span>
                 </dd>
               </div>

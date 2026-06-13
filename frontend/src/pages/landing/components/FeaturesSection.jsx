@@ -150,8 +150,8 @@ const FeaturesSection = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [isVisible, setIsVisible] = useState(false);
   const [features, setFeatures] = useState(defaultFeatures);
-  const [title, setTitle] = useState('Everything You Need to Manage AI Costs');
-  const [subtitle, setSubtitle] = useState('Powerful features designed to help you track, analyze, and optimize your AI API usage across all providers.');
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const sectionRef = useRef(null);
 
   // Fetch dynamic content from API
@@ -163,12 +163,9 @@ const FeaturesSection = () => {
           if (response.data.items) {
             setFeatures(response.data.items);
           }
-          if (response.data.title) {
-            setTitle(response.data.title);
-          }
-          if (response.data.subtitle) {
-            setSubtitle(response.data.subtitle);
-          }
+          // Update title/subtitle - use empty string if not provided to allow hiding
+          setTitle(response.data.title ?? '');
+          setSubtitle(response.data.subtitle ?? '');
         }
       } catch (error) {
         console.log('Using default features:', error);
@@ -204,22 +201,36 @@ const FeaturesSection = () => {
     { id: 'optimization', label: 'Optimization' }
   ];
 
+  // Filter features that have valid title and description
+  const validFeatures = features.filter(feature =>
+    feature && feature.title?.trim() && feature.description?.trim()
+  );
+
   const filteredFeatures = activeCategory === 'all'
-    ? features
-    : features.filter(f => f.category === activeCategory);
+    ? validFeatures
+    : validFeatures.filter(f => f.category === activeCategory);
+
+  // Check if header should be shown
+  const showHeader = title?.trim() || subtitle?.trim();
 
   return (
     <section ref={sectionRef} id="features" className="py-20 bg-white overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
-        <div className={`text-center mb-12 transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-            {title}
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            {subtitle}
-          </p>
-        </div>
+        {/* Section Header - Only show if title or subtitle exists */}
+        {showHeader && (
+          <div className={`text-center mb-12 transition-all duration-700 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+            {title?.trim() && (
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                {title}
+              </h2>
+            )}
+            {subtitle?.trim() && (
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Category Filter */}
         <div className={`flex flex-wrap justify-center gap-2 mb-10 transition-all duration-700 delay-100 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
@@ -263,10 +274,15 @@ const FeaturesSection = () => {
         <div className="mt-16 text-center">
           <p className="text-gray-600 mb-4">Ready to optimize your AI costs?</p>
           <button
-            onClick={() => window.location.href = '/register'}
+            onClick={() => {
+              const pricingSection = document.getElementById('pricing');
+              if (pricingSection) {
+                pricingSection.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
             className="px-8 py-3 bg-[#DC2626] text-white font-semibold rounded-lg hover:bg-[#B91C1C] transition-colors"
           >
-            Get Started Free
+            Get Started
           </button>
         </div>
       </div>

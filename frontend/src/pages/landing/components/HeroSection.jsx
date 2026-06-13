@@ -24,10 +24,10 @@ const HeroSection = () => {
 
   // Default metrics with fallback values
   const defaultMetrics = [
-    { label: 'Cost Reduction', value: '40%', icon: '💰', description: 'Average savings' },
-    { label: 'API Calls Tracked', value: '10M+', icon: '📊', description: 'Monthly volume' },
-    { label: 'Providers Supported', value: '15+', icon: '🔌', description: 'AI integrations' },
-    { label: 'Uptime', value: '99.9%', icon: '⚡', description: 'Reliability' }
+    { label: 'Cost Reduction', value: '40', suffix: '%', icon: '💰', description: 'Average savings' },
+    { label: 'API Calls Tracked', value: '10', suffix: 'M+', icon: '📊', description: 'Monthly volume' },
+    { label: 'Providers Supported', value: '15', suffix: '+', icon: '🔌', description: 'AI integrations' },
+    { label: 'Uptime', value: '99.9', suffix: '%', icon: '⚡', description: 'Reliability' }
   ];
 
   const [metrics, setMetrics] = useState(defaultMetrics);
@@ -36,7 +36,18 @@ const HeroSection = () => {
   useEffect(() => {
     const fetchContent = async () => {
       try {
-        // Fetch platform stats
+        // Fetch hero content
+        const heroResponse = await publicApi.getLandingSection('hero');
+        if (heroResponse.success && heroResponse.data) {
+          setHeroContent(heroResponse.data);
+
+          // Use stats from hero content if available, otherwise use defaults
+          if (heroResponse.data.stats && heroResponse.data.stats.length > 0) {
+            setMetrics(heroResponse.data.stats);
+          }
+        }
+
+        // Fetch platform stats for badge
         const statsResponse = await publicApi.getStats();
         if (statsResponse.success && statsResponse.data) {
           setStats({
@@ -45,20 +56,6 @@ const HeroSection = () => {
             costSaved: statsResponse.data.costSaved || '$2M+',
             providers: statsResponse.data.providers || '15+'
           });
-
-          // Update metrics with real data if available
-          setMetrics([
-            { label: 'Cost Reduction', value: '40%', icon: '💰', description: 'Average savings' },
-            { label: 'API Calls Tracked', value: statsResponse.data.totalApiCalls || '10M+', icon: '📊', description: 'Monthly volume' },
-            { label: 'Providers Supported', value: statsResponse.data.providers || '15+', icon: '🔌', description: 'AI integrations' },
-            { label: 'Uptime', value: '99.9%', icon: '⚡', description: 'Reliability' }
-          ]);
-        }
-
-        // Fetch hero content
-        const heroResponse = await publicApi.getLandingSection('hero');
-        if (heroResponse.success && heroResponse.data) {
-          setHeroContent(heroResponse.data);
         }
       } catch (error) {
         console.log('Using default content:', error);
@@ -94,6 +91,11 @@ const HeroSection = () => {
     return () => clearInterval(interval);
   }, [metrics.length]);
 
+  // Filter metrics that have valid values
+  const validMetrics = metrics.filter(metric =>
+    metric && (metric.value?.toString().trim() || metric.label?.trim())
+  );
+
   return (
     <section ref={sectionRef} className="relative min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
       {/* Background Pattern */}
@@ -107,7 +109,7 @@ const HeroSection = () => {
       <div className="absolute top-1/4 -left-20 w-96 h-96 bg-red-500/20 rounded-full blur-3xl animate-pulse" />
       <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 pb-24 md:pb-16">
         <div className="grid lg:grid-cols-2 gap-12 items-center min-h-[calc(100vh-6rem)]">
           {/* Left Content */}
           <div className={`text-center lg:text-left transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
@@ -117,18 +119,24 @@ const HeroSection = () => {
               <span className="text-sm text-white/80">Trusted by {stats.totalUsers} companies worldwide</span>
             </div>
 
-            {/* Headline */}
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              {heroContent?.title || 'AI API Cost'}
-              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-red-600">
-                {heroContent?.titleHighlight || 'Management Platform'}
-              </span>
-            </h1>
+            {/* Headline - Only show if title exists */}
+            {(heroContent?.title?.trim() || heroContent?.titleHighlight?.trim()) && (
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+                {heroContent?.title?.trim() && <span>{heroContent.title}</span>}
+                {heroContent?.titleHighlight?.trim() && (
+                  <span className="block text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-red-600">
+                    {heroContent.titleHighlight}
+                  </span>
+                )}
+              </h1>
+            )}
 
-            {/* Subheadline */}
-            <p className="text-lg md:text-xl text-gray-300 mb-8 max-w-2xl">
-              {heroContent?.subtitle || 'Track token usage, optimize AI costs, and scale your infrastructure efficiently. Get real-time analytics and forecasting for OpenAI, Anthropic, and 15+ AI providers.'}
-            </p>
+            {/* Subheadline - Only show if subtitle exists */}
+            {heroContent?.subtitle?.trim() && (
+              <p className="text-lg md:text-xl text-gray-300 mb-8 max-w-2xl">
+                {heroContent.subtitle}
+              </p>
+            )}
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12">
@@ -136,44 +144,68 @@ const HeroSection = () => {
                 onClick={() => navigate('/register')}
                 className="px-8 py-4 bg-[#DC2626] text-white font-semibold rounded-xl hover:bg-[#B91C1C] transition-all transform hover:scale-105 shadow-lg shadow-red-500/25"
               >
-                {heroContent?.ctaButton || 'Start Free Trial'}
+                {heroContent?.ctaButton?.trim() || 'Get Started'}
                 <svg className="inline-block w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </button>
-              <button
-                onClick={() => {
-                  const pricingSection = document.getElementById('pricing');
-                  if (pricingSection) {
-                    pricingSection.scrollIntoView({ behavior: 'smooth' });
-                  }
-                }}
-                className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl hover:bg-white/20 transition-all border border-white/20"
-              >
-                {heroContent?.secondaryCta || 'View Pricing'}
-              </button>
+              {heroContent?.secondaryCta?.trim() && (
+                <button
+                  onClick={() => {
+                    const pricingSection = document.getElementById('pricing');
+                    if (pricingSection) {
+                      pricingSection.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-8 py-4 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-xl hover:bg-white/20 transition-all border border-white/20"
+                >
+                  {heroContent.secondaryCta}
+                </button>
+              )}
             </div>
 
-            {/* Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-              {metrics.map((metric, index) => (
-                <div
-                  key={index}
-                  onClick={() => setActiveMetric(index)}
-                  className={`p-3 md:p-4 rounded-xl cursor-pointer transition-all duration-500 ${
-                    activeMetric === index
-                      ? 'bg-white/20 backdrop-blur-sm scale-105 shadow-lg'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="text-xl md:text-2xl mb-1">{metric.icon}</div>
-                  <div className="text-xl md:text-2xl lg:text-3xl font-bold text-white">{metric.value}</div>
-                  <div className="text-xs md:text-sm text-gray-400">{metric.label}</div>
-                  {activeMetric === index && metric.description && (
-                    <div className="text-xs text-green-400 mt-1 hidden md:block">{metric.description}</div>
-                  )}
-                </div>
-              ))}
+            {/* Metrics - Only show valid metrics */}
+            {validMetrics.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-12">
+                {validMetrics.map((metric, index) => (
+                  <div
+                    key={index}
+                    onClick={() => setActiveMetric(index)}
+                    className={`p-3 md:p-4 rounded-xl cursor-pointer transition-all duration-500 ${
+                      activeMetric === index
+                        ? 'bg-white/20 backdrop-blur-sm scale-105 shadow-lg'
+                        : 'bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    {metric.icon && <div className="text-xl md:text-2xl mb-1">{metric.icon}</div>}
+                    <div className="text-xl md:text-2xl lg:text-3xl font-bold text-white">
+                      {metric.value}{metric.suffix || ''}
+                    </div>
+                    {metric.label?.trim() && <div className="text-xs md:text-sm text-gray-400">{metric.label}</div>}
+                    {activeMetric === index && metric.description?.trim() && (
+                      <div className="text-xs text-green-400 mt-1 hidden md:block">{metric.description}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Scroll Indicator - Mobile Only */}
+            <div className="flex justify-center lg:hidden">
+              <button
+                onClick={() => {
+                  const featuresSection = document.getElementById('features');
+                  if (featuresSection) {
+                    featuresSection.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }}
+                className="flex flex-col items-center gap-1 text-white/60 hover:text-white transition-colors"
+              >
+                <span className="text-xs">Scroll to explore</span>
+                <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </button>
             </div>
           </div>
 
@@ -265,8 +297,8 @@ const HeroSection = () => {
           </div>
         </div>
 
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
+        {/* Scroll Indicator - Desktop Only */}
+        <div className="hidden lg:block absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
           <button
             onClick={() => {
               const featuresSection = document.getElementById('features');

@@ -244,6 +244,20 @@ import landingPageContentRoutes, { adminLandingContentRoutes } from './landingPa
 router.use('/public', landingPageContentRoutes);
 
 // ===========================================
+// Testimonial Routes
+// ===========================================
+
+import testimonialRoutes from './testimonial.routes.js';
+router.use('/testimonials', testimonialRoutes);
+
+// ===========================================
+// Platform Statistics Routes
+// ===========================================
+
+import platformStatRoutes from './platformStat.routes.js';
+router.use('/platform-stats', platformStatRoutes);
+
+// ===========================================
 // Admin Routes
 // ===========================================
 

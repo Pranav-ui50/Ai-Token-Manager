@@ -52,10 +52,10 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-6">
             <button
               onClick={() => scrollToSection('features')}
-              className={`font-medium transition-colors ${
+              className={`font-medium text-sm transition-colors ${
                 isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-white/90 hover:text-white'
               }`}
             >
@@ -63,7 +63,7 @@ const Navbar = () => {
             </button>
             <button
               onClick={() => scrollToSection('pricing')}
-              className={`font-medium transition-colors ${
+              className={`font-medium text-sm transition-colors ${
                 isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-white/90 hover:text-white'
               }`}
             >
@@ -71,15 +71,23 @@ const Navbar = () => {
             </button>
             <button
               onClick={() => scrollToSection('providers')}
-              className={`font-medium transition-colors ${
+              className={`font-medium text-sm transition-colors ${
                 isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-white/90 hover:text-white'
               }`}
             >
               Providers
             </button>
             <button
+              onClick={() => scrollToSection('analytics')}
+              className={`font-medium text-sm transition-colors ${
+                isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-white/90 hover:text-white'
+              }`}
+            >
+              Analytics
+            </button>
+            <button
               onClick={() => scrollToSection('faq')}
-              className={`font-medium transition-colors ${
+              className={`font-medium text-sm transition-colors ${
                 isScrolled ? 'text-gray-600 hover:text-gray-900' : 'text-white/90 hover:text-white'
               }`}
             >
@@ -88,7 +96,7 @@ const Navbar = () => {
           </div>
 
           {/* CTA Buttons */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-3">
             <button
               onClick={() => navigate('/login')}
               className={`font-medium transition-colors ${
@@ -98,16 +106,16 @@ const Navbar = () => {
               Sign In
             </button>
             <button
-              onClick={() => navigate('/register')}
+              onClick={() => scrollToSection('pricing')}
               className="px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
             >
-              Start Free Trial
+              Get Started
             </button>
           </div>
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2"
+            className="lg:hidden p-2"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             <svg
@@ -127,7 +135,7 @@ const Navbar = () => {
 
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
-          <div className="md:hidden bg-white rounded-lg shadow-lg mt-2 py-4 px-4">
+          <div className="lg:hidden bg-white rounded-lg shadow-lg mt-2 py-4 px-4">
             <div className="flex flex-col gap-4">
               <button
                 onClick={() => scrollToSection('features')}
@@ -148,6 +156,12 @@ const Navbar = () => {
                 Providers
               </button>
               <button
+                onClick={() => scrollToSection('analytics')}
+                className="text-gray-600 hover:text-gray-900 font-medium text-left"
+              >
+                Analytics
+              </button>
+              <button
                 onClick={() => scrollToSection('faq')}
                 className="text-gray-600 hover:text-gray-900 font-medium text-left"
               >
@@ -164,13 +178,10 @@ const Navbar = () => {
                 Sign In
               </button>
               <button
-                onClick={() => {
-                  navigate('/register');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => scrollToSection('pricing')}
                 className="px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors text-center"
               >
-                Start Free Trial
+                Get Started
               </button>
             </div>
           </div>

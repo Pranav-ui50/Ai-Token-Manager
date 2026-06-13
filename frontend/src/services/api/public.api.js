@@ -80,6 +80,24 @@ const publicApi = {
   getLandingSection: async (section) => {
     const response = await api.get(`/public/landing-content/${section}`);
     return response.data;
+  },
+
+  /**
+   * Get all active testimonials (public)
+   * @returns {Promise} Active testimonials
+   */
+  getTestimonials: async () => {
+    const response = await api.get('/testimonials');
+    return response.data;
+  },
+
+  /**
+   * Get all active platform stats (public)
+   * @returns {Promise} Active platform stats
+   */
+  getPlatformStats: async () => {
+    const response = await api.get('/platform-stats');
+    return response.data;
   }
 };
 

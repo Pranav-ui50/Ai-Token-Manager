@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { showToast } from '../../utils/toasts.js';
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
@@ -53,6 +54,8 @@ const ResetPasswordPage = () => {
 
     if (!formData.email) {
       errors.email = 'Email is required';
+    } else if (formData.email.length > 60) {
+      errors.email = 'Email cannot exceed 60 characters';
     } else if (!/^\S+@\S+\.\S+$/.test(formData.email)) {
       errors.email = 'Please enter a valid Email ID';
     }
@@ -65,6 +68,8 @@ const ResetPasswordPage = () => {
       errors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       errors.password = 'Password must be at least 8 characters';
+    } else if (formData.password.length > 100) {
+      errors.password = 'Password cannot exceed 100 characters';
     } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
       errors.password = 'Password must contain uppercase, lowercase, and number';
     }
@@ -90,7 +95,10 @@ const ResetPasswordPage = () => {
     const result = await resetPassword(formData.token, formData.email, formData.password);
 
     if (result.success) {
+      showToast.passwordResetSuccess();
       setSuccess(true);
+    } else {
+      showToast.error(result.error?.message || 'Failed to reset password. Please try again.');
     }
   };
 
@@ -308,6 +316,7 @@ const ResetPasswordPage = () => {
                     value={formData.email}
                     onChange={handleChange}
                     placeholder="Enter your email"
+                    maxLength={60}
                     className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                       formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
@@ -340,6 +349,7 @@ const ResetPasswordPage = () => {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Enter new password"
+                  maxLength={100}
                   className={`w-full pl-11 pr-12 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -404,6 +414,7 @@ const ResetPasswordPage = () => {
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   placeholder="Confirm new password"
+                  maxLength={100}
                   className={`w-full pl-11 pr-12 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
                     formErrors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
                   }`}

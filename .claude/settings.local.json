@@ -119,7 +119,11 @@
       "Bash(npx eslint *)",
       "Bash(node --check src/pages/features/FeatureCreatePage.jsx)",
       "Bash(findstr \":5000\")",
-      "Bash(ping -n 5 127.0.0.1)"
+      "Bash(ping -n 5 127.0.0.1)",
+      "Bash(Get-ChildItem *)",
+      "Bash(node -c src/controllers/admin.controller.js)",
+      "Bash(node -c src/routes/admin.routes.js)",
+      "Bash(node -e \"require\\('./src/pages/admin/AdminUsersPage.jsx'\\)\")"
     ]
   }
 }
