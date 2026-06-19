@@ -5,20 +5,92 @@
  * Features must be linked to a Project/Product.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
+import { useSubscription } from '../../context/SubscriptionContext.jsx';
+import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.js';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import projectApi from '../../services/api/project.api.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
 
+// Validation constants
+const VALIDATION_RULES = {
+  name: { minLength: 2, maxLength: 100, required: true },
+  description: { maxLength: 500 },
+  inputTokensPerRequest: { min: 0, max: 999999999999999, maxLength: 15 },
+  outputTokensPerRequest: { min: 0, max: 999999999999999, maxLength: 15 },
+  dynamicMultiplier: { min: 0.1, max: 100, maxLength: 15 },
+  fixedCostPerRequest: { min: 0, max: 1000, maxLength: 15 },
+  overheadPercentage: { min: 0, max: 100, maxLength: 15 },
+  monthlyFixedCost: { min: 0, max: 1000000, maxLength: 15 },
+  maxRequestsPerUser: { min: 0, max: 1000000000, maxLength: 15 },
+  maxTokensPerUser: { min: 0, max: 1000000000000, maxLength: 15 },
+  maxRequestsPerMonth: { min: 0, max: 1000000000, maxLength: 15 },
+  cacheTTL: { min: 0, max: 86400, maxLength: 15 }
+};
+
+// Input field component - defined outside to prevent re-creation on every render
+const InputField = ({ name, label, required, type = 'text', placeholder, maxLength, helpText, disabled, value, onChange, onBlur, error, touched, numericOnly }) => {
+  const hasError = touched && error;
+  const currentValue = value ?? '';
+
+  const handleChange = (e) => {
+    if (numericOnly) {
+      // Only allow digits (0-9)
+      const numericValue = e.target.value.replace(/[^0-9]/g, '');
+      const syntheticEvent = {
+        ...e,
+        target: {
+          ...e.target,
+          value: numericValue,
+          name: e.target.name
+        }
+      };
+      onChange(syntheticEvent);
+    } else {
+      onChange(e);
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {label}{required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+      <input
+        type="text"
+        inputMode={type === 'number' ? 'numeric' : undefined}
+        name={name}
+        value={currentValue}
+        onChange={handleChange}
+        onBlur={onBlur}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        disabled={disabled}
+        className={`w-full px-3 py-2 border rounded-md ${
+          hasError ? 'border-red-500' : 'border-gray-300'
+        } ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+      />
+      <div className="min-h-[20px] mt-1">
+        {hasError && (
+          <p className="text-xs text-red-600">{error}</p>
+        )}
+        {helpText && !hasError && (
+          <p className="text-xs text-gray-500">{helpText}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function FeatureCreatePage() {
   const navigate = useNavigate();
   const { currentOrganization } = useOrganization();
+  const { checkLimit, subscription } = useSubscription();
 
-  // Get currency from organization settings or default to USD
   const currency = currentOrganization?.settings?.currency || 'USD';
   const currencySymbol = getCurrencySymbol(currency);
 
@@ -32,6 +104,10 @@ function FeatureCreatePage() {
   const [modelSource, setModelSource] = useState(null);
   const [modelFetchError, setModelFetchError] = useState(null);
 
+  // Field-level validation errors and touched state
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [touched, setTouched] = useState({});
+
   const [formData, setFormData] = useState({
     project: '',
     name: '',
@@ -42,32 +118,106 @@ function FeatureCreatePage() {
     provider: '',
     modelIdentifier: '',
     modelDisplayName: '',
-    // Token estimates
-    inputTokensPerRequest: 0,
-    outputTokensPerRequest: 0,
+    inputTokensPerRequest: '',
+    outputTokensPerRequest: '',
     calculationMethod: 'fixed',
-    dynamicMultiplier: 1,
-    // Infrastructure costs
-    fixedCostPerRequest: 0,
-    overheadPercentage: 0,
-    monthlyFixedCost: 0,
+    dynamicMultiplier: '1',
+    fixedCostPerRequest: '',
+    overheadPercentage: '',
+    monthlyFixedCost: '',
     infrastructureType: 'serverless',
-    // Limits
     maxRequestsPerUser: '',
     maxTokensPerUser: '',
     maxRequestsPerMonth: '',
-    // Settings
     enabled: true,
     requiresAuth: true,
     cacheEnabled: false,
-    cacheTTL: 3600
+    cacheTTL: '3600'
   });
 
-  // Fetch providers and projects on mount
+  // Validation function for a single field
+  const validateField = (name, value) => {
+    const rules = VALIDATION_RULES[name];
+    if (!rules) return '';
+
+    if (rules.required && (!value || (typeof value === 'string' && !value.trim()))) {
+      return `${name.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} is required`;
+    }
+
+    if (!value && !rules.required) return '';
+
+    const stringValue = String(value);
+
+    if (rules.minLength && stringValue.length < rules.minLength) {
+      return `Minimum ${rules.minLength} characters required`;
+    }
+
+    if (rules.maxLength && stringValue.length > rules.maxLength) {
+      // Use "digits" for numeric fields
+      const digitFields = [
+        'inputTokensPerRequest', 'outputTokensPerRequest', 'dynamicMultiplier',
+        'fixedCostPerRequest', 'overheadPercentage', 'monthlyFixedCost',
+        'maxRequestsPerUser', 'maxTokensPerUser', 'maxRequestsPerMonth', 'cacheTTL'
+      ];
+      if (digitFields.includes(name)) {
+        return `Maximum ${rules.maxLength} digits allowed`;
+      }
+      return `Maximum ${rules.maxLength} characters allowed`;
+    }
+
+    if (rules.min !== undefined && value !== '' && Number(value) < rules.min) {
+      return `Value must be at least ${rules.min}`;
+    }
+
+    if (rules.max !== undefined && value !== '' && Number(value) > rules.max) {
+      return `Value must not exceed ${rules.max.toLocaleString()}`;
+    }
+
+    // Special validation for overhead percentage (1-100)
+    if (name === 'overheadPercentage' && value !== '') {
+      const numValue = Number(value);
+      if (numValue < 1 || numValue > 100) {
+        return 'Value must be between 1 and 100';
+      }
+    }
+
+    return '';
+  };
+
+  // Validate all fields
+  const validateForm = () => {
+    const errors = {};
+
+    if (!formData.project) {
+      errors.project = 'Project selection is required';
+    }
+
+    const nameError = validateField('name', formData.name);
+    if (nameError) errors.name = nameError;
+
+    const descError = validateField('description', formData.description);
+    if (descError) errors.description = descError;
+
+    const numericFields = [
+      'inputTokensPerRequest', 'outputTokensPerRequest', 'dynamicMultiplier',
+      'fixedCostPerRequest', 'overheadPercentage', 'monthlyFixedCost',
+      'maxRequestsPerUser', 'maxTokensPerUser', 'maxRequestsPerMonth', 'cacheTTL'
+    ];
+
+    numericFields.forEach(field => {
+      if (formData[field] !== '' && formData[field] !== undefined) {
+        const error = validateField(field, formData[field]);
+        if (error) errors[field] = error;
+      }
+    });
+
+    return errors;
+  };
+
+  // Fetch providers on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch providers
         const providersRes = await providerApi.getAll({ limit: 100, activeOnly: false });
         if (providersRes.providers) {
           setProviders(providersRes.providers);
@@ -89,7 +239,6 @@ function FeatureCreatePage() {
       try {
         const orgId = currentOrganization._id;
         const response = await projectApi.getForOrganization(orgId);
-        // Handle different response structures
         const projectsList = response?.projects || response?.data || response || [];
         setProjects(Array.isArray(projectsList) ? projectsList : []);
       } catch (err) {
@@ -103,17 +252,17 @@ function FeatureCreatePage() {
     fetchProjects();
   }, [currentOrganization]);
 
-  // Debug: Log when filteredModels changes
-  useEffect(() => {
-    console.log('[FeatureCreatePage] ====== FILTERED MODELS STATE UPDATED ======');
-    console.log('[FeatureCreatePage] Count:', filteredModels.length);
-    if (filteredModels.length > 0) {
-      console.log('[FeatureCreatePage] Model names:', filteredModels.map(m => m.displayName || m.name).join(', '));
-    }
-  }, [filteredModels]);
-
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    // Clear error for this field if exists
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
 
     // Handle provider change - fetch models
     if (name === 'provider') {
@@ -129,29 +278,39 @@ function FeatureCreatePage() {
       setModelFetchError(null);
 
       if (value) {
-        // Fetch models for selected provider
         fetchModels(value);
       }
     } else {
+      // Update form data - keep values as strings for smooth typing
       setFormData(prev => ({
         ...prev,
-        [name]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) || 0 : value)
+        [name]: type === 'checkbox' ? checked : value
       }));
     }
   };
 
-  // Fetch models for a provider (from live API with database fallback)
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+
+    // Mark as touched on blur
+    setTouched(prev => ({ ...prev, [name]: true }));
+
+    // Validate on blur
+    const error = validateField(name, value);
+    if (error) {
+      setFieldErrors(prev => ({ ...prev, [name]: error }));
+    }
+  };
+
   const fetchModels = async (providerId) => {
     setIsLoadingModels(true);
     setModelFetchError(null);
     setFilteredModels([]);
 
     try {
-      // Try to fetch from provider's live API first (force refresh to get latest)
       const response = await providerApi.getDynamicModels(providerId, { forceRefresh: true });
       const liveModels = response.models || [];
 
-      // Process models for the dropdown
       const processedModels = liveModels.map(model => ({
         ...model,
         id: model._id || model.id,
@@ -159,7 +318,6 @@ function FeatureCreatePage() {
         source: response.meta?.source || 'unknown'
       }));
 
-      // Sort by display name
       processedModels.sort((a, b) => {
         const nameA = a.displayName || a.name || '';
         const nameB = b.displayName || b.name || '';
@@ -169,7 +327,6 @@ function FeatureCreatePage() {
       setFilteredModels(processedModels);
       setModelSource(response.meta?.source || 'api');
 
-      // Auto-select the first model
       if (processedModels.length > 0) {
         const firstModel = processedModels[0];
         setFormData(prev => ({
@@ -191,17 +348,14 @@ function FeatureCreatePage() {
     }
   };
 
-  // Get the best model ID from filtered models (for highlighting in dropdown)
   const getBestModelId = () => {
     if (filteredModels.length === 0) return '';
 
-    // First try to find a recommended model
     const recommendedModel = filteredModels.find(m => m.isRecommended);
     if (recommendedModel) {
       return recommendedModel.isDatabaseModel ? recommendedModel._id : (recommendedModel.rawId || recommendedModel.id);
     }
 
-    // Otherwise, sort by context window (larger = more capable)
     const sortedModels = [...filteredModels].sort((a, b) => {
       const ctxA = a.capabilities?.contextWindow || 0;
       const ctxB = b.capabilities?.contextWindow || 0;
@@ -217,25 +371,45 @@ function FeatureCreatePage() {
     e.preventDefault();
     setError('');
 
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const newTouched = {};
+      Object.keys(errors).forEach(field => {
+        newTouched[field] = true;
+      });
+      setTouched(prev => ({ ...prev, ...newTouched }));
+
+      const firstErrorField = Object.keys(errors)[0];
+      const element = document.querySelector(`[name="${firstErrorField}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.focus();
+      }
+      return;
+    }
+
     if (!currentOrganization) {
       setError('No organization selected. Please select an organization first.');
       return;
     }
 
-    if (!formData.project) {
-      setError('Project/Product selection is required. Please select a project to link this feature.');
-      return;
-    }
-
-    if (!formData.name.trim()) {
-      setError('Feature name is required');
-      return;
+    try {
+      if (checkLimit && typeof checkLimit === 'function') {
+        const limitCheck = checkLimit('features', 1);
+        if (limitCheck && !limitCheck.allowed) {
+          setError(limitCheck.reason || 'Feature limit reached. Please upgrade your subscription to create more features.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.log('Subscription check not available, proceeding with backend validation');
     }
 
     setIsSubmitting(true);
 
     try {
-      // Find the selected model to get its details
       const selectedModel = filteredModels.find(m => (m.rawId || m.id) === formData.model);
 
       const featureData = {
@@ -244,7 +418,7 @@ function FeatureCreatePage() {
         category: formData.category || 'other',
         status: formData.status || 'active',
         organization: currentOrganization._id,
-        project: formData.project, // Required project reference
+        project: formData.project,
         provider: formData.provider || undefined,
         tokenEstimates: {
           inputTokensPerRequest: Number(formData.inputTokensPerRequest) || 0,
@@ -271,13 +445,10 @@ function FeatureCreatePage() {
         }
       };
 
-      // Handle model reference - use ObjectId for DB models, identifier for dynamic models
       if (selectedModel) {
         if (selectedModel.isDatabaseModel) {
-          // Database model - use ObjectId reference
           featureData.model = selectedModel.id;
         } else {
-          // Dynamic model - use identifier
           featureData.modelIdentifier = selectedModel.rawId || selectedModel.id;
           featureData.modelDisplayName = selectedModel.displayName || selectedModel.name;
           if (selectedModel.capabilities) {
@@ -295,11 +466,19 @@ function FeatureCreatePage() {
       }
     } catch (err) {
       console.error('Feature creation error:', err.response?.data);
+
+      if (isSubscriptionError(err)) {
+        const errorInfo = handleSubscriptionError(err);
+        if (errorInfo) {
+          setError(errorInfo.message);
+        }
+        return;
+      }
+
       const errorData = err.response?.data?.error;
       let errorMessage = 'Failed to create feature';
 
       if (errorData?.details && Array.isArray(errorData.details)) {
-        // Format validation errors
         errorMessage = errorData.details.map(e => `${e.field}: ${e.message}`).join(', ');
       } else if (errorData?.message) {
         errorMessage = errorData.message;
@@ -318,6 +497,7 @@ function FeatureCreatePage() {
       {/* Header */}
       <div className="mb-6">
         <button
+          type="button"
           onClick={() => navigate('/features')}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
@@ -332,14 +512,9 @@ function FeatureCreatePage() {
 
       {/* Error */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-sm">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+          <span className="text-sm">{error}</span>
+          <button type="button" onClick={() => setError('')} className="text-red-600 hover:text-red-800">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -349,8 +524,8 @@ function FeatureCreatePage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Project Selection - Required */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        {/* Project Selection */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Project / Product</h2>
             <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">Required</span>
@@ -361,13 +536,15 @@ function FeatureCreatePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Project / Product<span className="text-red-500">*</span>
+                Project / Product<span className="text-red-500 ml-1">*</span>
               </label>
               <select
                 name="project"
                 value={formData.project}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border rounded-md ${
+                  touched.project && fieldErrors.project ? 'border-red-500' : 'border-gray-300'
+                }`}
                 required
                 disabled={isLoadingProjects}
               >
@@ -380,58 +557,41 @@ function FeatureCreatePage() {
                   </option>
                 ))}
               </select>
+              {touched.project && fieldErrors.project && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.project}</p>
+              )}
               {projects.length === 0 && !isLoadingProjects && (
                 <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-amber-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm text-amber-700 font-medium">No projects available</p>
-                      <p className="text-xs text-amber-600 mt-1">
-                        You need to create a project first before adding features. Contact your organization owner to create a project.
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-sm text-amber-700">No projects available. Create a project first.</p>
                 </div>
-              )}
-              {formData.project && (
-                <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Project selected: {projects.find(p => p._id === formData.project)?.name}
-                </p>
               )}
             </div>
           </div>
         </div>
 
         {/* Basic Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InputField
+              name="name"
+              label="Feature Name"
+              required
+              maxLength={100}
+              placeholder="e.g., Chat Assistant, Image Generator"
+              value={formData.name}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.name}
+              touched={touched.name}
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Feature Name<span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                placeholder="e.g., Chat Assistant, Image Generator"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
               <select
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="chat">Chat</option>
                 <option value="completion">Completion</option>
@@ -443,27 +603,25 @@ function FeatureCreatePage() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Description
-              </label>
-              <textarea
+              <InputField
                 name="description"
+                label="Description"
+                maxLength={500}
+                placeholder="Brief description of this feature"
                 value={formData.description}
                 onChange={handleChange}
-                rows={2}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
-                placeholder="Brief description of this feature"
+                onBlur={handleBlur}
+                error={fieldErrors.description}
+                touched={touched.description}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 name="status"
                 value={formData.status}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -474,18 +632,16 @@ function FeatureCreatePage() {
         </div>
 
         {/* Model & Provider */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Model & Provider</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Provider
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
               <select
                 name="provider"
                 value={formData.provider}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="">Select Provider</option>
                 {providers.map(provider => (
@@ -501,14 +657,12 @@ function FeatureCreatePage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                AI Model
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
               <select
                 name="model"
                 value={formData.model}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100 disabled:cursor-not-allowed"
                 disabled={!formData.provider || isLoadingModels}
               >
                 <option value="">
@@ -531,192 +685,58 @@ function FeatureCreatePage() {
                   );
                 })}
               </select>
-
-              {/* Loading state */}
               {isLoadingModels && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-blue-600">
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Fetching latest models from provider API...</span>
-                </div>
+                <p className="mt-1 text-sm text-blue-600">Loading models...</p>
               )}
-
-              {/* Model source indicator */}
-              {!isLoadingModels && modelSource && (
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {(modelSource === 'api' || modelSource === 'database_fallback') && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        {modelSource === 'database_fallback' ? 'API + Database' : 'Live from API'}
-                      </span>
-                    )}
-                    {modelSource === 'database' && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
-                        </svg>
-                        From Database
-                      </span>
-                    )}
-                    {modelSource === 'hybrid' && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                        </svg>
-                        API + Database
-                      </span>
-                    )}
-                    {modelSource === 'error' && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                        </svg>
-                        Error
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-500">
-                      {filteredModels.length} model{filteredModels.length !== 1 ? 's' : ''} available
-                    </span>
-                  </div>
-                  {formData.provider && (
-                    <button
-                      type="button"
-                      onClick={() => fetchModels(formData.provider)}
-                      disabled={isLoadingModels}
-                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isLoadingModels ? 'Refreshing...' : 'Refresh'}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Error state */}
-              {modelFetchError && (
-                <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-red-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="flex-1">
-                      <p className="text-sm text-red-700">{modelFetchError}</p>
-                      <button
-                        type="button"
-                        onClick={() => formData.provider && fetchModels(formData.provider)}
-                        className="mt-2 text-sm text-red-600 hover:text-red-800 underline"
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Success state */}
-              {formData.provider && formData.model && !isLoadingModels && (
-                <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.isRecommended
-                    ? 'Recommended model selected'
-                    : 'Model selected'}
-                </p>
-              )}
-
-              {/* No provider selected */}
               {!formData.provider && (
-                <p className="mt-1 text-xs text-gray-500">Select a provider to see available models</p>
-              )}
-
-              {/* No models available */}
-              {formData.provider && !isLoadingModels && filteredModels.length === 0 && !modelFetchError && (
-                <p className="mt-1 text-xs text-amber-600">
-                  No models for this provider. <button type="button" onClick={() => navigate('/models')} className="underline">Create one</button>
-                </p>
+                <p className="mt-1 text-sm text-gray-500">Select a provider to see available models</p>
               )}
             </div>
           </div>
-          {formData.model && filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-sm text-gray-600 mb-2">Selected Model Pricing:</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <span className="text-xs text-gray-500">Input Price</span>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {currencySymbol}{(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.inputPrice || 0).toFixed(2)}/1M tokens
-                  </p>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <span className="text-xs text-gray-500">Output Price</span>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {currencySymbol}{(filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0).toFixed(2)}/1M tokens
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          {formData.model && !filteredModels.find(m => (m.rawId || m.id) === formData.model)?.pricing && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-sm text-amber-600 mb-2">
-                <svg className="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                Pricing not available for this model. Please configure pricing manually.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Token Estimates */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Token Estimates</h2>
           <p className="text-sm text-gray-500 mb-4">
             Estimate how many tokens each API request will consume. This is used for cost calculations.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <InputField
+              name="inputTokensPerRequest"
+              label="Input Tokens / Request"
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="e.g., 500"
+              helpText="Number of input tokens per request (max 15 digits)"
+              value={formData.inputTokensPerRequest}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.inputTokensPerRequest}
+              touched={touched.inputTokensPerRequest}
+            />
+            <InputField
+              name="outputTokensPerRequest"
+              label="Output Tokens / Request"
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="e.g., 1000"
+              helpText="Number of output tokens per request (max 15 digits)"
+              value={formData.outputTokensPerRequest}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.outputTokensPerRequest}
+              touched={touched.outputTokensPerRequest}
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Input Tokens / Request
-              </label>
-              <input
-                type="number"
-                name="inputTokensPerRequest"
-                value={formData.inputTokensPerRequest}
-                onChange={handleChange}
-                min="0"
-                placeholder="e.g., 500"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Output Tokens / Request
-              </label>
-              <input
-                type="number"
-                name="outputTokensPerRequest"
-                value={formData.outputTokensPerRequest}
-                onChange={handleChange}
-                min="0"
-                placeholder="e.g., 1000"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Calculation Method
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Calculation Method</label>
               <select
                 name="calculationMethod"
                 value={formData.calculationMethod}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="fixed">Fixed</option>
                 <option value="dynamic">Dynamic</option>
@@ -724,102 +744,78 @@ function FeatureCreatePage() {
               </select>
             </div>
             {formData.calculationMethod === 'dynamic' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dynamic Multiplier
-                </label>
-                <input
-                  type="number"
-                  name="dynamicMultiplier"
-                  value={formData.dynamicMultiplier}
-                  onChange={handleChange}
-                  min="0.1"
-                  step="0.1"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
+              <InputField
+                name="dynamicMultiplier"
+                label="Dynamic Multiplier"
+                type="number"
+                maxLength={15}
+                numericOnly
+                placeholder="1"
+                helpText="Multiplier value (max 15 digits)"
+                value={formData.dynamicMultiplier}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                error={fieldErrors.dynamicMultiplier}
+                touched={touched.dynamicMultiplier}
+              />
             )}
           </div>
-          {formData.inputTokensPerRequest > 0 && formData.outputTokensPerRequest > 0 && formData.model && filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-sm text-gray-600 mb-2">Estimated Cost per 1000 Requests:</p>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-[#DC2626]">
-                  {formatCurrencyWithSymbol(
-                    ((filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.inputPrice || 0) / 1000000) * formData.inputTokensPerRequest * 1000 +
-                    ((filteredModels.find(m => (m.isDatabaseModel ? m._id : (m.rawId || m.id)) === formData.model)?.pricing?.outputPrice || 0) / 1000000) * formData.outputTokensPerRequest * 1000,
-                    currency
-                  )}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formData.inputTokensPerRequest + formData.outputTokensPerRequest} tokens/request × 1000 requests
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Infrastructure Costs */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Infrastructure Costs (Optional)</h2>
           <p className="text-sm text-gray-500 mb-4">
             Additional costs beyond API token usage (e.g., server hosting, caching overhead).
           </p>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <InputField
+              name="fixedCostPerRequest"
+              label={`${getCurrencyLabel('Fixed Cost / Request', currency)}`}
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="1"
+              value={formData.fixedCostPerRequest}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.fixedCostPerRequest}
+              touched={touched.fixedCostPerRequest}
+            />
+            <InputField
+              name="overheadPercentage"
+              label="Overhead Percentage (%)"
+              type="number"
+              maxLength={3}
+              numericOnly
+              placeholder="10"
+              helpText="Value must be between 1 and 100"
+              value={formData.overheadPercentage}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.overheadPercentage}
+              touched={touched.overheadPercentage}
+            />
+            <InputField
+              name="monthlyFixedCost"
+              label={`${getCurrencyLabel('Monthly Fixed Cost', currency)}`}
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="100"
+              value={formData.monthlyFixedCost}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.monthlyFixedCost}
+              touched={touched.monthlyFixedCost}
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {getCurrencyLabel('Fixed Cost / Request', currency)}
-              </label>
-              <input
-                type="number"
-                name="fixedCostPerRequest"
-                value={formData.fixedCostPerRequest}
-                onChange={handleChange}
-                min="0"
-                step="0.00001"
-                placeholder="0.00001"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Overhead Percentage (%)
-              </label>
-              <input
-                type="number"
-                name="overheadPercentage"
-                value={formData.overheadPercentage}
-                onChange={handleChange}
-                min="0"
-                max="100"
-                placeholder="10"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {getCurrencyLabel('Monthly Fixed Cost', currency)}
-              </label>
-              <input
-                type="number"
-                name="monthlyFixedCost"
-                value={formData.monthlyFixedCost}
-                onChange={handleChange}
-                min="0"
-                step="0.01"
-                placeholder="100"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Infrastructure Type
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Infrastructure Type</label>
               <select
                 name="infrastructureType"
                 value={formData.infrastructureType}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
                 <option value="serverless">Serverless</option>
                 <option value="dedicated">Dedicated</option>
@@ -831,60 +827,56 @@ function FeatureCreatePage() {
         </div>
 
         {/* Usage Limits */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Usage Limits (Optional)</h2>
           <p className="text-sm text-gray-500 mb-4">
             Set limits on feature usage per user or per month.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Requests / User
-              </label>
-              <input
-                type="number"
-                name="maxRequestsPerUser"
-                value={formData.maxRequestsPerUser}
-                onChange={handleChange}
-                min="0"
-                placeholder="Unlimited"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <p className="mt-1 text-xs text-gray-500">Leave empty for unlimited</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Tokens / User
-              </label>
-              <input
-                type="number"
-                name="maxTokensPerUser"
-                value={formData.maxTokensPerUser}
-                onChange={handleChange}
-                min="0"
-                placeholder="Unlimited"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Max Requests / Month
-              </label>
-              <input
-                type="number"
-                name="maxRequestsPerMonth"
-                value={formData.maxRequestsPerMonth}
-                onChange={handleChange}
-                min="0"
-                placeholder="Unlimited"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
+            <InputField
+              name="maxRequestsPerUser"
+              label="Max Requests / User"
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="Unlimited"
+              value={formData.maxRequestsPerUser}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.maxRequestsPerUser}
+              touched={touched.maxRequestsPerUser}
+            />
+            <InputField
+              name="maxTokensPerUser"
+              label="Max Tokens / User"
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="Unlimited"
+              value={formData.maxTokensPerUser}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.maxTokensPerUser}
+              touched={touched.maxTokensPerUser}
+            />
+            <InputField
+              name="maxRequestsPerMonth"
+              label="Max Requests / Month"
+              type="number"
+              maxLength={15}
+              numericOnly
+              placeholder="Unlimited"
+              value={formData.maxRequestsPerMonth}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              error={fieldErrors.maxRequestsPerMonth}
+              touched={touched.maxRequestsPerMonth}
+            />
           </div>
         </div>
 
         {/* Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Settings</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
@@ -894,7 +886,7 @@ function FeatureCreatePage() {
                 id="enabled"
                 checked={formData.enabled}
                 onChange={handleChange}
-                className="w-4 h-4 text-[#DC2626] border-gray-300 rounded "
+                className="w-4 h-4 text-red-600 border-gray-300 rounded"
               />
               <label htmlFor="enabled" className="text-sm text-gray-700">
                 Feature Enabled
@@ -907,7 +899,7 @@ function FeatureCreatePage() {
                 id="requiresAuth"
                 checked={formData.requiresAuth}
                 onChange={handleChange}
-                className="w-4 h-4 text-[#DC2626] border-gray-300 rounded "
+                className="w-4 h-4 text-red-600 border-gray-300 rounded"
               />
               <label htmlFor="requiresAuth" className="text-sm text-gray-700">
                 Requires Authentication
@@ -920,26 +912,24 @@ function FeatureCreatePage() {
                 id="cacheEnabled"
                 checked={formData.cacheEnabled}
                 onChange={handleChange}
-                className="w-4 h-4 text-[#DC2626] border-gray-300 rounded "
+                className="w-4 h-4 text-red-600 border-gray-300 rounded"
               />
               <label htmlFor="cacheEnabled" className="text-sm text-gray-700">
                 Enable Response Caching
               </label>
             </div>
             {formData.cacheEnabled && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cache TTL (seconds)
-                </label>
-                <input
-                  type="number"
-                  name="cacheTTL"
-                  value={formData.cacheTTL}
-                  onChange={handleChange}
-                  min="0"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
+              <InputField
+                name="cacheTTL"
+                label="Cache TTL (seconds)"
+                type="number"
+                helpText="Time to live for cached responses (max 24 hours)"
+                value={formData.cacheTTL}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                error={fieldErrors.cacheTTL}
+                touched={touched.cacheTTL}
+              />
             )}
           </div>
         </div>
@@ -956,7 +946,7 @@ function FeatureCreatePage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Creating...' : 'Create Feature'}
           </button>

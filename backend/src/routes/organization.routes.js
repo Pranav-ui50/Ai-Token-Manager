@@ -7,6 +7,7 @@
 import express from 'express';
 import organizationController from '../controllers/organization.controller.js';
 import { protect, restrictTo, checkOrganization } from '../middlewares/auth.middleware.js';
+import { validateSubscription, checkResourceLimit } from '../middlewares/subscription.middleware.js';
 import {
   validateCreate,
   validateUpdate,
@@ -88,6 +89,8 @@ router.delete(
  */
 router.post(
   '/:id/invite',
+  validateSubscription,
+  checkResourceLimit('teamMembers', 1),
   validateInvite,
   checkOrganization('id'),
   organizationController.inviteMember
@@ -100,6 +103,8 @@ router.post(
  */
 router.post(
   '/:id/members',
+  validateSubscription,
+  checkResourceLimit('teamMembers', 1),
   validateAddMember,
   checkOrganization('id'),
   organizationController.addMember

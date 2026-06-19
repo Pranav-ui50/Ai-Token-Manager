@@ -142,8 +142,13 @@ const FeaturesPage = () => {
                   type="text"
                   placeholder="Search features..."
                   value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                  onChange={(e) => {
+                    if (e.target.value.length <= 200) {
+                      setFilters({ ...filters, search: e.target.value });
+                    }
+                  }}
+                  maxLength={200}
+                  className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200"
                 />
                 <button
                   type="submit"
@@ -287,16 +292,23 @@ const FeaturesPage = () => {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           to={`/features/${feature._id}`}
-                          className="text-[#DC2626] hover:text-[#B91C1C]"
+                          className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                          title="View feature"
                         >
-                          View
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
                         </Link>
                         {!isViewer && (
                         <button
                           onClick={() => handleDeleteClick(feature)}
-                          className="text-gray-500 hover:text-red-600"
+                          className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete feature"
                         >
-                          Delete
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
                         </button>
                         )}
                       </div>

@@ -8,6 +8,7 @@
 import { Router } from 'express';
 import billingController from '../controllers/billing.controller.js';
 import { protect, requirePermissions, checkOrganization } from '../middlewares/auth.middleware.js';
+import { validateSubscription, validateDowngrade, attachSubscriptionContext } from '../middlewares/subscription.middleware.js';
 import validate from '../middlewares/validation.middleware.js';
 import {
   validateUpdateSubscription,
@@ -24,6 +25,9 @@ const router = Router();
 
 // All billing routes require authentication
 router.use(protect);
+
+// Attach subscription context to all billing routes
+router.use(attachSubscriptionContext);
 
 // ==========================================
 // Organization Billing Routes
@@ -57,6 +61,7 @@ router.get('/:organizationId/available-plans',
  */
 router.post('/:organizationId/validate-change',
   requirePermissions('view_billing'),
+  validateDowngrade,
   billingController.validatePlanChange
 );
 
@@ -67,6 +72,7 @@ router.post('/:organizationId/validate-change',
  */
 router.post('/:organizationId/change-plan',
   requirePermissions('manage_billing'),
+  validateDowngrade,
   billingController.changePlan
 );
 

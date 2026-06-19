@@ -18,6 +18,7 @@ const connectDB = async () => {
     // Enhanced timeout options for cPanel/shared hosting environments
     const connectionOptions = {
       ...config.mongodb.options,
+      dbName: config.mongodb.dbName, // Explicitly set database name
       serverSelectionTimeoutMS: 5000,  // Fail fast if MongoDB unreachable (5 seconds)
       connectTimeoutMS: 10000,          // Connection timeout (10 seconds)
       socketTimeoutMS: 45000,           // Socket timeout

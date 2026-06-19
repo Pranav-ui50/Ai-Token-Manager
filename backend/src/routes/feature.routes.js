@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import featureController from '../controllers/feature.controller.js';
 import { protect, restrictTo } from '../middlewares/auth.middleware.js';
+import { validateSubscription, checkResourceLimit } from '../middlewares/subscription.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import { featureValidators } from '../validators/feature.validators.js';
 import { ROLES } from '../utils/constants.js';
@@ -28,6 +29,8 @@ router.use(protect);
 router.post(
   '/',
   restrictTo(ROLES.SUPER_ADMIN, ROLES.ORG_OWNER, ROLES.PRODUCT_MANAGER),
+  validateSubscription,
+  checkResourceLimit('features', 1),
   validate(featureValidators.create),
   featureController.createFeature
 );

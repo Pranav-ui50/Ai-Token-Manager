@@ -32,7 +32,12 @@ const connectDB = async () => {
       process.exit(1);
     }
 
-    const conn = await mongoose.connect(mongoUri, config.mongodb.options);
+    const connectionOptions = {
+      ...config.mongodb.options,
+      dbName: config.mongodb.dbName, // Explicitly set database name
+    };
+
+    const conn = await mongoose.connect(mongoUri, connectionOptions);
     logger.info(`MongoDB Connected: ${conn.connection.host}`);
     logger.info(`Database: ${conn.connection.name}`);
     return conn;

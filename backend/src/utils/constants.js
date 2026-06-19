@@ -167,7 +167,8 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_ANALYTICS,
     PERMISSIONS.VIEW_DASHBOARD,
     PERMISSIONS.VIEW_REPORTS,
-    PERMISSIONS.EXPORT_REPORTS
+    PERMISSIONS.EXPORT_REPORTS,
+    PERMISSIONS.VIEW_BILLING     // Added for subscription context
   ],
 
   // Developer - Manages integrations and APIs

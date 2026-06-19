@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import projectController from '../controllers/project.controller.js';
 import { protect, requirePermissions, checkOrganization } from '../middlewares/auth.middleware.js';
+import { validateSubscription, checkResourceLimit } from '../middlewares/subscription.middleware.js';
 import { projectValidator } from '../validators/project.validator.js';
 
 const router = Router();
@@ -21,6 +22,8 @@ router.use(protect);
  */
 router.post('/',
   requirePermissions('manage_features'),
+  validateSubscription,
+  checkResourceLimit('projects', 1),
   projectValidator.create,
   projectController.create
 );

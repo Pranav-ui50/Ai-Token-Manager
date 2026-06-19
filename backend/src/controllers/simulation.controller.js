@@ -32,6 +32,17 @@ class SimulationController {
         data: simulation
       });
     } catch (error) {
+      // Provide clear error message for limit exceeded
+      if (error.code === 'LIMIT_EXCEEDED') {
+        const limit = error.details?.limit;
+        const current = error.details?.current;
+        throw new AppError(
+          `Simulation limit reached. Your current plan allows only ${limit} simulations. You currently have ${current} simulations. Please upgrade your subscription or delete existing simulations to continue.`,
+          403,
+          'SIMULATION_LIMIT_EXCEEDED',
+          { limit, current }
+        );
+      }
       next(error);
     }
   }
@@ -190,6 +201,12 @@ class SimulationController {
     try {
       const { id } = req.params;
       const userId = req.user.userId;
+      const organizationId = req.user.organization;
+
+      // Check simulation limit before duplicating
+      if (organizationId) {
+        await limitService.validateLimit(organizationId, 'simulations', 1);
+      }
 
       const simulation = await simulationService.duplicate(id, userId);
 
@@ -199,6 +216,17 @@ class SimulationController {
         data: simulation
       });
     } catch (error) {
+      // Provide clear error message for limit exceeded
+      if (error.code === 'LIMIT_EXCEEDED') {
+        const limit = error.details?.limit;
+        const current = error.details?.current;
+        throw new AppError(
+          `Simulation limit reached. Your current plan allows only ${limit} simulations. You currently have ${current} simulations. Please upgrade your subscription or delete existing simulations to continue.`,
+          403,
+          'SIMULATION_LIMIT_EXCEEDED',
+          { limit, current }
+        );
+      }
       next(error);
     }
   }

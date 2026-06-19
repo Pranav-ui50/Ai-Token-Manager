@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import simulationController from '../controllers/simulation.controller.js';
 import { protect, requirePermissions } from '../middlewares/auth.middleware.js';
+import { validateSubscription, checkResourceLimit } from '../middlewares/subscription.middleware.js';
 import { validate } from '../middlewares/validation.middleware.js';
 import { body, param, query } from 'express-validator';
 
@@ -81,6 +82,8 @@ router.post('/compare',
  */
 router.post('/',
   requirePermissions('run_simulations'),
+  validateSubscription,
+  checkResourceLimit('simulations', 1),
   [
     body('organizationId')
       .isMongoId()
@@ -178,6 +181,8 @@ router.post('/:id/run',
  */
 router.post('/:id/duplicate',
   requirePermissions('run_simulations'),
+  validateSubscription,
+  checkResourceLimit('simulations', 1),
   [
     param('id').isMongoId().withMessage('Invalid simulation ID'),
     validate

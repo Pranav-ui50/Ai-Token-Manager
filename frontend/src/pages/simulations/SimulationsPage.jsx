@@ -7,11 +7,13 @@
 import Loader from '../../components/common/Loader.jsx';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useSubscription } from '../../context/SubscriptionContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
 import simulationApi from '../../services/api/simulation.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
 import ForecastCharts from '../../components/simulations/ForecastCharts.jsx';
 import { showToast } from '../../utils/toasts.js';
+import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.js';
 
 const SIMULATION_TYPES = [
   { value: 'growth', label: 'User Growth Scenario', description: 'Model user growth and token usage projections' },
@@ -24,6 +26,7 @@ const SIMULATION_TYPES = [
 function SimulationsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { canRunSimulations, canViewSimulations, role } = usePermissions();
+  const { checkLimit, subscription } = useSubscription();
   const isViewer = role === 'viewer';
   const [simulations, setSimulations] = useState([]);
   const [statistics, setStatistics] = useState(null);
@@ -140,6 +143,28 @@ function SimulationsPage() {
       return;
     }
 
+    // Check subscription limits before creating
+    try {
+      if (checkLimit && typeof checkLimit === 'function') {
+        const limitCheck = checkLimit('simulations', 1);
+        if (limitCheck && !limitCheck.allowed) {
+          showToast.error(limitCheck.reason || 'Simulation limit reached. Please upgrade your subscription to create more simulations.', {
+            action: {
+              label: 'Upgrade',
+              onClick: () => {
+                window.location.href = '/subscription';
+              }
+            }
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      // If limit check fails (subscription context not available), proceed with creation
+      // The backend will validate limits
+      console.log('Subscription check not available, proceeding with backend validation');
+    }
+
     try {
       const simulation = await simulationApi.create({
         organizationId: orgId,
@@ -181,6 +206,11 @@ function SimulationsPage() {
       // Refresh statistics after creating
       fetchStatistics();
     } catch (err) {
+      // Handle subscription limit errors specifically
+      if (isSubscriptionError(err)) {
+        handleSubscriptionError(err);
+        return;
+      }
       showToast.error(err.response?.data?.error?.message || 'Failed to create simulation');
     }
   };
@@ -243,6 +273,28 @@ function SimulationsPage() {
   };
 
   const handleDuplicateSimulation = async (simulation) => {
+    // Check subscription limits before duplicating
+    try {
+      if (checkLimit && typeof checkLimit === 'function') {
+        const limitCheck = checkLimit('simulations', 1);
+        if (limitCheck && !limitCheck.allowed) {
+          showToast.error(limitCheck.reason || 'Simulation limit reached. Please upgrade your subscription to create more simulations.', {
+            action: {
+              label: 'Upgrade',
+              onClick: () => {
+                window.location.href = '/subscription';
+              }
+            }
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      // If limit check fails (subscription context not available), proceed with duplication
+      // The backend will validate limits
+      console.log('Subscription check not available, proceeding with backend validation');
+    }
+
     try {
       const duplicate = await simulationApi.duplicate(simulation._id);
       setSimulations(prev => [duplicate, ...prev]);
@@ -251,6 +303,13 @@ function SimulationsPage() {
       fetchStatistics();
     } catch (err) {
       console.error('Duplicate simulation error:', err);
+
+      // Handle subscription limit errors specifically
+      if (isSubscriptionError(err)) {
+        handleSubscriptionError(err);
+        return;
+      }
+
       showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to duplicate simulation');
     }
   };

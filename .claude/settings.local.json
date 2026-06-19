@@ -163,7 +163,8 @@
       "Bash(node -c src/services/limitEnforcement.service.js)",
       "Bash(node -c src/services/subscription.service.js)",
       "Bash(node --check src/services/limitEnforcement.service.js)",
-      "Bash(node --check src/services/subscription.service.js)"
+      "Bash(node --check src/services/subscription.service.js)",
+      "Bash(grep -E \"\\\\.\\(jsx|tsx|js|ts\\)$\")"
     ]
   }
 }

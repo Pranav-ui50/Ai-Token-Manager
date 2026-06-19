@@ -92,7 +92,16 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Log error in development
+    // Handle 403 Forbidden for billing endpoints silently (expected for superadmins)
+    const isBillingEndpoint = originalRequest?.url?.includes('/billing');
+    const is403Forbidden = error.response?.status === 403;
+
+    if (isBillingEndpoint && is403Forbidden) {
+      // Return empty data instead of rejecting
+      return { data: null };
+    }
+
+    // Log error in development (except 403 Forbidden for billing endpoints)
     if (import.meta.env.DEV) {
       console.error('[API] Error:', {
         url: originalRequest?.url,

@@ -63,6 +63,17 @@ class FeatureController {
         data: { feature }
       });
     } catch (error) {
+      // Provide clear error message for limit exceeded
+      if (error.code === 'LIMIT_EXCEEDED') {
+        const limit = error.details?.limit;
+        const current = error.details?.current;
+        throw new AppError(
+          `Feature limit reached. Your current plan allows only ${limit} features. You currently have ${current} features. Please upgrade your subscription or remove existing features to continue.`,
+          403,
+          'FEATURE_LIMIT_EXCEEDED',
+          { limit, current }
+        );
+      }
       next(error);
     }
   }

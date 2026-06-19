@@ -211,8 +211,13 @@ function TokenEstimatesPage() {
             type="text"
             placeholder="Search features..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+            onChange={(e) => {
+              if (e.target.value.length <= 200) {
+                setSearchTerm(e.target.value);
+              }
+            }}
+            maxLength={200}
+            className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200"
           />
         </div>
       </div>
@@ -336,9 +341,12 @@ function TokenEstimatesPage() {
                         ) : (
                           <button
                             onClick={() => handleEdit(feature)}
-                            className="text-[#DC2626] hover:text-[#B91C1C] text-sm font-medium transition-colors"
+                            className="text-purple-600 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors"
+                            title="Edit token estimates"
                           >
-                            Edit
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
                           </button>
                         )}
                       </td>
@@ -433,9 +441,12 @@ function TokenEstimatesPage() {
                         </div>
                         <button
                           onClick={() => handleEdit(feature)}
-                          className="text-[#DC2626] hover:text-[#B91C1C] text-sm font-medium transition-colors"
+                          className="text-purple-600 hover:text-purple-700 p-2 rounded-lg hover:bg-purple-50 transition-colors"
+                          title="Edit token estimates"
                         >
-                          Edit
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
                         </button>
                       </div>
                     </>

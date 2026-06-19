@@ -224,8 +224,13 @@ function FeatureCostPage() {
             type="text"
             placeholder="Search features or models..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+            onChange={(e) => {
+              if (e.target.value.length <= 200) {
+                setSearchTerm(e.target.value);
+              }
+            }}
+            maxLength={200}
+            className="w-full pl-9 sm:pl-10 pr-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200"
           />
         </div>
       </div>
@@ -370,8 +375,8 @@ function FeatureCostPage() {
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right">
                           <Link
                             to={`/features/${feature._id}`}
-                            className="text-[#DC2626] hover:text-[#B91C1C] p-1.5 rounded-lg hover:bg-red-50 transition-colors inline-flex items-center justify-center"
-                            title="View Details"
+                            className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors inline-flex items-center justify-center"
+                            title="View details"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
