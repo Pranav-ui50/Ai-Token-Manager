@@ -14,13 +14,17 @@ import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
+import usePermissions from '../../hooks/usePermissions.js';
 import { useProjectCurrency } from '../../hooks/useProjectCurrency.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
+import { showToast } from '../../utils/toasts.js';
 
 function ProjectDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentOrganization } = useOrganization();
+  const { role } = usePermissions();
+  const isViewer = role === 'viewer';
   const { currency, currencySymbol } = useProjectCurrency();
   const [project, setProject] = useState(null);
   const [stats, setStats] = useState(null);
@@ -28,7 +32,6 @@ function ProjectDetailPage() {
   const [featuresLoading, setFeaturesLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
@@ -55,14 +58,14 @@ function ProjectDetailPage() {
     model: '',
     provider: '',
     // Token estimates
-    inputTokensPerRequest: 0,
-    outputTokensPerRequest: 0,
+    inputTokensPerRequest: '',
+    outputTokensPerRequest: '',
     calculationMethod: 'fixed',
-    dynamicMultiplier: 1,
+    dynamicMultiplier: '',
     // Infrastructure costs
-    fixedCostPerRequest: 0,
-    overheadPercentage: 0,
-    monthlyFixedCost: 0,
+    fixedCostPerRequest: '',
+    overheadPercentage: '',
+    monthlyFixedCost: '',
     infrastructureType: 'serverless',
     // Limits
     maxRequestsPerUser: '',
@@ -72,8 +75,108 @@ function ProjectDetailPage() {
     enabled: true,
     requiresAuth: true,
     cacheEnabled: false,
-    cacheTTL: 3600
+    cacheTTL: ''
   });
+
+  // Form validation errors
+  const [formErrors, setFormErrors] = useState({});
+
+  // Validation helper functions
+  const validateField = (name, value) => {
+    let error = '';
+
+    switch (name) {
+      case 'name':
+        if (!value.trim()) {
+          error = 'Feature name is required';
+        } else if (value.length > 100) {
+          error = 'Feature name must be 100 characters or less';
+        } else if (/[<>{}]/.test(value)) {
+          error = 'HTML tags are not allowed';
+        }
+        break;
+
+      case 'description':
+        if (value.length > 500) {
+          error = 'Description must be 500 characters or less';
+        } else if (/[<>{}]/.test(value)) {
+          error = 'HTML tags are not allowed';
+        }
+        break;
+
+      case 'inputTokensPerRequest':
+      case 'outputTokensPerRequest':
+      case 'maxRequestsPerUser':
+      case 'maxTokensPerUser':
+      case 'maxRequestsPerMonth':
+        if (value && !/^\d+$/.test(value)) {
+          error = 'Please enter a valid number';
+        } else if (value && parseInt(value) > 999999999999999) {
+          error = 'Number is too large';
+        }
+        break;
+
+      case 'fixedCostPerRequest':
+      case 'monthlyFixedCost':
+        if (value && !/^\d*\.?\d*$/.test(value)) {
+          error = 'Please enter a valid number';
+        } else if (value && parseFloat(value) > 999999999) {
+          error = 'Amount is too large';
+        }
+        break;
+
+      case 'overheadPercentage':
+        if (value && !/^\d*\.?\d*$/.test(value)) {
+          error = 'Please enter a valid number';
+        } else if (value && (parseFloat(value) < 0 || parseFloat(value) > 100)) {
+          error = 'Percentage must be between 0 and 100';
+        }
+        break;
+
+      case 'dynamicMultiplier':
+        if (value && !/^\d*\.?\d*$/.test(value)) {
+          error = 'Please enter a valid number';
+        } else if (value && parseFloat(value) < 0.1) {
+          error = 'Multiplier must be at least 0.1';
+        }
+        break;
+
+      case 'cacheTTL':
+        if (value && !/^\d+$/.test(value)) {
+          error = 'Please enter a valid number';
+        } else if (value && parseInt(value) < 0) {
+          error = 'TTL must be 0 or greater';
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    setFormErrors(prev => ({ ...prev, [name]: error }));
+    return error;
+  };
+
+  const handleFieldChange = (name, value) => {
+    setFeatureForm(prev => ({ ...prev, [name]: value }));
+    validateField(name, value);
+  };
+
+  const handleNumberFieldChange = (name, value) => {
+    // Allow empty string, digits, and decimal point (for cost fields)
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setFeatureForm(prev => ({ ...prev, [name]: value }));
+      validateField(name, value);
+    }
+  };
+
+  const handleIntegerFieldChange = (name, value) => {
+    // Allow empty string and positive integers only
+    if (value === '' || /^\d+$/.test(value)) {
+      setFeatureForm(prev => ({ ...prev, [name]: value }));
+      validateField(name, value);
+    }
+  };
 
   // Available models and providers (would come from API in real app)
   const [models, setModels] = useState([]);
@@ -176,10 +279,9 @@ function ProjectDetailPage() {
 
   const handleUpdateProject = async (e) => {
     e.preventDefault();
-    setError('');
 
     if (!formData.name.trim()) {
-      setError('Project name is required');
+      showToast.error('Project name is required');
       return;
     }
 
@@ -187,18 +289,19 @@ function ProjectDetailPage() {
       const updatedProject = await projectApi.update(id, formData);
       setProject(updatedProject);
       setShowEditModal(false);
-      setSuccess('Project updated successfully');
+      showToast.success('Project updated successfully');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update project');
+      showToast.error(err.response?.data?.message || 'Failed to update project');
     }
   };
 
   const handleDeleteProject = async () => {
     try {
       await projectApi.delete(id);
-      navigate('/projects', { state: { message: 'Project deleted successfully' } });
+      showToast.success('Project deleted successfully');
+      navigate('/projects');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete project');
+      showToast.error(err.response?.data?.message || 'Failed to delete project');
       setShowDeleteModal(false);
     }
   };
@@ -208,14 +311,14 @@ function ProjectDetailPage() {
       if (project.isActive === false) {
         await projectApi.restore(id);
         setProject({ ...project, isActive: true });
-        setSuccess('Project activated successfully');
+        showToast.success('Project activated successfully');
       } else {
         await projectApi.archive(id);
         setProject({ ...project, isActive: false });
-        setSuccess('Project deactivated successfully');
+        showToast.success('Project deactivated successfully');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update project status');
+      showToast.error(err.response?.data?.message || 'Failed to update project status');
     }
   };
 
@@ -296,7 +399,8 @@ function ProjectDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Status Dropdown */}
+          {/* Status Dropdown - Hidden for viewers */}
+          {!isViewer && (
           <div className="relative" ref={statusDropdownRef}>
             <button
               onClick={() => setShowStatusDropdown(!showStatusDropdown)}
@@ -355,6 +459,8 @@ function ProjectDetailPage() {
               </div>
             )}
           </div>
+          )}
+          {!isViewer && (
           <button
             onClick={() => setShowEditModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
@@ -364,6 +470,8 @@ function ProjectDetailPage() {
             </svg>
             <span>Edit</span>
           </button>
+          )}
+          {!isViewer && (
           <button
             onClick={() => setShowDeleteModal(true)}
             className="inline-flex items-center gap-2 px-3 py-2 text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
@@ -373,10 +481,11 @@ function ProjectDetailPage() {
             </svg>
             <span>Delete</span>
           </button>
+          )}
         </div>
       </div>
 
-      {/* Error/Success Messages */}
+      {/* Error Messages */}
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -386,22 +495,6 @@ function ProjectDetailPage() {
             <span className="text-sm">{error}</span>
           </div>
           <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm">{success}</span>
-          </div>
-          <button onClick={() => setSuccess('')} className="text-green-600 hover:text-green-800">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -501,12 +594,9 @@ function ProjectDetailPage() {
             {project.organization && (
               <div className="flex justify-between items-center py-2">
                 <span className="text-sm text-gray-500">Organization</span>
-                <RouterLink
-                  to={`/organizations/${project.organization._id || project.organization}`}
-                  className="text-sm font-medium text-[#DC2626] hover:underline"
-                >
-                  {project.organization.name || 'View Organization'}
-                </RouterLink>
+                <span className="text-sm font-medium text-gray-900">
+                  {project.organization.name || 'Unknown'}
+                </span>
               </div>
             )}
           </div>
@@ -561,6 +651,7 @@ function ProjectDetailPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Features</h2>
+          {!isViewer && (
           <button
             onClick={() => {
               if (!currentOrganization) {
@@ -577,6 +668,7 @@ function ProjectDetailPage() {
             </svg>
             <span>Add Feature</span>
           </button>
+          )}
         </div>
 
         {featuresLoading ? (
@@ -656,7 +748,10 @@ function ProjectDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
               </svg>
             </div>
-            <p className="text-gray-500 text-sm mb-4">No features in this project yet</p>
+            <p className="text-gray-500 text-sm mb-4">
+              {isViewer ? 'No features in this project' : 'No features in this project yet'}
+            </p>
+            {!isViewer && (
             <button
               onClick={() => setShowFeatureModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
@@ -666,6 +761,7 @@ function ProjectDetailPage() {
               </svg>
               <span>Add First Feature</span>
             </button>
+            )}
           </div>
         )}
       </div>
@@ -690,27 +786,31 @@ function ProjectDetailPage() {
       >
         <form onSubmit={handleUpdateProject} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Project Name<span className="text-red-500">*</span></label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Project Name<span className="text-red-500">*</span></label>
+              <span className="text-xs text-gray-400">{formData.name.length}/100</span>
+            </div>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               maxLength={100}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               placeholder="Enter project name"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <span className="text-xs text-gray-400">{formData.description.length}/500</span>
+            </div>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              maxLength={300}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
+              maxLength={500}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
               placeholder="Brief description of the project"
             />
           </div>
@@ -726,7 +826,7 @@ function ProjectDetailPage() {
                   ...formData,
                   settings: { ...formData.settings, currency: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
@@ -747,7 +847,7 @@ function ProjectDetailPage() {
                   ...formData,
                   settings: { ...formData.settings, timezone: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 <option value="UTC">UTC</option>
                 <option value="America/New_York">Eastern Time (ET)</option>
@@ -778,7 +878,7 @@ function ProjectDetailPage() {
                 ...formData,
                 settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(e.target.value) || 0 }
               })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               placeholder="0.00"
               min="0"
               step="0.01"
@@ -855,13 +955,13 @@ function ProjectDetailPage() {
             status: 'active',
             model: '',
             provider: '',
-            inputTokensPerRequest: 0,
-            outputTokensPerRequest: 0,
+            inputTokensPerRequest: '',
+            outputTokensPerRequest: '',
             calculationMethod: 'fixed',
-            dynamicMultiplier: 1,
-            fixedCostPerRequest: 0,
-            overheadPercentage: 0,
-            monthlyFixedCost: 0,
+            dynamicMultiplier: '',
+            fixedCostPerRequest: '',
+            overheadPercentage: '',
+            monthlyFixedCost: '',
             infrastructureType: 'serverless',
             maxRequestsPerUser: '',
             maxTokensPerUser: '',
@@ -869,8 +969,9 @@ function ProjectDetailPage() {
             enabled: true,
             requiresAuth: true,
             cacheEnabled: false,
-            cacheTTL: 3600
+            cacheTTL: ''
           });
+          setFormErrors({});
         }}
         title="Add Feature to Project"
         size="2xl"
@@ -884,8 +985,25 @@ function ProjectDetailPage() {
             return;
           }
 
+          // Validate all fields
+          const errors = {};
           if (!featureForm.name.trim()) {
-            setError('Feature name is required');
+            errors.name = 'Feature name is required';
+          } else if (featureForm.name.length > 100) {
+            errors.name = 'Feature name must be 100 characters or less';
+          } else if (/[<>{}]/.test(featureForm.name)) {
+            errors.name = 'HTML tags are not allowed';
+          }
+
+          if (featureForm.description.length > 500) {
+            errors.description = 'Description must be 500 characters or less';
+          } else if (/[<>{}]/.test(featureForm.description)) {
+            errors.description = 'HTML tags are not allowed';
+          }
+
+          // Check for validation errors
+          if (Object.keys(errors).length > 0 || Object.values(formErrors).some(err => err)) {
+            setFormErrors({ ...errors, ...formErrors });
             return;
           }
 
@@ -900,15 +1018,15 @@ function ProjectDetailPage() {
               model: featureForm.model || undefined,
               provider: featureForm.provider || undefined,
               tokenEstimates: {
-                inputTokensPerRequest: Number(featureForm.inputTokensPerRequest) || 0,
-                outputTokensPerRequest: Number(featureForm.outputTokensPerRequest) || 0,
+                inputTokensPerRequest: featureForm.inputTokensPerRequest ? Number(featureForm.inputTokensPerRequest) : 0,
+                outputTokensPerRequest: featureForm.outputTokensPerRequest ? Number(featureForm.outputTokensPerRequest) : 0,
                 calculationMethod: featureForm.calculationMethod,
-                dynamicMultiplier: Number(featureForm.dynamicMultiplier) || 1
+                dynamicMultiplier: featureForm.dynamicMultiplier ? Number(featureForm.dynamicMultiplier) : 1
               },
               infrastructureCost: {
-                fixedCostPerRequest: Number(featureForm.fixedCostPerRequest) || 0,
-                overheadPercentage: Number(featureForm.overheadPercentage) || 0,
-                monthlyFixedCost: Number(featureForm.monthlyFixedCost) || 0,
+                fixedCostPerRequest: featureForm.fixedCostPerRequest ? Number(featureForm.fixedCostPerRequest) : 0,
+                overheadPercentage: featureForm.overheadPercentage ? Number(featureForm.overheadPercentage) : 0,
+                monthlyFixedCost: featureForm.monthlyFixedCost ? Number(featureForm.monthlyFixedCost) : 0,
                 infrastructureType: featureForm.infrastructureType
               },
               limits: {
@@ -920,12 +1038,12 @@ function ProjectDetailPage() {
                 enabled: featureForm.enabled,
                 requiresAuth: featureForm.requiresAuth,
                 cacheEnabled: featureForm.cacheEnabled,
-                cacheTTL: Number(featureForm.cacheTTL) || 3600
+                cacheTTL: featureForm.cacheTTL ? Number(featureForm.cacheTTL) : 3600
               }
             };
 
             await featureApi.create(featureData);
-            setSuccess('Feature created successfully');
+            showToast.success('Feature created successfully');
             setShowFeatureModal(false);
             setFeatureForm({
               name: '',
@@ -934,13 +1052,13 @@ function ProjectDetailPage() {
               status: 'active',
               model: '',
               provider: '',
-              inputTokensPerRequest: 0,
-              outputTokensPerRequest: 0,
+              inputTokensPerRequest: '',
+              outputTokensPerRequest: '',
               calculationMethod: 'fixed',
-              dynamicMultiplier: 1,
-              fixedCostPerRequest: 0,
-              overheadPercentage: 0,
-              monthlyFixedCost: 0,
+              dynamicMultiplier: '',
+              fixedCostPerRequest: '',
+              overheadPercentage: '',
+              monthlyFixedCost: '',
               infrastructureType: 'serverless',
               maxRequestsPerUser: '',
               maxTokensPerUser: '',
@@ -948,8 +1066,9 @@ function ProjectDetailPage() {
               enabled: true,
               requiresAuth: true,
               cacheEnabled: false,
-              cacheTTL: 3600
+              cacheTTL: ''
             });
+            setFormErrors({});
             fetchFeatures();
           } catch (err) {
             const errorData = err.response?.data?.error;
@@ -964,7 +1083,7 @@ function ProjectDetailPage() {
             setError(errorMessage);
           }
         }}>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          <div className="space-y-4">
             {/* Error display */}
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
@@ -987,22 +1106,27 @@ function ProjectDetailPage() {
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Basic Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Feature Name <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Feature Name <span className="text-red-500">*</span>
+                    <span className="text-xs text-gray-400 ml-2">({featureForm.name.length}/100)</span>
+                  </label>
                   <input
                     type="text"
                     value={featureForm.name}
-                    onChange={(e) => setFeatureForm({ ...featureForm, name: e.target.value })}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
                     maxLength={100}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent`}
                     placeholder="e.g., Chat Assistant"
-                    required
                   />
+                  {formErrors.name && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select
                     value={featureForm.category}
-                    onChange={(e) => setFeatureForm({ ...featureForm, category: e.target.value })}
+                    onChange={(e) => handleFieldChange('category', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
                     <option value="chat">Chat</option>
@@ -1015,21 +1139,27 @@ function ProjectDetailPage() {
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                    <span className="text-xs text-gray-400 ml-2">({featureForm.description.length}/500)</span>
+                  </label>
                   <textarea
                     value={featureForm.description}
-                    onChange={(e) => setFeatureForm({ ...featureForm, description: e.target.value })}
+                    onChange={(e) => handleFieldChange('description', e.target.value)}
                     rows={2}
                     maxLength={500}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                    className={`w-full px-3 py-2 border ${formErrors.description ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent resize-none`}
                     placeholder="Brief description of this feature"
                   />
+                  {formErrors.description && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.description}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={featureForm.status}
-                    onChange={(e) => setFeatureForm({ ...featureForm, status: e.target.value })}
+                    onChange={(e) => handleFieldChange('status', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
                     <option value="active">Active</option>
@@ -1180,30 +1310,34 @@ function ProjectDetailPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Input Tokens / Request</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.inputTokensPerRequest}
-                    onChange={(e) => setFeatureForm({ ...featureForm, inputTokensPerRequest: e.target.value })}
-                    min="0"
-                    placeholder="500"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleIntegerFieldChange('inputTokensPerRequest', e.target.value)}
+                    placeholder="e.g., 500"
+                    className={`w-full px-3 py-2 border ${formErrors.inputTokensPerRequest ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.inputTokensPerRequest && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.inputTokensPerRequest}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Output Tokens / Request</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.outputTokensPerRequest}
-                    onChange={(e) => setFeatureForm({ ...featureForm, outputTokensPerRequest: e.target.value })}
-                    min="0"
-                    placeholder="200"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleIntegerFieldChange('outputTokensPerRequest', e.target.value)}
+                    placeholder="e.g., 200"
+                    className={`w-full px-3 py-2 border ${formErrors.outputTokensPerRequest ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.outputTokensPerRequest && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.outputTokensPerRequest}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Calculation Method</label>
                   <select
                     value={featureForm.calculationMethod}
-                    onChange={(e) => setFeatureForm({ ...featureForm, calculationMethod: e.target.value })}
+                    onChange={(e) => handleFieldChange('calculationMethod', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
                     <option value="fixed">Fixed</option>
@@ -1216,13 +1350,15 @@ function ProjectDetailPage() {
                 <div className="mt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Dynamic Multiplier</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.dynamicMultiplier}
-                    onChange={(e) => setFeatureForm({ ...featureForm, dynamicMultiplier: e.target.value })}
-                    min="0.1"
-                    step="0.1"
-                    className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleNumberFieldChange('dynamicMultiplier', e.target.value)}
+                    placeholder="e.g., 1.5"
+                    className={`w-full md:w-1/3 px-3 py-2 border ${formErrors.dynamicMultiplier ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.dynamicMultiplier && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.dynamicMultiplier}</p>
+                  )}
                 </div>
               )}
               {featureForm.inputTokensPerRequest > 0 && featureForm.outputTokensPerRequest > 0 && featureForm.model && (
@@ -1251,44 +1387,47 @@ function ProjectDetailPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{getCurrencyLabel('Fixed Cost/Req', currency)}</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.fixedCostPerRequest}
-                    onChange={(e) => setFeatureForm({ ...featureForm, fixedCostPerRequest: e.target.value })}
-                    min="0"
-                    step="0.00001"
-                    placeholder="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleNumberFieldChange('fixedCostPerRequest', e.target.value)}
+                    placeholder="e.g., 0.0001"
+                    className={`w-full px-3 py-2 border ${formErrors.fixedCostPerRequest ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.fixedCostPerRequest && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.fixedCostPerRequest}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Overhead (%)</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.overheadPercentage}
-                    onChange={(e) => setFeatureForm({ ...featureForm, overheadPercentage: e.target.value })}
-                    min="0"
-                    max="100"
-                    placeholder="10"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleNumberFieldChange('overheadPercentage', e.target.value)}
+                    placeholder="e.g., 10"
+                    className={`w-full px-3 py-2 border ${formErrors.overheadPercentage ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.overheadPercentage && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.overheadPercentage}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{getCurrencyLabel('Monthly Fixed', currency)}</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.monthlyFixedCost}
-                    onChange={(e) => setFeatureForm({ ...featureForm, monthlyFixedCost: e.target.value })}
-                    min="0"
-                    step="0.01"
-                    placeholder="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    onChange={(e) => handleNumberFieldChange('monthlyFixedCost', e.target.value)}
+                    placeholder="e.g., 100.00"
+                    className={`w-full px-3 py-2 border ${formErrors.monthlyFixedCost ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.monthlyFixedCost && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.monthlyFixedCost}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Infra Type</label>
                   <select
                     value={featureForm.infrastructureType}
-                    onChange={(e) => setFeatureForm({ ...featureForm, infrastructureType: e.target.value })}
+                    onChange={(e) => handleFieldChange('infrastructureType', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   >
                     <option value="serverless">Serverless</option>
@@ -1307,35 +1446,41 @@ function ProjectDetailPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Max Requests/User</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.maxRequestsPerUser}
-                    onChange={(e) => setFeatureForm({ ...featureForm, maxRequestsPerUser: e.target.value })}
-                    min="0"
+                    onChange={(e) => handleIntegerFieldChange('maxRequestsPerUser', e.target.value)}
                     placeholder="Unlimited"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={`w-full px-3 py-2 border ${formErrors.maxRequestsPerUser ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.maxRequestsPerUser && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.maxRequestsPerUser}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Max Tokens/User</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.maxTokensPerUser}
-                    onChange={(e) => setFeatureForm({ ...featureForm, maxTokensPerUser: e.target.value })}
-                    min="0"
+                    onChange={(e) => handleIntegerFieldChange('maxTokensPerUser', e.target.value)}
                     placeholder="Unlimited"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={`w-full px-3 py-2 border ${formErrors.maxTokensPerUser ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.maxTokensPerUser && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.maxTokensPerUser}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Max Requests/Month</label>
                   <input
-                    type="number"
+                    type="text"
                     value={featureForm.maxRequestsPerMonth}
-                    onChange={(e) => setFeatureForm({ ...featureForm, maxRequestsPerMonth: e.target.value })}
-                    min="0"
+                    onChange={(e) => handleIntegerFieldChange('maxRequestsPerMonth', e.target.value)}
                     placeholder="Unlimited"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className={`w-full px-3 py-2 border ${formErrors.maxRequestsPerMonth ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                   />
+                  {formErrors.maxRequestsPerMonth && (
+                    <p className="text-xs text-red-500 mt-1">{formErrors.maxRequestsPerMonth}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1348,7 +1493,7 @@ function ProjectDetailPage() {
                   <input
                     type="checkbox"
                     checked={featureForm.enabled}
-                    onChange={(e) => setFeatureForm({ ...featureForm, enabled: e.target.checked })}
+                    onChange={(e) => handleFieldChange('enabled', e.target.checked)}
                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                   />
                   <span className="text-sm text-gray-700">Feature Enabled</span>
@@ -1357,7 +1502,7 @@ function ProjectDetailPage() {
                   <input
                     type="checkbox"
                     checked={featureForm.requiresAuth}
-                    onChange={(e) => setFeatureForm({ ...featureForm, requiresAuth: e.target.checked })}
+                    onChange={(e) => handleFieldChange('requiresAuth', e.target.checked)}
                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                   />
                   <span className="text-sm text-gray-700">Requires Authentication</span>
@@ -1366,7 +1511,7 @@ function ProjectDetailPage() {
                   <input
                     type="checkbox"
                     checked={featureForm.cacheEnabled}
-                    onChange={(e) => setFeatureForm({ ...featureForm, cacheEnabled: e.target.checked })}
+                    onChange={(e) => handleFieldChange('cacheEnabled', e.target.checked)}
                     className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                   />
                   <span className="text-sm text-gray-700">Enable Response Caching</span>
@@ -1375,12 +1520,15 @@ function ProjectDetailPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Cache TTL (seconds)</label>
                     <input
-                      type="number"
+                      type="text"
                       value={featureForm.cacheTTL}
-                      onChange={(e) => setFeatureForm({ ...featureForm, cacheTTL: e.target.value })}
-                      min="0"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(e) => handleIntegerFieldChange('cacheTTL', e.target.value)}
+                      placeholder="e.g., 3600"
+                      className={`w-full px-3 py-2 border ${formErrors.cacheTTL ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-red-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                     />
+                    {formErrors.cacheTTL && (
+                      <p className="text-xs text-red-500 mt-1">{formErrors.cacheTTL}</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1401,13 +1549,13 @@ function ProjectDetailPage() {
                   status: 'active',
                   model: '',
                   provider: '',
-                  inputTokensPerRequest: 0,
-                  outputTokensPerRequest: 0,
+                  inputTokensPerRequest: '',
+                  outputTokensPerRequest: '',
                   calculationMethod: 'fixed',
-                  dynamicMultiplier: 1,
-                  fixedCostPerRequest: 0,
-                  overheadPercentage: 0,
-                  monthlyFixedCost: 0,
+                  dynamicMultiplier: '',
+                  fixedCostPerRequest: '',
+                  overheadPercentage: '',
+                  monthlyFixedCost: '',
                   infrastructureType: 'serverless',
                   maxRequestsPerUser: '',
                   maxTokensPerUser: '',
@@ -1415,8 +1563,9 @@ function ProjectDetailPage() {
                   enabled: true,
                   requiresAuth: true,
                   cacheEnabled: false,
-                  cacheTTL: 3600
+                  cacheTTL: ''
                 });
+                setFormErrors({});
               }}
               className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >

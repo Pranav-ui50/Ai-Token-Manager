@@ -1228,6 +1228,20 @@ class PaymentService {
 
     logger.info(`[Razorpay] Verifying payment for organization ${organizationId}, order ${orderId}`);
 
+    // Check if this payment has already been processed (idempotency check)
+    const existingInvoice = await Invoice.findOne({ 'payment.externalPaymentId': paymentId });
+    if (existingInvoice) {
+      logger.info(`[Razorpay] Payment ${paymentId} already processed, returning existing invoice: ${existingInvoice._id}`);
+      return {
+        success: true,
+        paymentId,
+        orderId,
+        invoiceId: existingInvoice._id,
+        subscription: (await Organization.findById(organizationId))?.subscription,
+        alreadyProcessed: true
+      };
+    }
+
     const organization = await Organization.findById(organizationId).populate('owner');
     if (!organization) {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
@@ -1294,45 +1308,99 @@ class PaymentService {
 
     logger.info(`[Razorpay] Organization subscription updated: ${organization._id}, plan: ${planId}, status: active`);
 
-    // Create invoice
+    // Create invoice (use upsert to handle any race conditions)
     const invoiceNumber = await Invoice.generateInvoiceNumber(organization._id);
     const amount = payment.amount / 100;
 
-    const invoice = await Invoice.create({
-      organization: organization._id,
-      invoiceNumber,
-      externalInvoiceId: orderId,
-      type: 'subscription',
-      status: 'paid',
-      subtotal: amount,
-      total: amount,
-      currency: payment.currency.toUpperCase(),
-      dueDate: new Date(), // Payment already captured, due date is now
-      billingPeriod: {
-        start: new Date(),
-        end: organization.subscription.currentPeriodEnd
-      },
-      items: [{
-        description: `${planDisplayName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+    let invoice;
+    try {
+      invoice = await Invoice.create({
+        organization: organization._id,
+        invoiceNumber,
+        externalInvoiceId: orderId,
         type: 'subscription',
-        quantity: 1,
-        unitPrice: amount,
-        amount
-      }],
-      payment: {
-        provider: 'razorpay',
-        externalPaymentId: paymentId,
-        externalCustomerId: organization.subscription.razorpayCustomerId,
-        paidAt: new Date()
-      },
-      subscription: {
-        planId,
-        planName: planName,
-        billingCycle
-      },
-      billingAddress: organization.billingDetails,
-      createdBy: organization.owner?._id
-    });
+        status: 'paid',
+        subtotal: amount,
+        total: amount,
+        currency: payment.currency.toUpperCase(),
+        dueDate: new Date(), // Payment already captured, due date is now
+        billingPeriod: {
+          start: new Date(),
+          end: organization.subscription.currentPeriodEnd
+        },
+        items: [{
+          description: `${planDisplayName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+          type: 'subscription',
+          quantity: 1,
+          unitPrice: amount,
+          amount
+        }],
+        payment: {
+          provider: 'razorpay',
+          externalPaymentId: paymentId,
+          externalCustomerId: organization.subscription.razorpayCustomerId,
+          paidAt: new Date()
+        },
+        subscription: {
+          planId,
+          planName: planName,
+          billingCycle
+        },
+        billingAddress: organization.billingDetails,
+        createdBy: organization.owner?._id
+      });
+    } catch (invoiceError) {
+      // If invoice creation fails (e.g., duplicate key), try to find existing invoice
+      if (invoiceError.code === 11000) {
+        logger.warn(`[Razorpay] Duplicate invoice detected, looking up existing invoice for payment: ${paymentId}`);
+        invoice = await Invoice.findOne({ 'payment.externalPaymentId': paymentId });
+        if (!invoice) {
+          // Try finding by orderId
+          invoice = await Invoice.findOne({ externalInvoiceId: orderId });
+        }
+        if (!invoice) {
+          // Generate a new unique invoice number and retry
+          const newInvoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+          invoice = await Invoice.create({
+            organization: organization._id,
+            invoiceNumber: newInvoiceNumber,
+            externalInvoiceId: orderId,
+            type: 'subscription',
+            status: 'paid',
+            subtotal: amount,
+            total: amount,
+            currency: payment.currency.toUpperCase(),
+            dueDate: new Date(),
+            billingPeriod: {
+              start: new Date(),
+              end: organization.subscription.currentPeriodEnd
+            },
+            items: [{
+              description: `${planDisplayName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+              type: 'subscription',
+              quantity: 1,
+              unitPrice: amount,
+              amount
+            }],
+            payment: {
+              provider: 'razorpay',
+              externalPaymentId: paymentId,
+              externalCustomerId: organization.subscription.razorpayCustomerId,
+              paidAt: new Date()
+            },
+            subscription: {
+              planId,
+              planName: planName,
+              billingCycle
+            },
+            billingAddress: organization.billingDetails,
+            createdBy: organization.owner?._id
+          });
+        }
+      } else {
+        throw invoiceError;
+      }
+    }
 
     logger.info(`Razorpay payment verified: ${paymentId} for organization ${organizationId}`);
 

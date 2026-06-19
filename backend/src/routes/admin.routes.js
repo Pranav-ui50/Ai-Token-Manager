@@ -175,6 +175,20 @@ router.patch('/models/:id/status', adminController.toggleModelStatus);
  */
 router.get('/dashboard', adminController.getDashboardStats);
 
+/**
+ * @route   GET /api/admin/settings
+ * @desc    Get system settings
+ * @access  Private (Super Admin)
+ */
+router.get('/settings', adminController.getSettings);
+
+/**
+ * @route   PUT /api/admin/settings
+ * @desc    Update system settings
+ * @access  Private (Super Admin)
+ */
+router.put('/settings', adminController.updateSettings);
+
 // ===========================================
 // Plan Management Routes (Platform-wide)
 // ===========================================

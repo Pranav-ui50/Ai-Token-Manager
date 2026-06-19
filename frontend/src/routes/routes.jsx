@@ -101,7 +101,6 @@ const ForgotPasswordPage = lazy(() => import('../pages/auth/ForgotPasswordPage.j
 const ResetPasswordPage = lazy(() => import('../pages/auth/ResetPasswordPage.jsx'));
 const Dashboard = lazy(() => import('../pages/dashboard/Dashboard.jsx'));
 const OrganizationsPage = lazy(() => import('../pages/organizations/OrganizationsPage.jsx'));
-const OrganizationDetailPage = lazy(() => import('../pages/organizations/OrganizationDetailPage.jsx'));
 const AcceptInvitationPage = lazy(() => import('../pages/organizations/AcceptInvitationPage.jsx'));
 const ProvidersPage = lazy(() => import('../pages/providers/ProvidersPage.jsx'));
 const ProviderDetailPage = lazy(() => import('../pages/providers/ProviderDetailPage.jsx'));
@@ -125,6 +124,7 @@ const ScenarioComparisonPage = lazy(() => import('../pages/simulations/ScenarioC
 const TeamPage = lazy(() => import('../pages/team/TeamPage.jsx'));
 const BillingPage = lazy(() => import('../pages/billing/BillingPage.jsx'));
 const InvoicesPage = lazy(() => import('../pages/billing/InvoicesPage.jsx'));
+const SubscriptionPage = lazy(() => import('../pages/subscription/SubscriptionPage.jsx'));
 const SettingsPage = lazy(() => import('../pages/settings/SettingsPage.jsx'));
 const IntegrationsPage = lazy(() => import('../pages/integrations/IntegrationsPage.jsx'));
 const ApiKeysPage = lazy(() => import('../pages/api-keys/ApiKeysPage.jsx'));
@@ -160,9 +160,6 @@ const TokenEstimatesPage = lazy(() => import('../pages/token-estimates/TokenEsti
 const FeatureCostPage = lazy(() => import('../pages/feature-cost/FeatureCostPage.jsx'));
 const UsageAnalyticsPage = lazy(() => import('../pages/usage-analytics/UsageAnalyticsPage.jsx'));
 const ProfitAnalysisPage = lazy(() => import('../pages/profit-analysis/ProfitAnalysisPage.jsx'));
-
-// Docs page
-const DocsPage = lazy(() => import('../pages/docs/DocsPage.jsx'));
 
 // Legal pages
 const TermsOfServicePage = lazy(() => import('../pages/legal/TermsOfServicePage.jsx'));
@@ -318,18 +315,6 @@ const routes = [
         <DashboardLayout>
           <PageWrapper>
             <OrganizationsPage />
-          </PageWrapper>
-        </DashboardLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: '/organizations/:id',
-    element: (
-      <ProtectedRoute>
-        <DashboardLayout>
-          <PageWrapper>
-            <OrganizationDetailPage />
           </PageWrapper>
         </DashboardLayout>
       </ProtectedRoute>
@@ -657,22 +642,6 @@ const routes = [
   },
 
   // ===========================================
-  // Documentation Routes
-  // ===========================================
-  {
-    path: '/docs',
-    element: (
-      <ProtectedRoute>
-        <DashboardLayout>
-          <PageWrapper>
-            <DocsPage />
-          </PageWrapper>
-        </DashboardLayout>
-      </ProtectedRoute>
-    )
-  },
-
-  // ===========================================
   // Pricing History Routes
   // ===========================================
   {
@@ -754,6 +723,22 @@ const routes = [
         <DashboardLayout>
           <PageWrapper>
             <InvoicesPage />
+          </PageWrapper>
+        </DashboardLayout>
+      </ProtectedRoute>
+    )
+  },
+
+  // ===========================================
+  // Subscription Route
+  // ===========================================
+  {
+    path: '/subscription',
+    element: (
+      <ProtectedRoute>
+        <DashboardLayout>
+          <PageWrapper>
+            <SubscriptionPage />
           </PageWrapper>
         </DashboardLayout>
       </ProtectedRoute>

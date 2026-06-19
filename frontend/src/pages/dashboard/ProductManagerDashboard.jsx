@@ -335,7 +335,15 @@ function ProductManagerDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 text-sm sm:text-base truncate">{feature.name}</p>
-                      <p className="text-xs text-gray-500 truncate">{feature.model?.name || 'Not Mapped'}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="truncate">{feature.model?.name || feature.modelDisplayName || 'Not Mapped'}</span>
+                        {feature.project && (
+                          <>
+                            <span className="text-gray-300">•</span>
+                            <span className="text-blue-600 truncate">{feature.project.name || 'Project'}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
@@ -408,8 +416,9 @@ function ProductManagerDashboard() {
               <thead>
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Feature</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden md:table-cell">Project</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden sm:table-cell">Model</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden md:table-cell">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap hidden lg:table-cell">Category</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Tokens</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">Status</th>
                 </tr>
@@ -422,10 +431,25 @@ function ProductManagerDashboard() {
                         {feature.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-sm hidden sm:table-cell">
-                      {feature.model?.name || <span className="text-yellow-600">Not Mapped</span>}
-                    </td>
                     <td className="px-4 py-3 whitespace-nowrap hidden md:table-cell">
+                      {feature.project ? (
+                        <Link
+                          to={`/projects/${feature.project._id || feature.project}`}
+                          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                          <span className="truncate max-w-[120px]">{feature.project.name || 'Project'}</span>
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">No Project</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-sm hidden sm:table-cell">
+                      {feature.model?.name || feature.modelDisplayName || <span className="text-yellow-600">Not Mapped</span>}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap hidden lg:table-cell">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 capitalize">
                         {feature.category || 'other'}
                       </span>
@@ -507,6 +531,32 @@ function ProductManagerDashboard() {
             <p className="font-medium text-gray-900 text-sm sm:text-base">Feature Cost</p>
             <p className="text-xs text-gray-500 mt-1 hidden sm:block">View cost estimates</p>
           </button>
+        </div>
+
+        {/* Project Flow Info */}
+        <div className="mt-4 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-100">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-blue-800">Feature Hierarchy</p>
+              <p className="text-xs text-blue-600 mt-1">
+                Features must be linked to a Project/Product. When creating a feature, select the project it belongs to.
+              </p>
+              <div className="flex items-center gap-2 mt-2 text-xs text-blue-700">
+                <span className="px-2 py-0.5 bg-blue-100 rounded font-medium">Organization</span>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="px-2 py-0.5 bg-blue-100 rounded font-medium">Projects</span>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="px-2 py-0.5 bg-blue-100 rounded font-medium">Features</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

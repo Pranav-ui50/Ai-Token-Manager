@@ -135,6 +135,18 @@ const organizationApi = {
   },
 
   /**
+   * Update member status
+   * @param {string} orgId - Organization ID
+   * @param {string} memberId - Member ID
+   * @param {string} status - New status ('active' or 'inactive')
+   * @returns {Promise}
+   */
+  updateMemberStatus: async (orgId, memberId, status) => {
+    const response = await api.put(`/organizations/${orgId}/members/${memberId}/status`, { status });
+    return response.data;
+  },
+
+  /**
    * Transfer ownership
    * @param {string} orgId - Organization ID
    * @param {string} newOwnerId - New owner ID

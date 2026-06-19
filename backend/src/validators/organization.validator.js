@@ -70,7 +70,7 @@ export const validateInvite = validate([
     .withMessage('Email is required')
     .isEmail()
     .withMessage('Please provide a valid email')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
   body('roleId')
     .notEmpty()
     .withMessage('Role is required')
@@ -153,7 +153,7 @@ export const validateAddMember = validate([
     .withMessage('Email is required')
     .isEmail()
     .withMessage('Please provide a valid email')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
   body('password')
     .notEmpty()
     .withMessage('Password is required')

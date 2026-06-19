@@ -5,6 +5,7 @@
  */
 
 import simulationService from '../services/simulation.service.js';
+import limitService from '../services/limit.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -16,6 +17,13 @@ class SimulationController {
   async create(req, res, next) {
     try {
       const userId = req.user.userId;
+      const organizationId = req.body.organization || req.user.organization;
+
+      // Check simulation limit before creating
+      if (organizationId) {
+        await limitService.validateLimit(organizationId, 'simulations', 1);
+      }
+
       const simulation = await simulationService.create(req.body, userId);
 
       res.status(201).json({

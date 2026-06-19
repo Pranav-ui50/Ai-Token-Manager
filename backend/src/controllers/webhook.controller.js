@@ -140,8 +140,10 @@ class WebhookController {
         success: result.success,
         message: result.message,
         data: {
+          success: result.success,
           statusCode: result.statusCode,
-          duration: result.duration
+          duration: result.duration,
+          message: result.message
         }
       });
     } catch (error) {

@@ -38,7 +38,7 @@ const planSchema = new mongoose.Schema({
   // Plan tier
   tier: {
     type: String,
-    enum: ['free', 'starter', 'professional', 'business', 'enterprise'],
+    enum: ['starter', 'professional', 'business'],
     default: 'starter'
   },
 
@@ -233,6 +233,18 @@ const planSchema = new mongoose.Schema({
 
   // Plan-level usage limits
   limits: {
+    maxProjects: {
+      type: Number,
+      default: null // null means unlimited
+    },
+    maxFeatures: {
+      type: Number,
+      default: null
+    },
+    maxSimulations: {
+      type: Number,
+      default: null
+    },
     maxUsers: {
       type: Number,
       default: null // null means unlimited
@@ -396,7 +408,38 @@ const planSchema = new mongoose.Schema({
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  toObject: { virtuals: true },
+  strict: true, // Ensure only defined fields are saved
+  minimize: false // Ensure empty objects are saved
+});
+
+// Pre-save hook to debug limits
+planSchema.pre('save', function(next) {
+  console.log('[DEBUG Plan Schema] ====== PRE-SAVE HOOK ======');
+  console.log('[DEBUG Plan Schema] Document _id:', this._id);
+  console.log('[DEBUG Plan Schema] Is new document?:', this.isNew);
+  console.log('[DEBUG Plan Schema] Modified paths:', this.modifiedPaths());
+  console.log('[DEBUG Plan Schema] limits object:', JSON.stringify(this.limits, null, 2));
+  console.log('[DEBUG Plan Schema] limits.maxProjects:', this.limits?.maxProjects, '(type:', typeof this.limits?.maxProjects, ')');
+  console.log('[DEBUG Plan Schema] limits.maxFeatures:', this.limits?.maxFeatures, '(type:', typeof this.limits?.maxFeatures, ')');
+  console.log('[DEBUG Plan Schema] limits.maxSimulations:', this.limits?.maxSimulations, '(type:', typeof this.limits?.maxSimulations, ')');
+  console.log('[DEBUG Plan Schema] limits.maxUsers:', this.limits?.maxUsers, '(type:', typeof this.limits?.maxUsers, ')');
+  console.log('[DEBUG Plan Schema] limits.maxApiCalls:', this.limits?.maxApiCalls, '(type:', typeof this.limits?.maxApiCalls, ')');
+  console.log('[DEBUG Plan Schema] limits.maxTokens:', this.limits?.maxTokens, '(type:', typeof this.limits?.maxTokens, ')');
+  console.log('[DEBUG Plan Schema] ============================');
+  next();
+});
+
+// Post-save hook to verify data was saved
+planSchema.post('save', function(doc, next) {
+  console.log('[DEBUG Plan Schema] ====== POST-SAVE HOOK ======');
+  console.log('[DEBUG Plan Schema] Document saved with _id:', doc._id);
+  console.log('[DEBUG Plan Schema] Saved limits:', JSON.stringify(doc.limits, null, 2));
+  console.log('[DEBUG Plan Schema] Saved limits.maxProjects:', doc.limits?.maxProjects);
+  console.log('[DEBUG Plan Schema] Saved limits.maxFeatures:', doc.limits?.maxFeatures);
+  console.log('[DEBUG Plan Schema] Saved limits.maxSimulations:', doc.limits?.maxSimulations);
+  console.log('[DEBUG Plan Schema] =============================');
+  next();
 });
 
 // Indexes

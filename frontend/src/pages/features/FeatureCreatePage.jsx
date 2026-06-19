@@ -2,6 +2,7 @@
  * Feature Create Page
  *
  * Create a new feature with model, provider, and pricing configuration.
+ * Features must be linked to a Project/Product.
  */
 
 import { useState, useEffect } from 'react';
@@ -10,6 +11,7 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
+import projectApi from '../../services/api/project.api.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
 
 function FeatureCreatePage() {
@@ -23,12 +25,15 @@ function FeatureCreatePage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [providers, setProviders] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [filteredModels, setFilteredModels] = useState([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelSource, setModelSource] = useState(null);
   const [modelFetchError, setModelFetchError] = useState(null);
 
   const [formData, setFormData] = useState({
+    project: '',
     name: '',
     description: '',
     category: 'other',
@@ -58,13 +63,12 @@ function FeatureCreatePage() {
     cacheTTL: 3600
   });
 
-  // Fetch providers on mount
+  // Fetch providers and projects on mount
   useEffect(() => {
-    const fetchProviders = async () => {
+    const fetchData = async () => {
       try {
-        // Fetch all providers with a high limit to ensure we get all
+        // Fetch providers
         const providersRes = await providerApi.getAll({ limit: 100, activeOnly: false });
-        console.log('[FeatureCreatePage] Providers fetched:', providersRes.providers?.length, providersRes.providers?.map(p => ({ id: p._id, name: p.name, displayName: p.displayName })));
         if (providersRes.providers) {
           setProviders(providersRes.providers);
         }
@@ -73,8 +77,31 @@ function FeatureCreatePage() {
       }
     };
 
-    fetchProviders();
+    fetchData();
   }, []);
+
+  // Fetch projects when organization changes
+  useEffect(() => {
+    const fetchProjects = async () => {
+      if (!currentOrganization?._id) return;
+
+      setIsLoadingProjects(true);
+      try {
+        const orgId = currentOrganization._id;
+        const response = await projectApi.getForOrganization(orgId);
+        // Handle different response structures
+        const projectsList = response?.projects || response?.data || response || [];
+        setProjects(Array.isArray(projectsList) ? projectsList : []);
+      } catch (err) {
+        console.error('Failed to fetch projects:', err);
+        setProjects([]);
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    };
+
+    fetchProjects();
+  }, [currentOrganization]);
 
   // Debug: Log when filteredModels changes
   useEffect(() => {
@@ -195,6 +222,11 @@ function FeatureCreatePage() {
       return;
     }
 
+    if (!formData.project) {
+      setError('Project/Product selection is required. Please select a project to link this feature.');
+      return;
+    }
+
     if (!formData.name.trim()) {
       setError('Feature name is required');
       return;
@@ -212,6 +244,7 @@ function FeatureCreatePage() {
         category: formData.category || 'other',
         status: formData.status || 'active',
         organization: currentOrganization._id,
+        project: formData.project, // Required project reference
         provider: formData.provider || undefined,
         tokenEstimates: {
           inputTokensPerRequest: Number(formData.inputTokensPerRequest) || 0,
@@ -316,6 +349,64 @@ function FeatureCreatePage() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Project Selection - Required */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Project / Product</h2>
+            <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">Required</span>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Features must be linked to a Project/Product. Select the project this feature belongs to.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Project / Product<span className="text-red-500">*</span>
+              </label>
+              <select
+                name="project"
+                value={formData.project}
+                onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                required
+                disabled={isLoadingProjects}
+              >
+                <option value="">
+                  {isLoadingProjects ? 'Loading projects...' : 'Select a project'}
+                </option>
+                {projects.map(project => (
+                  <option key={project._id} value={project._id}>
+                    {project.name} {project.status ? `(${project.status})` : ''}
+                  </option>
+                ))}
+              </select>
+              {projects.length === 0 && !isLoadingProjects && (
+                <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-amber-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-amber-700 font-medium">No projects available</p>
+                      <p className="text-xs text-amber-600 mt-1">
+                        You need to create a project first before adding features. Contact your organization owner to create a project.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {formData.project && (
+                <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Project selected: {projects.find(p => p._id === formData.project)?.name}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Basic Info */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>

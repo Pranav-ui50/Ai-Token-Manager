@@ -208,8 +208,12 @@ export function OrganizationProvider({ children }) {
       return result;
     } catch (error) {
       // Use the server's error message if available
+      const errorCode = error.response?.data?.error?.code || error.response?.data?.code;
       const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || error.message;
-      dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
+      // Only set error state for non-limit errors (limit errors are handled via toast)
+      if (errorCode !== 'LIMIT_EXCEEDED') {
+        dispatch({ type: ACTIONS.SET_ERROR, payload: errorMessage });
+      }
       throw error;
     }
   }, [getOrganization]);

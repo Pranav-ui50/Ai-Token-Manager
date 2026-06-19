@@ -5,6 +5,7 @@
  */
 
 import projectService from '../services/project.service.js';
+import limitService from '../services/limit.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -18,6 +19,9 @@ class ProjectController {
       logger.info(`[ProjectController] create called by user: ${req.user?.id}`);
       const { organizationId, name, description, settings } = req.body;
       const userId = req.user.id || req.user.userId;
+
+      // Check project limit before creating
+      await limitService.validateLimit(organizationId, 'projects', 1);
 
       logger.info(`[ProjectController] Creating project: ${name} for org: ${organizationId}`);
 

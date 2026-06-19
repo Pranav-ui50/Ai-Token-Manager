@@ -8,6 +8,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import usePermissions from '../../hooks/usePermissions.js';
+import { useOrganization } from '../../context/index.js';
 import projectApi from '../../services/api/project.api.js';
 import featureApi from '../../services/api/feature.api.js';
 import planApi from '../../services/api/plan.api.js';
@@ -23,9 +25,36 @@ const extractNumber = (value) => {
   return 0;
 };
 
+// Get status badge styles
+const getStatusBadge = (status) => {
+  const styles = {
+    active: 'bg-green-100 text-green-700',
+    trial: 'bg-blue-100 text-blue-700',
+    pending_payment: 'bg-yellow-100 text-yellow-700',
+    past_due: 'bg-orange-100 text-orange-700',
+    expired: 'bg-red-100 text-red-700',
+    cancelled: 'bg-gray-100 text-gray-700'
+  };
+  return styles[status] || 'bg-gray-100 text-gray-700';
+};
+
+// Get plan tier badge styles
+const getPlanTierBadge = (tier) => {
+  const styles = {
+    free: 'bg-gray-100 text-gray-700',
+    starter: 'bg-blue-100 text-blue-700',
+    professional: 'bg-purple-100 text-purple-700',
+    business: 'bg-yellow-100 text-yellow-700',
+    enterprise: 'bg-[#DC2626]/10 text-[#DC2626]'
+  };
+  return styles[tier] || 'bg-gray-100 text-gray-700';
+};
+
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { role } = usePermissions();
+  const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const [stats, setStats] = useState({
     projects: 0,
     features: 0,
@@ -35,65 +64,134 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Get organization ID from currentOrganization context or user object
+  const organizationId = currentOrganization?._id || user?.organization?._id || user?.organization;
+
+  // Get subscription data from organization
+  const subscription = currentOrganization?.subscription || null;
+
+  // Check if organization has a subscription (trial or active plan)
+  const hasSubscription = subscription && (subscription.planId || subscription.status === 'trial');
+
+  // Get plan display name
+  const getPlanDisplayName = () => {
+    if (subscription?.planId?.name) {
+      return subscription.planId.name;
+    }
+    if (subscription?.planName) {
+      return subscription.planName;
+    }
+    if (subscription?.plan) {
+      // Capitalize first letter
+      return subscription.plan.charAt(0).toUpperCase() + subscription.plan.slice(1);
+    }
+    if (subscription?.status === 'trial') {
+      return 'Free Trial';
+    }
+    return null;
+  };
+
+  const planDisplayName = getPlanDisplayName();
+
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    // Only fetch when we have an organization ID
+    if (organizationId) {
+      fetchDashboardData();
+    } else if (!orgLoading && !organizationId) {
+      // No organization - set empty stats
+      setIsLoading(false);
+    }
+  }, [organizationId, orgLoading]);
 
   const fetchDashboardData = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Fetch all data in parallel
+      console.log('[Dashboard] Fetching data for organization:', organizationId);
+
+      // Fetch all data in parallel using organization ID
       const [projectsRes, featuresRes, plansRes, simulationsRes] = await Promise.allSettled([
-        projectApi.getForOrganization?.(user?.organization?._id || user?.organization) || projectApi.getAll?.(),
-        featureApi.getAll({ limit: 1 }),
-        planApi.getAll({ limit: 1 }),
-        simulationApi.getAll?.({ limit: 1 }) || Promise.resolve({ status: 'fulfilled', value: {} })
+        // Projects - use organization-specific endpoint
+        projectApi.getForOrganization(organizationId).catch(err => {
+          console.error('[Dashboard] Projects fetch error:', err);
+          return [];
+        }),
+        // Features - get all features (filtered by organization via auth)
+        featureApi.getAll({ limit: 100 }).catch(err => {
+          console.error('[Dashboard] Features fetch error:', err);
+          return { data: { features: [], pagination: { total: 0 } } };
+        }),
+        // Plans - get all plans (filtered by organization via auth)
+        planApi.getAll({ limit: 100 }).catch(err => {
+          console.error('[Dashboard] Plans fetch error:', err);
+          return { data: { plans: [], pagination: { total: 0 } } };
+        }),
+        // Simulations - use organization-specific endpoint
+        simulationApi.getForOrganization(organizationId).catch(err => {
+          console.error('[Dashboard] Simulations fetch error:', err);
+          return [];
+        })
       ]);
 
-      // Process projects
+      console.log('[Dashboard] API Responses:', { projectsRes, featuresRes, plansRes, simulationsRes });
+
+      // Process projects - API returns array directly via response.data.data
       if (projectsRes.status === 'fulfilled') {
-        const projectsData = projectsRes.value?.data || projectsRes.value || {};
-        const projectsList = projectsData.projects || projectsData.data || [];
-        setStats(prev => ({
-          ...prev,
-          projects: projectsData.total || projectsData.count || (Array.isArray(projectsList) ? projectsList.length : 0)
-        }));
+        const projectsData = projectsRes.value;
+        // Handle case where response is an array directly
+        const projectsList = Array.isArray(projectsData) ? projectsData : (projectsData?.data || projectsData?.projects || []);
+        const count = Array.isArray(projectsData) ? projectsData.length : (projectsData?.total || projectsData?.count || projectsList.length);
+        console.log('[Dashboard] Projects count:', count);
+        setStats(prev => ({ ...prev, projects: count }));
+      } else {
+        console.error('[Dashboard] Projects failed:', projectsRes.reason);
       }
 
-      // Process features
+      // Process features - API returns axios response, response.data = { success: true, data: { features: [], pagination: {} } }
       if (featuresRes.status === 'fulfilled') {
-        const featuresData = featuresRes.value?.data || featuresRes.value || {};
-        const featuresList = featuresData.features || featuresData.data || [];
-        setStats(prev => ({
-          ...prev,
-          features: featuresData.total || featuresData.count || (Array.isArray(featuresList) ? featuresList.length : 0)
-        }));
+        const featuresResponse = featuresRes.value;
+        // Axios response: response.data = { success: true, data: {...} }
+        const apiData = featuresResponse?.data; // { success: true, data: {...} }
+        const innerData = apiData?.data || apiData || {}; // { features: [...], pagination: {...} }
+        const featuresList = innerData.features || [];
+        const pagination = innerData.pagination || {};
+        const count = pagination.total || innerData.total || featuresList.length || 0;
+        console.log('[Dashboard] Features count:', count, 'innerData:', innerData);
+        setStats(prev => ({ ...prev, features: count }));
+      } else {
+        console.error('[Dashboard] Features failed:', featuresRes.reason);
       }
 
-      // Process plans
+      // Process plans - API returns axios response, response.data = { success: true, data: { plans: [], pagination: {} } }
       if (plansRes.status === 'fulfilled') {
-        const plansData = plansRes.value?.data || plansRes.value || {};
-        const plansList = plansData.plans || plansData.data || [];
-        setStats(prev => ({
-          ...prev,
-          plans: plansData.total || plansData.count || (Array.isArray(plansList) ? plansList.length : 0)
-        }));
+        const plansResponse = plansRes.value;
+        // Axios response: response.data = { success: true, data: { plans: [...], pagination: {...} } }
+        const apiData = plansResponse?.data; // { success: true, data: {...} }
+        const innerData = apiData?.data || apiData || {}; // { plans: [...], pagination: {...} }
+        const plansList = innerData.plans || [];
+        const pagination = innerData.pagination || {};
+        const count = pagination.total || innerData.total || plansList.length || 0;
+        console.log('[Dashboard] Plans count:', count, 'innerData:', innerData);
+        setStats(prev => ({ ...prev, plans: count }));
+      } else {
+        console.error('[Dashboard] Plans failed:', plansRes.reason);
       }
 
-      // Process simulations
+      // Process simulations - API returns array directly
       if (simulationsRes.status === 'fulfilled') {
-        const simulationsData = simulationsRes.value?.data || simulationsRes.value || {};
-        const simulationsList = simulationsData.simulations || simulationsData.data || [];
-        setStats(prev => ({
-          ...prev,
-          simulations: simulationsData.total || simulationsData.count || (Array.isArray(simulationsList) ? simulationsList.length : 0)
-        }));
+        const simulationsData = simulationsRes.value;
+        // Handle case where response is an array directly
+        const simulationsList = Array.isArray(simulationsData) ? simulationsData : (simulationsData?.data || simulationsData?.simulations || []);
+        const count = Array.isArray(simulationsData) ? simulationsData.length : (simulationsData?.total || simulationsData?.count || simulationsList.length);
+        console.log('[Dashboard] Simulations count:', count);
+        setStats(prev => ({ ...prev, simulations: count }));
+      } else {
+        console.error('[Dashboard] Simulations failed:', simulationsRes.reason);
       }
 
     } catch (err) {
-      console.error('Failed to fetch dashboard data:', err);
+      console.error('[Dashboard] Failed to fetch dashboard data:', err);
       setError(err.response?.data?.error?.message || 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
@@ -104,7 +202,8 @@ const DashboardPage = () => {
     await logout();
   };
 
-  if (isLoading) {
+  // Show loading while fetching organization or dashboard data
+  if (orgLoading || isLoading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
         <div className="text-center">
@@ -187,7 +286,7 @@ const DashboardPage = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className={`grid gap-6 mb-8 ${role === 'viewer' ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
           {/* Projects Card */}
           <Link to="/projects" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
@@ -202,7 +301,7 @@ const DashboardPage = () => {
               </div>
             </div>
             <div className="mt-4 flex items-center text-sm">
-              <span className="text-gray-400">{stats.projects === 0 ? 'No projects yet' : 'Manage projects'}</span>
+              <span className="text-gray-400">{stats.projects === 0 ? 'No projects yet' : 'View projects'}</span>
             </div>
           </Link>
 
@@ -224,7 +323,8 @@ const DashboardPage = () => {
             </div>
           </Link>
 
-          {/* Plans Card */}
+          {/* Plans Card - Only for non-viewer roles */}
+          {role !== 'viewer' && (
           <Link to="/plans" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
@@ -241,6 +341,7 @@ const DashboardPage = () => {
               <span className="text-gray-400">{stats.plans === 0 ? 'No plans yet' : 'View plans'}</span>
             </div>
           </Link>
+          )}
 
           {/* Simulations Card */}
           <Link to="/simulations" className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
@@ -250,7 +351,7 @@ const DashboardPage = () => {
                 <p className="text-3xl font-bold text-gray-900">{stats.simulations}</p>
               </div>
               <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </div>
@@ -261,7 +362,170 @@ const DashboardPage = () => {
           </Link>
         </div>
 
-        {/* Getting Started */}
+        {/* Current Plan Section - Only show if organization has a subscription */}
+        {hasSubscription && planDisplayName && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Current Plan</h3>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(subscription?.status)}`}>
+                {subscription?.status?.charAt(0).toUpperCase() + subscription?.status?.slice(1)}
+              </span>
+            </div>
+
+            {/* Plan Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+              {/* Plan Name */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#DC2626]/10 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Plan</p>
+                  <p className="text-base font-semibold text-gray-900">{planDisplayName}</p>
+                </div>
+              </div>
+
+              {/* Billing Interval */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Billing</p>
+                  <p className="text-base font-semibold text-gray-900">
+                    {subscription?.billingCycle === 'yearly' ? 'Yearly' : 'Monthly'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Started Date (for active) */}
+              {subscription?.status === 'active' && subscription?.currentPeriodStart && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-4 4M3 5v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Started</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {new Date(subscription.currentPeriodStart).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Trial End (for trial) */}
+              {subscription?.status === 'trial' && subscription?.trialEndsAt && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-yellow-50 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Trial Ends</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {new Date(subscription.trialEndsAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Renews Date (for active) */}
+              {subscription?.status === 'active' && subscription?.currentPeriodEnd && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Renews</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Plan Limits Section */}
+            {subscription?.planId?.limits && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-medium text-gray-700 mb-3">Plan Includes</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Users Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <span className="text-gray-700">
+                      Up to <span className="font-semibold text-gray-900">{subscription.planId.limits.maxUsers || 'Unlimited'}</span> users
+                    </span>
+                  </div>
+
+                  {/* Projects Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    <span className="text-gray-700">
+                      Up to <span className="font-semibold text-gray-900">{subscription.planId.limits.maxProjects || 'Unlimited'}</span> projects
+                    </span>
+                  </div>
+
+                  {/* Features Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-purple-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                    <span className="text-gray-700">
+                      Up to <span className="font-semibold text-gray-900">{subscription.planId.limits.maxFeatures || 'Unlimited'}</span> features
+                    </span>
+                  </div>
+
+                  {/* Simulations Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span className="text-gray-700">
+                      <span className="font-semibold text-gray-900">{subscription.planId.limits.maxSimulations || 'Unlimited'}</span> simulations
+                    </span>
+                  </div>
+
+                  {/* API Calls Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-cyan-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-gray-700">
+                      <span className="font-semibold text-gray-900">{subscription.planId.limits.maxApiCalls ? subscription.planId.limits.maxApiCalls.toLocaleString() : 'Unlimited'}</span> API calls
+                    </span>
+                  </div>
+
+                  {/* Tokens/Credits Limit */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+                    <svg className="w-5 h-5 text-pink-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                    </svg>
+                    <span className="text-gray-700">
+                      <span className="font-semibold text-gray-900">{(subscription.planId.credits?.includedCredits || subscription.planId.limits.maxTokens || 0).toLocaleString()}</span> tokens included
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Getting Started - Only for non-viewer roles */}
+        {role !== 'viewer' && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-6">
             Getting Started
@@ -328,8 +592,10 @@ const DashboardPage = () => {
             </button>
           </div>
         </div>
+        )}
 
-        {/* Quick Actions */}
+        {/* Quick Actions - Only for non-viewer roles */}
+        {role !== 'viewer' && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-6">
             Quick Actions
@@ -384,6 +650,7 @@ const DashboardPage = () => {
             </button>
           </div>
         </div>
+        )}
       </main>
     </div>
   );

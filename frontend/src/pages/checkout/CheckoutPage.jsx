@@ -19,7 +19,7 @@ const CheckoutPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, isAuthenticated } = useAuth();
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, getOrganization } = useOrganization();
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -294,6 +294,13 @@ const CheckoutPage = () => {
             );
 
             if (verifyResponse.success) {
+              // Refresh organization context to get updated members after plan upgrade
+              try {
+                await getOrganization(orgId);
+              } catch (refreshErr) {
+                console.error('[Checkout] Failed to refresh organization:', refreshErr);
+                // Don't block success modal on refresh failure
+              }
               // Show success modal instead of redirecting
               setShowSuccessModal(true);
               setProcessing(false);
@@ -303,6 +310,18 @@ const CheckoutPage = () => {
             }
           } catch (verifyErr) {
             console.error('Payment verification error:', verifyErr);
+            // Check if this is a duplicate payment error (409) - payment already processed
+            const errorCode = verifyErr.response?.status;
+            const errorData = verifyErr.response?.data?.error;
+
+            if (errorCode === 409 || errorData?.code === 'DUPLICATE_ERROR') {
+              // Payment was already processed - this is actually a success
+              console.log('[Checkout] Payment already processed (idempotent request)');
+              setShowSuccessModal(true);
+              setProcessing(false);
+              return;
+            }
+
             setError('Payment verification failed. Please contact support.');
             setProcessing(false);
           }

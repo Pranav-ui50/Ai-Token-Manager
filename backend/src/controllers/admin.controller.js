@@ -12,6 +12,7 @@ import AIModel from '../models/AIModel.js';
 import Provider from '../models/Provider.js';
 import Plan from '../models/Plan.js';
 import PricingHistory from '../models/PricingHistory.js';
+import Setting from '../models/Setting.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -192,9 +193,9 @@ class AdminController {
       const { plan } = req.body;
 
       // Valid plans in the system
-      const validPlans = ['starter', 'professional', 'business'];
+      const validPlans = ['free', 'starter', 'professional', 'business', 'enterprise'];
       if (!validPlans.includes(plan)) {
-        throw new AppError('Invalid plan. Valid plans are: starter, professional, business', 400, 'INVALID_PLAN');
+        throw new AppError('Invalid plan. Valid plans are: free, starter, professional, business, enterprise', 400, 'INVALID_PLAN');
       }
 
       const organization = await Organization.findByIdAndUpdate(
@@ -447,7 +448,7 @@ class AdminController {
       const { name, description, plan, ownerEmail, ownerFirstName, ownerLastName, ownerPassword, sendInvitation } = req.body;
 
       // Validate plan - only allow valid plans that exist in the system
-      const validPlans = ['starter', 'professional', 'business'];
+      const validPlans = ['free', 'starter', 'professional', 'business', 'enterprise'];
       const selectedPlan = validPlans.includes(plan) ? plan : 'starter';
 
       // Check if organization name already exists
@@ -1042,6 +1043,8 @@ class AdminController {
         totalModels,
         totalProviders,
         activeOrganizations,
+        organizationsByPlan,
+        organizationsByStatus,
         modelsByType,
         featuresByStatus
       ] = await Promise.all([
@@ -1052,6 +1055,12 @@ class AdminController {
         AIModel.countDocuments(),
         Provider.countDocuments(),
         Organization.countDocuments({ isActive: true }),
+        Organization.aggregate([
+          { $group: { _id: '$subscription.plan', count: { $sum: 1 } } }
+        ]),
+        Organization.aggregate([
+          { $group: { _id: '$subscription.status', count: { $sum: 1 } } }
+        ]),
         AIModel.aggregate([{ $group: { _id: '$type', count: { $sum: 1 } } }]),
         Feature.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
       ]);
@@ -1069,6 +1078,42 @@ class AdminController {
         .limit(5)
         .select('name displayName type createdAt');
 
+      // Process organizations by plan - include all tier options
+      const planCounts = {
+        free: 0,
+        starter: 0,
+        professional: 0,
+        business: 0,
+        enterprise: 0
+      };
+      organizationsByPlan.forEach(item => {
+        const tier = item._id || 'free';
+        if (planCounts.hasOwnProperty(tier)) {
+          planCounts[tier] = item.count;
+        } else {
+          planCounts['free'] += item.count; // Add unknown plans to free
+        }
+      });
+
+      // Process organizations by status - include all status options
+      const statusCounts = {
+        active: 0,
+        trial: 0,
+        pending_payment: 0,
+        past_due: 0,
+        suspended: 0,
+        cancelled: 0,
+        expired: 0
+      };
+      organizationsByStatus.forEach(item => {
+        const status = item._id || 'active';
+        if (statusCounts.hasOwnProperty(status)) {
+          statusCounts[status] = item.count;
+        } else {
+          statusCounts['active'] += item.count; // Add unknown status to active
+        }
+      });
+
       res.json({
         success: true,
         data: {
@@ -1081,6 +1126,8 @@ class AdminController {
             providers: totalProviders,
             activeOrganizations
           },
+          organizationsByPlan: planCounts,
+          organizationsByStatus: statusCounts,
           modelsByType: modelsByType.reduce((acc, item) => {
             acc[item._id || 'unknown'] = item.count;
             return acc;
@@ -1133,6 +1180,20 @@ class AdminController {
         .skip(skip)
         .limit(parseInt(limit));
 
+      // Debug logging
+      console.log('\n[DEBUG getPlans] ========================================');
+      console.log('[DEBUG getPlans] found', plans.length, 'plans');
+      if (plans.length > 0) {
+        console.log('[DEBUG getPlans] First plan _id:', plans[0]._id);
+        console.log('[DEBUG getPlans] First plan name:', plans[0].name);
+        console.log('[DEBUG getPlans] First plan limits:', JSON.stringify(plans[0].limits, null, 2));
+        console.log('[DEBUG getPlans] First plan limits.maxProjects:', plans[0].limits?.maxProjects);
+        console.log('[DEBUG getPlans] First plan limits.maxFeatures:', plans[0].limits?.maxFeatures);
+        console.log('[DEBUG getPlans] First plan limits.maxSimulations:', plans[0].limits?.maxSimulations);
+        console.log('[DEBUG getPlans] First plan raw (toObject):', JSON.stringify(plans[0].toObject(), null, 2));
+      }
+      console.log('[DEBUG getPlans] ========================================\n');
+
       const total = await Plan.countDocuments(query);
 
       res.json({
@@ -1160,19 +1221,34 @@ class AdminController {
     try {
       const { id } = req.params;
 
+      console.log('\n[DEBUG getPlanById] ========================================');
+      console.log('[DEBUG getPlanById] Fetching plan with id:', id);
+
       const plan = await Plan.findById(id)
         .populate('organization', 'name slug')
         .populate('features.feature', 'name slug category tokenEstimates');
 
       if (!plan) {
+        console.log('[DEBUG getPlanById] Plan not found!');
         throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
       }
+
+      // Debug logging
+      console.log('[DEBUG getPlanById] plan._id:', plan._id);
+      console.log('[DEBUG getPlanById] plan.name:', plan.name);
+      console.log('[DEBUG getPlanById] plan.limits:', JSON.stringify(plan.limits, null, 2));
+      console.log('[DEBUG getPlanById] plan.limits.maxProjects:', plan.limits?.maxProjects, '(type:', typeof plan.limits?.maxProjects, ')');
+      console.log('[DEBUG getPlanById] plan.limits.maxFeatures:', plan.limits?.maxFeatures, '(type:', typeof plan.limits?.maxFeatures, ')');
+      console.log('[DEBUG getPlanById] plan.limits.maxSimulations:', plan.limits?.maxSimulations, '(type:', typeof plan.limits?.maxSimulations, ')');
+      console.log('[DEBUG getPlanById] plan raw (toObject):', JSON.stringify(plan.toObject(), null, 2));
+      console.log('[DEBUG getPlanById] ========================================\n');
 
       res.json({
         success: true,
         data: { plan }
       });
     } catch (error) {
+      console.error('[DEBUG getPlanById] ERROR:', error);
       next(error);
     }
   }
@@ -1184,6 +1260,38 @@ class AdminController {
   async createPlan(req, res, next) {
     try {
       const planData = req.body;
+
+      // Debug logging - verify request body
+      console.log('\n[DEBUG createPlan] ========================================');
+      console.log('[DEBUG createPlan] createPlan called');
+      console.log('[DEBUG createPlan] Request body:', JSON.stringify(planData, null, 2));
+      console.log('[DEBUG createPlan] planData.limits:', JSON.stringify(planData.limits, null, 2));
+      console.log('[DEBUG createPlan] planData.limits.maxProjects:', planData.limits?.maxProjects, '(type:', typeof planData.limits?.maxProjects, ')');
+      console.log('[DEBUG createPlan] planData.limits.maxFeatures:', planData.limits?.maxFeatures, '(type:', typeof planData.limits?.maxFeatures, ')');
+      console.log('[DEBUG createPlan] planData.limits.maxSimulations:', planData.limits?.maxSimulations, '(type:', typeof planData.limits?.maxSimulations, ')');
+
+      // Validate and convert limits to proper numbers or null
+      if (planData.limits) {
+        const limitFields = ['maxProjects', 'maxFeatures', 'maxSimulations', 'maxUsers', 'maxApiCalls', 'maxTokens', 'maxStorage'];
+        for (const field of limitFields) {
+          const value = planData.limits[field];
+          if (value === null || value === undefined || value === '') {
+            // Convert null, undefined, or empty string to null (unlimited)
+            planData.limits[field] = null;
+          } else if (typeof value === 'string') {
+            // If it's a string, try to parse it as a number
+            const parsed = parseInt(value, 10);
+            planData.limits[field] = isNaN(parsed) ? null : parsed;
+          } else if (typeof value === 'number') {
+            // If it's already a number, keep it (unless NaN)
+            planData.limits[field] = isNaN(value) ? null : Math.floor(value);
+          } else {
+            // Unknown type, convert to null
+            console.warn(`[DEBUG createPlan] Invalid ${field} value: ${value}, type: ${typeof value}. Converting to null.`);
+            planData.limits[field] = null;
+          }
+        }
+      }
 
       // Get the first organization or create one
       let organization = await Organization.findOne().sort({ createdAt: 1 });
@@ -1203,21 +1311,105 @@ class AdminController {
         planData.slug = planData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       }
 
-      const plan = await Plan.create({
-        ...planData,
-        organization: organization._id
-      });
+      // Create plan with all fields
+      const planToCreate = {
+        organization: organization._id,
+        name: planData.name,
+        slug: planData.slug,
+        description: planData.description || '',
+        tier: planData.tier || 'starter',
+        status: planData.status || 'draft',
+        isPopular: planData.isPopular || false,
+        displayOrder: planData.displayOrder || 0,
 
-      await plan.populate('features.feature', 'name slug category');
+        // Billing
+        billing: {
+          price: planData.billing?.price || 0,
+          yearlyPrice: planData.billing?.yearlyPrice,
+          currency: planData.billing?.currency || 'USD',
+          interval: planData.billing?.interval || 'month',
+          trialDays: planData.billing?.trialDays || 0
+        },
 
-      logger.info(`Admin created plan: ${plan.name}`);
+        // Pricing Model
+        pricingModel: {
+          type: planData.pricingModel?.type || 'flat',
+          usageBased: {
+            includedTokens: planData.pricingModel?.usageBased?.includedTokens || 0,
+            includedRequests: planData.pricingModel?.usageBased?.includedRequests || 0,
+            pricePerToken: planData.pricingModel?.usageBased?.pricePerToken || 0,
+            pricePerRequest: planData.pricingModel?.usageBased?.pricePerRequest || 0,
+            overageMultiplier: planData.pricingModel?.usageBased?.overageMultiplier || 1
+          },
+          tiers: planData.pricingModel?.tiers || []
+        },
+
+        // Credits
+        credits: {
+          includedCredits: planData.credits?.includedCredits || 0,
+          creditType: planData.credits?.creditType || 'token'
+        },
+
+        // Settings
+        settings: {
+          isPublic: planData.settings?.isPublic ?? true,
+          isDefault: planData.settings?.isDefault ?? false,
+          allowUpgrade: planData.settings?.allowUpgrade ?? true,
+          allowDowngrade: planData.settings?.allowDowngrade ?? true,
+          maxDowngradeInterval: planData.settings?.maxDowngradeInterval || 30
+        },
+
+        // Features
+        features: planData.features || []
+      };
+
+      // CRITICAL: Explicitly set all limits fields
+      // Using direct assignment to ensure Mongoose tracks the change
+      planToCreate.limits = {
+        maxProjects: planData.limits?.maxProjects ?? null,
+        maxFeatures: planData.limits?.maxFeatures ?? null,
+        maxSimulations: planData.limits?.maxSimulations ?? null,
+        maxUsers: planData.limits?.maxUsers ?? null,
+        maxApiCalls: planData.limits?.maxApiCalls ?? null,
+        maxTokens: planData.limits?.maxTokens ?? null,
+        maxStorage: planData.limits?.maxStorage ?? null
+      };
+
+      console.log('[DEBUG createPlan] planToCreate.limits:', JSON.stringify(planToCreate.limits, null, 2));
+      console.log('[DEBUG createPlan] About to call Plan.create()...');
+      console.log('[DEBUG createPlan] ========================================\n');
+
+      // Create the plan using Model.create() which handles nested objects better
+      const newPlan = await Plan.create(planToCreate);
+
+      console.log('\n[DEBUG createPlan] ====== AFTER CREATE ======');
+      console.log('[DEBUG createPlan] newPlan._id:', newPlan._id);
+      console.log('[DEBUG createPlan] newPlan.limits:', JSON.stringify(newPlan.limits, null, 2));
+      console.log('[DEBUG createPlan] newPlan.limits.maxProjects:', newPlan.limits?.maxProjects);
+      console.log('[DEBUG createPlan] newPlan.limits.maxFeatures:', newPlan.limits?.maxFeatures);
+      console.log('[DEBUG createPlan] newPlan.limits.maxSimulations:', newPlan.limits?.maxSimulations);
+
+      // Verify by fetching from database
+      const planVerify = await Plan.findById(newPlan._id).lean();
+      console.log('[DEBUG createPlan] ====== VERIFIED FROM DB ======');
+      console.log('[DEBUG createPlan] planVerify.limits:', JSON.stringify(planVerify.limits, null, 2));
+      console.log('[DEBUG createPlan] planVerify.limits.maxProjects:', planVerify.limits?.maxProjects);
+      console.log('[DEBUG createPlan] planVerify.limits.maxFeatures:', planVerify.limits?.maxFeatures);
+      console.log('[DEBUG createPlan] planVerify.limits.maxSimulations:', planVerify.limits?.maxSimulations);
+      console.log('[DEBUG createPlan] ========================================\n');
+
+      await newPlan.populate('features.feature', 'name slug category');
+
+      logger.info(`Admin created plan: ${newPlan.name}`);
 
       res.status(201).json({
         success: true,
         message: 'Plan created successfully',
-        data: { plan }
+        data: { plan: newPlan }
       });
     } catch (error) {
+      console.error('[DEBUG createPlan] ERROR:', error);
+      console.error('[DEBUG createPlan] Error stack:', error.stack);
       next(error);
     }
   }
@@ -1231,34 +1423,165 @@ class AdminController {
       const { id } = req.params;
       const updates = req.body;
 
-      // Remove fields that shouldn't be updated directly
-      delete updates._id;
-      delete updates.organization;
-      delete updates.createdAt;
+      // Debug logging - verify request body
+      console.log('\n[DEBUG updatePlan] ========================================');
+      console.log('[DEBUG updatePlan] updatePlan called for id:', id);
+      console.log('[DEBUG updatePlan] Request body:', JSON.stringify(updates, null, 2));
+      console.log('[DEBUG updatePlan] updates.limits:', JSON.stringify(updates.limits, null, 2));
+      console.log('[DEBUG updatePlan] updates.limits.maxProjects:', updates.limits?.maxProjects, '(type:', typeof updates.limits?.maxProjects, ')');
+      console.log('[DEBUG updatePlan] updates.limits.maxFeatures:', updates.limits?.maxFeatures, '(type:', typeof updates.limits?.maxFeatures, ')');
+      console.log('[DEBUG updatePlan] updates.limits.maxSimulations:', updates.limits?.maxSimulations, '(type:', typeof updates.limits?.maxSimulations, ')');
 
-      // Auto-generate slug from name if name changed
-      if (updates.name && !updates.slug) {
-        updates.slug = updates.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      // Validate and convert limits to proper numbers or null
+      if (updates.limits) {
+        const limitFields = ['maxProjects', 'maxFeatures', 'maxSimulations', 'maxUsers', 'maxApiCalls', 'maxTokens', 'maxStorage'];
+        for (const field of limitFields) {
+          const value = updates.limits[field];
+          if (value === null || value === undefined || value === '') {
+            // Convert null, undefined, or empty string to null (unlimited)
+            updates.limits[field] = null;
+          } else if (typeof value === 'string') {
+            // If it's a string, try to parse it as a number
+            const parsed = parseInt(value, 10);
+            updates.limits[field] = isNaN(parsed) ? null : parsed;
+          } else if (typeof value === 'number') {
+            // If it's already a number, keep it (unless NaN)
+            updates.limits[field] = isNaN(value) ? null : Math.floor(value);
+          } else {
+            // Unknown type, convert to null
+            console.warn(`[DEBUG updatePlan] Invalid ${field} value: ${value}, type: ${typeof value}. Converting to null.`);
+            updates.limits[field] = null;
+          }
+        }
+        console.log('[DEBUG updatePlan] Validated and converted updates.limits:', JSON.stringify(updates.limits, null, 2));
       }
 
-      const plan = await Plan.findByIdAndUpdate(
-        id,
-        { $set: updates },
-        { new: true, runValidators: true }
-      ).populate('features.feature', 'name slug category tokenEstimates');
-
+      // Find the plan first
+      const plan = await Plan.findById(id);
       if (!plan) {
         throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
       }
 
-      logger.info(`Admin updated plan: ${plan.name}`);
+      console.log('[DEBUG updatePlan] Plan BEFORE update - limits:', JSON.stringify(plan.limits, null, 2));
+
+      // Build the update object with individual fields using dot notation
+      const updateObj = {};
+
+      // Update basic fields
+      if (updates.name) updateObj.name = updates.name;
+      if (updates.slug) updateObj.slug = updates.slug;
+      if (updates.description !== undefined) updateObj.description = updates.description;
+      if (updates.tier) updateObj.tier = updates.tier;
+      if (updates.status) updateObj.status = updates.status;
+      if (updates.isPopular !== undefined) updateObj.isPopular = updates.isPopular;
+      if (updates.displayOrder !== undefined) updateObj.displayOrder = updates.displayOrder;
+
+      // Update billing
+      if (updates.billing) {
+        updateObj.billing = {
+          price: updates.billing.price ?? plan.billing?.price ?? 0,
+          yearlyPrice: updates.billing.yearlyPrice ?? plan.billing?.yearlyPrice,
+          currency: updates.billing.currency ?? plan.billing?.currency ?? 'USD',
+          interval: updates.billing.interval ?? plan.billing?.interval ?? 'month',
+          trialDays: updates.billing.trialDays ?? plan.billing?.trialDays ?? 0
+        };
+      }
+
+      // Update pricingModel
+      if (updates.pricingModel) {
+        updateObj.pricingModel = {
+          type: updates.pricingModel.type ?? plan.pricingModel?.type ?? 'flat',
+          usageBased: {
+            includedTokens: updates.pricingModel.usageBased?.includedTokens ?? plan.pricingModel?.usageBased?.includedTokens ?? 0,
+            includedRequests: updates.pricingModel.usageBased?.includedRequests ?? plan.pricingModel?.usageBased?.includedRequests ?? 0,
+            pricePerToken: updates.pricingModel.usageBased?.pricePerToken ?? plan.pricingModel?.usageBased?.pricePerToken ?? 0,
+            pricePerRequest: updates.pricingModel.usageBased?.pricePerRequest ?? plan.pricingModel?.usageBased?.pricePerRequest ?? 0,
+            overageMultiplier: updates.pricingModel.usageBased?.overageMultiplier ?? plan.pricingModel?.usageBased?.overageMultiplier ?? 1
+          },
+          tiers: updates.pricingModel.tiers ?? plan.pricingModel?.tiers ?? []
+        };
+      }
+
+      // Update credits
+      if (updates.credits) {
+        updateObj.credits = {
+          includedCredits: updates.credits.includedCredits ?? plan.credits?.includedCredits ?? 0,
+          creditType: updates.credits.creditType ?? plan.credits?.creditType ?? 'token'
+        };
+      }
+
+      // CRITICAL: Update limits using DOT NOTATION to ensure all fields are set
+      // Using dot notation (e.g., 'limits.maxProjects') instead of nested object
+      // ensures MongoDB properly sets each field
+      if (updates.limits) {
+        // Set each limit field individually using dot notation
+        updateObj['limits.maxProjects'] = updates.limits.maxProjects ?? null;
+        updateObj['limits.maxFeatures'] = updates.limits.maxFeatures ?? null;
+        updateObj['limits.maxSimulations'] = updates.limits.maxSimulations ?? null;
+        updateObj['limits.maxUsers'] = updates.limits.maxUsers ?? null;
+        updateObj['limits.maxApiCalls'] = updates.limits.maxApiCalls ?? null;
+        updateObj['limits.maxTokens'] = updates.limits.maxTokens ?? null;
+        updateObj['limits.maxStorage'] = updates.limits.maxStorage ?? null;
+
+        console.log('[DEBUG updatePlan] limits update using dot notation:');
+        console.log('[DEBUG updatePlan]   limits.maxProjects:', updateObj['limits.maxProjects']);
+        console.log('[DEBUG updatePlan]   limits.maxFeatures:', updateObj['limits.maxFeatures']);
+        console.log('[DEBUG updatePlan]   limits.maxSimulations:', updateObj['limits.maxSimulations']);
+      }
+
+      // Update settings
+      if (updates.settings) {
+        updateObj.settings = {
+          isPublic: updates.settings.isPublic ?? plan.settings?.isPublic ?? true,
+          isDefault: updates.settings.isDefault ?? plan.settings?.isDefault ?? false,
+          allowUpgrade: updates.settings.allowUpgrade ?? plan.settings?.allowUpgrade ?? true,
+          allowDowngrade: updates.settings.allowDowngrade ?? plan.settings?.allowDowngrade ?? true,
+          maxDowngradeInterval: updates.settings.maxDowngradeInterval ?? plan.settings?.maxDowngradeInterval ?? 30
+        };
+      }
+
+      // Update features if provided
+      if (updates.features) {
+        updateObj.features = updates.features;
+      }
+
+      console.log('[DEBUG updatePlan] Final updateObj keys:', Object.keys(updateObj));
+      console.log('[DEBUG updatePlan] About to call findByIdAndUpdate...');
+      console.log('[DEBUG updatePlan] ========================================\n');
+
+      // Use findByIdAndUpdate with the update object
+      const updatedPlan = await Plan.findByIdAndUpdate(
+        id,
+        { $set: updateObj },
+        { new: true, runValidators: true }
+      ).populate('features.feature', 'name slug category tokenEstimates');
+
+      console.log('\n[DEBUG updatePlan] ====== AFTER UPDATE ======');
+      console.log('[DEBUG updatePlan] updatedPlan._id:', updatedPlan._id);
+      console.log('[DEBUG updatePlan] updatedPlan.limits:', JSON.stringify(updatedPlan.limits, null, 2));
+      console.log('[DEBUG updatePlan] updatedPlan.limits.maxProjects:', updatedPlan.limits?.maxProjects);
+      console.log('[DEBUG updatePlan] updatedPlan.limits.maxFeatures:', updatedPlan.limits?.maxFeatures);
+      console.log('[DEBUG updatePlan] updatedPlan.limits.maxSimulations:', updatedPlan.limits?.maxSimulations);
+
+      // Verify by fetching from database
+      const planVerify = await Plan.findById(id).lean();
+      console.log('[DEBUG updatePlan] ====== VERIFIED FROM DB ======');
+      console.log('[DEBUG updatePlan] planVerify.limits:', JSON.stringify(planVerify.limits, null, 2));
+      console.log('[DEBUG updatePlan] planVerify.limits.maxProjects:', planVerify.limits?.maxProjects);
+      console.log('[DEBUG updatePlan] planVerify.limits.maxFeatures:', planVerify.limits?.maxFeatures);
+      console.log('[DEBUG updatePlan] planVerify.limits.maxSimulations:', planVerify.limits?.maxSimulations);
+      console.log('[DEBUG updatePlan] ========================================\n');
+
+      logger.info(`Admin updated plan: ${updatedPlan.name}`);
 
       res.json({
         success: true,
         message: 'Plan updated successfully',
-        data: { plan }
+        data: { plan: updatedPlan }
       });
     } catch (error) {
+      console.error('[DEBUG updatePlan] ERROR:', error);
+      console.error('[DEBUG updatePlan] Error stack:', error.stack);
       next(error);
     }
   }
@@ -1411,6 +1734,63 @@ class AdminController {
       res.json({
         success: true,
         message: 'Plans reordered successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ===========================================
+  // SETTINGS MANAGEMENT
+  // ===========================================
+
+  /**
+   * Get system settings
+   * @route GET /api/admin/settings
+   */
+  async getSettings(req, res, next) {
+    try {
+      const settings = await Setting.getSettings();
+
+      res.json({
+        success: true,
+        siteName: settings.siteName,
+        siteDescription: settings.siteDescription,
+        email: settings.email,
+        security: settings.security,
+        features: settings.features
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update system settings
+   * @route PUT /api/admin/settings
+   */
+  async updateSettings(req, res, next) {
+    try {
+      const { siteName, siteDescription, email, security, features } = req.body;
+
+      const settings = await Setting.updateSettings({
+        siteName,
+        siteDescription,
+        email,
+        security,
+        features
+      });
+
+      logger.info(`Admin updated system settings`);
+
+      res.json({
+        success: true,
+        message: 'Settings updated successfully',
+        siteName: settings.siteName,
+        siteDescription: settings.siteDescription,
+        email: settings.email,
+        security: settings.security,
+        features: settings.features
       });
     } catch (error) {
       next(error);

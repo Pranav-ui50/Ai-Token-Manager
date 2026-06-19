@@ -165,6 +165,18 @@ router.put(
 );
 
 /**
+ * @route   PUT /api/organizations/:id/members/:memberId/status
+ * @desc    Update member status (active/inactive)
+ * @access  Private (Owner only)
+ */
+router.put(
+  '/:id/members/:memberId/status',
+  validateMemberOperation,
+  checkOrganization('id'),
+  organizationController.updateMemberStatus
+);
+
+/**
  * @route   PUT /api/organizations/:id/transfer-ownership
  * @desc    Transfer ownership to another member
  * @access  Private (Owner only)

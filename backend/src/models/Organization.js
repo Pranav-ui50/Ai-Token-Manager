@@ -55,11 +55,43 @@ const organizationSchema = new mongoose.Schema(
         ref: 'Role',
         required: true
       },
+      status: {
+        type: String,
+        enum: ['active', 'inactive', 'disabled'],
+        default: 'active'
+      },
       joinedAt: {
         type: Date,
         default: Date.now
       },
       invitedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      // Fields for member management during plan changes
+      previousStatus: {
+        type: String,
+        enum: ['active', 'inactive', null],
+        default: null
+      },
+      disabledAt: {
+        type: Date,
+        default: null
+      },
+      disabledReason: {
+        type: String,
+        enum: ['plan_limit', 'admin_action', 'subscription_expired', null],
+        default: null
+      },
+      disabledBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      reamedAt: {
+        type: Date,
+        default: null
+      },
+      reenabledBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
       }
@@ -113,7 +145,7 @@ const organizationSchema = new mongoose.Schema(
       },
       status: {
         type: String,
-        enum: ['active', 'trial', 'pending_payment', 'past_due', 'expired', 'cancelled'],
+        enum: ['active', 'trial', 'pending_payment', 'past_due', 'expired', 'cancelled', 'grace_period'],
         default: 'trial'
       },
       billingCycle: {
@@ -188,6 +220,37 @@ const organizationSchema = new mongoose.Schema(
       updatedAt: {
         type: Date,
         default: Date.now
+      },
+      previousPlan: {
+        type: String,
+        default: null
+      },
+      expiredAt: {
+        type: Date,
+        default: null
+      }
+    },
+    // Scheduled downgrade information
+    scheduledDowngrade: {
+      planId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Plan'
+      },
+      planTier: {
+        type: String,
+        default: null
+      },
+      scheduledAt: {
+        type: Date,
+        default: null
+      },
+      effectiveAt: {
+        type: Date,
+        default: null
+      },
+      scheduledBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
       }
     },
     billingDetails: {
@@ -404,6 +467,7 @@ organizationSchema.methods.addMember = function (userId, roleId, invitedBy = nul
   this.members.push({
     user: userId,
     role: roleId,
+    status: 'active',
     invitedBy: invitedBy,
     joinedAt: new Date()
   });

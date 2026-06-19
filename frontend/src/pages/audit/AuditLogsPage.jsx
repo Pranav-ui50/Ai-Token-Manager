@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import auditApi from '../../services/api/audit.api.js';
 
 const SEVERITY_COLORS = {
@@ -15,23 +16,114 @@ const STATUS_COLORS = {
 };
 
 const ACTION_LABELS = {
+  // Authentication
   login: 'Login',
   logout: 'Logout',
   login_failed: 'Login Failed',
   password_reset: 'Password Reset',
   password_changed: 'Password Changed',
+  email_verified: 'Email Verified',
+  // CRUD
   create: 'Create',
   read: 'Read',
   update: 'Update',
   delete: 'Delete',
+  // Import/Export
+  import: 'Import',
   export: 'Export',
-  import: 'Import'
+  // User actions
+  user_invited: 'User Invited',
+  user_removed: 'User Removed',
+  role_changed: 'Role Changed',
+  // Organization
+  organization_created: 'Organization Created',
+  organization_updated: 'Organization Updated',
+  organization_deleted: 'Organization Deleted',
+  // Project
+  project_created: 'Project Created',
+  project_updated: 'Project Updated',
+  project_deleted: 'Project Deleted',
+  // Provider
+  provider_created: 'Provider Created',
+  provider_updated: 'Provider Updated',
+  provider_activated: 'Provider Activated',
+  provider_deactivated: 'Provider Deactivated',
+  // Model
+  model_created: 'Model Created',
+  model_updated: 'Model Updated',
+  pricing_updated: 'Pricing Updated',
+  // Plan
+  plan_created: 'Plan Created',
+  plan_updated: 'Plan Updated',
+  plan_activated: 'Plan Activated',
+  plan_deactivated: 'Plan Deactivated',
+  // Integration
+  integration_created: 'Integration Created',
+  integration_updated: 'Integration Updated',
+  integration_tested: 'Integration Tested',
+  // API Key
+  api_key_created: 'API Key Created',
+  api_key_revoked: 'API Key Revoked',
+  // Webhook
+  webhook_created: 'Webhook Created',
+  webhook_updated: 'Webhook Updated',
+  webhook_deleted: 'Webhook Deleted',
+  // Report
+  report_created: 'Report Created',
+  report_generated: 'Report Generated',
+  report_exported: 'Report Exported',
+  report_deleted: 'Report Deleted',
+  // Simulation
+  simulation_created: 'Simulation Created',
+  simulation_run: 'Simulation Run',
+  simulation_deleted: 'Simulation Deleted',
+  // Settings
+  settings_updated: 'Settings Updated',
+  // Bulk
+  bulk_create: 'Bulk Create',
+  bulk_update: 'Bulk Update',
+  bulk_delete: 'Bulk Delete',
+  // Payment
+  payment_created: 'Payment Created',
+  payment_verified: 'Payment Verified',
+  payment_failed: 'Payment Failed',
+  payment_refunded: 'Payment Refunded',
+  subscription_created: 'Subscription Created',
+  subscription_updated: 'Subscription Updated',
+  subscription_cancelled: 'Subscription Cancelled',
+  // System
+  system_error: 'System Error',
+  system_warning: 'System Warning',
+  system_info: 'System Info'
+};
+
+const RESOURCE_LABELS = {
+  user: 'User',
+  organization: 'Organization',
+  project: 'Project',
+  provider: 'Provider',
+  model: 'Model',
+  feature: 'Feature',
+  plan: 'Plan',
+  simulation: 'Simulation',
+  integration: 'Integration',
+  api_key: 'API Key',
+  webhook: 'Webhook',
+  report: 'Report',
+  notification: 'Notification',
+  pricing_history: 'Pricing History',
+  role: 'Role',
+  invitation: 'Invitation',
+  settings: 'Settings',
+  auth: 'Auth',
+  payment: 'Payment',
+  invoice: 'Invoice',
+  subscription: 'Subscription'
 };
 
 function AuditLogsPage() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [selectedLog, setSelectedLog] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
@@ -60,13 +152,25 @@ function AuditLogsPage() {
   // Export state
   const [exporting, setExporting] = useState(false);
 
+  // Track the latest request to avoid race conditions
+  const requestIdRef = useRef(0);
+
   useEffect(() => {
     loadOptions();
   }, []);
 
   useEffect(() => {
     loadLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, page]);
+
+  // Handle filter change - updates filter and resets page to 1
+  const handleFilterChange = (key, value) => {
+    // Update filter state
+    setFilters(prev => ({ ...prev, [key]: value }));
+    // Reset page to 1 when filter changes
+    setPage(1);
+  };
 
   const loadOptions = async () => {
     try {
@@ -76,27 +180,30 @@ function AuditLogsPage() {
         auditApi.getSeverityLevels().catch(() => null)
       ]);
 
-      setActionTypes(actionsRes?.data || ['login', 'logout', 'create', 'update', 'delete', 'read']);
+      setActionTypes(actionsRes?.data || ['login', 'logout', 'create', 'update', 'delete']);
       setResourceTypes(resourcesRes?.data || ['user', 'organization', 'project', 'feature', 'model', 'provider']);
       setSeverityLevels(severitiesRes?.data || ['info', 'warning', 'error', 'critical']);
     } catch (err) {
       console.error('Failed to load options:', err);
       // Set defaults on error
-      setActionTypes(['login', 'logout', 'create', 'update', 'delete', 'read']);
+      setActionTypes(['login', 'logout', 'create', 'update', 'delete']);
       setResourceTypes(['user', 'organization', 'project', 'feature', 'model', 'provider']);
       setSeverityLevels(['info', 'warning', 'error', 'critical']);
     }
   };
 
-  const loadLogs = async () => {
+  // Core function to fetch logs with specific filters
+  const fetchLogs = async (filterParams, pageNum) => {
+    // Generate a unique request ID for this call
+    const currentRequestId = ++requestIdRef.current;
+
     try {
       setLoading(true);
-      setError(null);
 
       // Validate and format dates
       const params = {
-        ...filters,
-        page,
+        ...filterParams,
+        page: pageNum,
         limit
       };
 
@@ -107,7 +214,6 @@ function AuditLogsPage() {
           console.warn('Invalid start date format:', params.startDate);
           delete params.startDate;
         } else {
-          // Ensure year is 4 digits and within valid range
           const year = parseInt(params.startDate.split('-')[0]);
           if (year < 2020 || year > new Date().getFullYear()) {
             console.warn('Start year out of range:', year);
@@ -123,7 +229,6 @@ function AuditLogsPage() {
           console.warn('Invalid end date format:', params.endDate);
           delete params.endDate;
         } else {
-          // Ensure year is 4 digits and within valid range
           const year = parseInt(params.endDate.split('-')[0]);
           if (year < 2020 || year > new Date().getFullYear()) {
             console.warn('End year out of range:', year);
@@ -134,39 +239,71 @@ function AuditLogsPage() {
 
       // Remove empty values
       Object.keys(params).forEach(key => {
-        if (!params[key]) delete params[key];
+        if (!params[key] && params[key] !== 0) delete params[key];
       });
+
+      console.log('[Audit Logs] Fetching with params:', params);
 
       const response = await auditApi.getLogs(params);
 
-      // Handle different response formats
-      if (response && response.data) {
-        setLogs(Array.isArray(response.data) ? response.data : []);
-      } else if (Array.isArray(response)) {
-        setLogs(response);
-      } else {
-        setLogs([]);
+      // Check if this is still the latest request (avoid race conditions)
+      if (currentRequestId !== requestIdRef.current) {
+        console.log('[Audit Logs] Ignoring stale response, request ID:', currentRequestId, 'current:', requestIdRef.current);
+        return;
       }
 
-      if (response && response.pagination) {
-        setTotal(response.pagination.total || 0);
-        setTotalPages(response.pagination.pages || 1);
+      console.log('[Audit Logs] API response:', response);
+
+      // Handle different response formats
+      if (response && response.success && Array.isArray(response.data)) {
+        // Standard response: { success: true, data: [...], pagination: {...} }
+        setLogs(response.data);
+        if (response.pagination) {
+          setTotal(response.pagination.total || 0);
+          setTotalPages(response.pagination.pages || 1);
+        } else {
+          setTotal(response.data.length);
+          setTotalPages(1);
+        }
+      } else if (Array.isArray(response)) {
+        // Direct array response
+        setLogs(response);
+        setTotal(response.length);
+        setTotalPages(1);
+      } else if (response && Array.isArray(response.data)) {
+        // Response with data array
+        setLogs(response.data);
+        if (response.pagination) {
+          setTotal(response.pagination.total || 0);
+          setTotalPages(response.pagination.pages || 1);
+        } else {
+          setTotal(response.data.length);
+          setTotalPages(1);
+        }
       } else {
+        console.warn('[Audit Logs] Unexpected response format:', response);
+        setLogs([]);
         setTotal(0);
         setTotalPages(1);
       }
     } catch (err) {
+      // Check if this is still the latest request
+      if (currentRequestId !== requestIdRef.current) {
+        console.log('[Audit Logs] Ignoring error from stale request');
+        return;
+      }
+
       console.error('Failed to load audit logs:', err);
 
-      // Check if it's a network error
+      // Show toast error
       if (err.isNetworkError || err.message?.includes('Network')) {
-        setError('Unable to connect to the server. Please check if the backend server is running.');
+        toast.error('Unable to connect to the server. Please check if the backend server is running.');
       } else if (err.response?.status === 401) {
-        setError('You are not authorized to view audit logs. Please log in again.');
+        toast.error('You are not authorized to view audit logs. Please log in again.');
       } else if (err.response?.status === 404) {
-        setError('Audit logs endpoint not found. Please check the API configuration.');
+        toast.error('Audit logs endpoint not found. Please check the API configuration.');
       } else {
-        setError(err.response?.data?.message || err.message || 'Failed to load audit logs');
+        toast.error(err.response?.data?.message || err.message || 'Failed to load audit logs');
       }
 
       setLogs([]);
@@ -175,6 +312,11 @@ function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load logs using current state
+  const loadLogs = async () => {
+    await fetchLogs(filters, page);
   };
 
   const handleExport = async (format = 'json') => {
@@ -195,8 +337,9 @@ function AuditLogsPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
+      toast.success(`Audit logs exported as ${format.toUpperCase()} successfully.`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to export logs');
+      toast.error(err.response?.data?.message || 'Failed to export logs');
     } finally {
       setExporting(false);
     }
@@ -259,6 +402,10 @@ function AuditLogsPage() {
     return ACTION_LABELS[action] || action?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || action;
   };
 
+  const formatResource = (resource) => {
+    return RESOURCE_LABELS[resource] || resource?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || resource;
+  };
+
   const clearFilters = () => {
     setFilters({
       action: '',
@@ -270,24 +417,6 @@ function AuditLogsPage() {
       search: ''
     });
     setPage(1);
-  };
-
-  // Handle date change with validation
-  const handleDateChange = (field, value) => {
-    // Validate date format YYYY-MM-DD
-    if (value) {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (dateRegex.test(value)) {
-        const year = parseInt(value.split('-')[0]);
-        const currentYear = new Date().getFullYear();
-        // Only allow years from 2020 to current year
-        if (year >= 2020 && year <= currentYear) {
-          setFilters({ ...filters, [field]: value });
-        }
-      }
-    } else {
-      setFilters({ ...filters, [field]: '' });
-    }
   };
 
   return (
@@ -306,27 +435,8 @@ function AuditLogsPage() {
           >
             {exporting ? 'Exporting...' : 'Export CSV'}
           </button>
-          <button
-            onClick={() => handleExport('json')}
-            disabled={exporting}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {exporting ? 'Exporting...' : 'Export JSON'}
-          </button>
         </div>
       </div>
-
-      {/* Error Alert */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-800 hover:text-red-900">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -355,7 +465,7 @@ function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
             <select
               value={filters.action}
-              onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+              onChange={(e) => handleFilterChange('action', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
             >
               <option value="">All Actions</option>
@@ -368,12 +478,12 @@ function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Resource Type</label>
             <select
               value={filters.resourceType}
-              onChange={(e) => setFilters({ ...filters, resourceType: e.target.value })}
+              onChange={(e) => handleFilterChange('resourceType', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
             >
               <option value="">All Resources</option>
               {resourceTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
+                <option key={type} value={type}>{formatResource(type)}</option>
               ))}
             </select>
           </div>
@@ -381,7 +491,7 @@ function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Severity</label>
             <select
               value={filters.severity}
-              onChange={(e) => setFilters({ ...filters, severity: e.target.value })}
+              onChange={(e) => handleFilterChange('severity', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
             >
               <option value="">All Severities</option>
@@ -394,7 +504,7 @@ function AuditLogsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
               value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+              onChange={(e) => handleFilterChange('status', e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
             >
               <option value="">All Statuses</option>
@@ -408,7 +518,7 @@ function AuditLogsPage() {
             <input
               type="date"
               value={filters.startDate}
-              onChange={(e) => handleDateChange('startDate', e.target.value)}
+              onChange={(e) => handleFilterChange('startDate', e.target.value)}
               min="2020-01-01"
               max={new Date().toISOString().split('T')[0]}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent text-gray-900"
@@ -419,7 +529,7 @@ function AuditLogsPage() {
             <input
               type="date"
               value={filters.endDate}
-              onChange={(e) => handleDateChange('endDate', e.target.value)}
+              onChange={(e) => handleFilterChange('endDate', e.target.value)}
               min="2020-01-01"
               max={new Date().toISOString().split('T')[0]}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent text-gray-900"
@@ -431,7 +541,7 @@ function AuditLogsPage() {
           <input
             type="text"
             value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
             placeholder="Search by description or resource name..."
             className="w-full border border-gray-200 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
           />
@@ -494,7 +604,7 @@ function AuditLogsPage() {
                       <span className="text-sm text-gray-900">{formatAction(log.action)}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{log.resourceType || 'N/A'}</div>
+                      <div className="text-sm text-gray-900">{formatResource(log.resourceType) || 'N/A'}</div>
                       {log.resourceName && (
                         <p className="text-xs text-gray-500">{log.resourceName}</p>
                       )}
@@ -512,9 +622,13 @@ function AuditLogsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => handleViewDetail(log)}
-                        className="text-[#DC2626] hover:text-[#B91C1C] font-medium"
+                        className="p-2 text-[#DC2626] hover:text-[#B91C1C] hover:bg-red-50 rounded-lg transition-colors"
+                        title="View Details"
                       >
-                        View Details
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                       </button>
                     </td>
                   </tr>
@@ -588,7 +702,7 @@ function AuditLogsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Resource Type</p>
-                  <p className="font-medium text-gray-900">{selectedLog.resourceType || 'N/A'}</p>
+                  <p className="font-medium text-gray-900">{formatResource(selectedLog.resourceType) || 'N/A'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Resource Name</p>

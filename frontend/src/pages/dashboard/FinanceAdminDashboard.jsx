@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useOrganization } from '../../context/OrganizationContext.jsx';
 import analyticsApi from '../../services/api/analytics.api.js';
 
 // Helper to extract numeric value from potentially nested object
@@ -23,6 +24,7 @@ const extractNumber = (value) => {
 function FinanceAdminDashboard() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
+  const { currentOrganization } = useOrganization();
   const [stats, setStats] = useState({
     totalSpend: 0,
     projectedCost: 0,
@@ -34,18 +36,11 @@ function FinanceAdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Get organization ID from user
-  const orgId = user?.organization?._id || user?.organization;
+  // Get organization ID from user or context
+  const orgId = currentOrganization?._id || user?.organization?._id || user?.organization;
 
   useEffect(() => {
-    if (orgId) {
-      fetchDashboardData();
-    } else {
-      // Set default data if no organization
-      setMonthlyData(generateDefaultMonthlyData());
-      setTopModels(generateDefaultModels());
-      setIsLoading(false);
-    }
+    fetchDashboardData();
   }, [orgId]);
 
   const fetchDashboardData = async () => {
@@ -58,10 +53,9 @@ function FinanceAdminDashboard() {
       const summary = data?.summary || {};
 
       // Map backend fields to frontend stats
-      // Backend returns totalCost, projectedCost, savings, activeSubscriptions directly
       setStats({
-        totalSpend: extractNumber(summary.totalCost || summary.monthlySpend || 0),
-        projectedCost: extractNumber(summary.projectedCost || summary.estimatedCost || 0),
+        totalSpend: extractNumber(summary.totalCost || summary.monthlySpend || summary.costs?.total || 0),
+        projectedCost: extractNumber(summary.projectedCost || summary.estimatedCost || summary.costs?.projected || 0),
         savings: extractNumber(summary.savings || summary.costSavings || 0),
         activeSubscriptions: extractNumber(summary.activePlans || summary.activeSubscriptions || summary.subscriptions || 0)
       });
@@ -69,61 +63,81 @@ function FinanceAdminDashboard() {
       // Set cost trend data for monthly chart
       const costTrend = data?.costTrend || [];
       if (costTrend.length > 0) {
+        // Get current month info for generating proper month labels
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // Take only last 5 data points to match "Last 5 months" title
+        const last5Data = costTrend.slice(-5);
+
         // Transform costTrend data for chart display
-        const transformedTrend = costTrend.map(item => ({
-          month: item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short' }) : item.month || '',
-          actual: item.cost || item.actual || 0,
-          projected: item.projected || 0,
-          tokens: item.tokens || 0,
-          requests: item.requests || 0
-        }));
+        // Use index-based month names to ensure unique months
+        const transformedTrend = last5Data.map((item, index) => {
+          // Calculate the month index based on position from current month
+          // First item is oldest (4 months ago), last is current
+          const monthIndex = (currentMonth - (last5Data.length - 1 - index) + 12) % 12;
+          return {
+            month: months[monthIndex],
+            actual: extractNumber(item.cost || item.actual || 0),
+            projected: extractNumber(item.projected || 0),
+            tokens: extractNumber(item.tokens || 0),
+            requests: extractNumber(item.requests || 0)
+          };
+        });
         setMonthlyData(transformedTrend);
       } else {
-        setMonthlyData(generateDefaultMonthlyData());
+        // No real usage data - don't show fake $0 values
+        setMonthlyData([]);
       }
 
       // Set top models from analytics
       const models = data?.topModels || data?.summary?.costs?.byModel || [];
       if (models.length > 0) {
-        // Transform models data for display
         const transformedModels = models.map(model => ({
-          _id: model.model || model._id,
-          name: model.name || model.model || 'Unknown',
-          cost: model.cost || 0,
-          tokens: model.tokens || 0,
-          requests: model.requests || 0,
-          provider: model.provider || 'Unknown'
+          _id: model._id || model.model,
+          name: model.name || model.modelName || model.model || 'Unknown',
+          cost: extractNumber(model.cost || 0),
+          tokens: extractNumber(model.tokens || model.tokenCount || 0),
+          requests: extractNumber(model.requests || 0),
+          provider: model.provider || model.providerName || 'Unknown'
         }));
         setTopModels(transformedModels.slice(0, 5));
       } else {
-        setTopModels(generateDefaultModels());
+        setTopModels([]);
       }
 
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
       setError(err.response?.data?.error?.message || 'Failed to load dashboard data');
-      // Set default data on error
       setMonthlyData(generateDefaultMonthlyData());
-      setTopModels(generateDefaultModels());
+      setTopModels([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const generateDefaultMonthlyData = () => [
-    { month: 'Jan', actual: 0, projected: 0 },
-    { month: 'Feb', actual: 0, projected: 0 },
-    { month: 'Mar', actual: 0, projected: 0 },
-    { month: 'Apr', actual: 0, projected: 0 },
-    { month: 'May', actual: 0, projected: 0 }
-  ];
+  const generateDefaultMonthlyData = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const data = [];
 
-  const generateDefaultModels = () => [];
+    // Generate last 5 months
+    for (let i = 4; i >= 0; i--) {
+      const monthIndex = (currentMonth - i + 12) % 12;
+      data.push({
+        month: months[monthIndex],
+        actual: 0,
+        projected: 0
+      });
+    }
+    return data;
+  };
 
   const formatCurrency = (amount) => {
     const numValue = typeof amount === 'object' ? extractNumber(amount) : amount;
     if (!numValue && numValue !== 0) return '$0.00';
-    // Ensure we're working with a number and format it
     const value = Number(numValue);
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -141,6 +155,9 @@ function FinanceAdminDashboard() {
     return numValue.toString();
   };
 
+  // Calculate max value for chart scaling
+  const maxCost = Math.max(...monthlyData.map(d => Math.max(d.actual, d.projected)), 1);
+
   // Loading state
   if (authLoading || isLoading) {
     return (
@@ -157,7 +174,7 @@ function FinanceAdminDashboard() {
   }
 
   // No organization state
-  if (!orgId) {
+  if (!orgId && !currentOrganization) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="text-center">
@@ -192,26 +209,6 @@ function FinanceAdminDashboard() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Finance Dashboard</h1>
           <p className="text-sm text-gray-500">Cost analysis and pricing management</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/reports')}
-            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export
-          </button>
-          <button
-            onClick={() => navigate('/simulations')}
-            className="px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
-          >
-            <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-5 8a4 4 0 01-4-4V5a2 2 0 012-2h14a2 2 0 012 2v8a4 4 0 01-4 4H7z" />
-            </svg>
-            New Simulation
-          </button>
         </div>
       </div>
 
@@ -262,7 +259,7 @@ function FinanceAdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="text-xs text-gray-500 mb-1 truncate">Active Plans</p>
+              <p className="text-xs text-gray-500 mb-1 truncate">Active Models</p>
               <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.activeSubscriptions}</p>
             </div>
             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -280,38 +277,45 @@ function FinanceAdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Monthly Spend</h2>
-            <select className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none">
-              <option>Last 5 months</option>
-              <option>Last 12 months</option>
-            </select>
+            <p className="text-xs text-gray-500">Last 5 months</p>
           </div>
           {monthlyData.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {monthlyData.map((data, index) => (
                 <div key={index} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">{data.month || `Month ${index + 1}`}</span>
+                    <span className="text-gray-600 font-medium">{data.month}</span>
                     <div className="flex items-center gap-4">
-                      <span className="text-gray-900 font-medium">{formatCurrency(extractNumber(data.actual))}</span>
-                      <span className="text-gray-400 text-xs">Projected: {formatCurrency(extractNumber(data.projected))}</span>
+                      <span className="text-gray-900 font-semibold">{formatCurrency(data.actual)}</span>
+                      {data.projected > 0 && (
+                        <span className="text-gray-400 text-xs">Projected: {formatCurrency(data.projected)}</span>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <div
-                      className="h-2 bg-[#DC2626] rounded-full"
-                      style={{ width: `${Math.min((extractNumber(data.actual) / 100) * 100, 100)}%` }}
-                    />
-                    <div
-                      className="h-2 bg-gray-200 rounded-full"
-                      style={{ width: `${Math.min((extractNumber(data.projected - data.actual) / 100) * 100, 100)}%` }}
-                    />
+                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div className="flex h-full">
+                      <div
+                        className="h-full bg-[#DC2626] rounded-l-full"
+                        style={{ width: `${Math.min((data.actual / maxCost) * 100, 100) || 0}%` }}
+                      />
+                      {data.projected > data.actual && (
+                        <div
+                          className="h-full bg-gray-300 rounded-r-full"
+                          style={{ width: `${Math.min(((data.projected - data.actual) / maxCost) * 100, 100 - (data.actual / maxCost) * 100) || 0}%` }}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No cost data available yet
+            <div className="text-center py-8">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <p className="text-gray-500">No cost data available yet</p>
+              <p className="text-sm text-gray-400 mt-1">Cost trends will appear here after API usage</p>
             </div>
           )}
         </div>
@@ -320,9 +324,6 @@ function FinanceAdminDashboard() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Top Models by Cost</h2>
-            <Link to="/models" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
-              View All
-            </Link>
           </div>
           {topModels.length > 0 ? (
             <div className="space-y-3">
@@ -333,20 +334,24 @@ function FinanceAdminDashboard() {
                       <span className="text-xs font-bold text-white">{index + 1}</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{model.name || model.modelName || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500 truncate">{model.provider || model.providerName || '-'}</p>
+                      <p className="font-medium text-gray-900 truncate">{model.name || 'Unknown'}</p>
+                      <p className="text-xs text-gray-500 truncate">{model.provider || '-'}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-gray-900">{formatCurrency(extractNumber(model.cost))}</p>
-                    <p className="text-xs text-gray-500">{formatNumber(model.tokens || model.tokenCount || 0)} tokens</p>
+                    <p className="font-semibold text-gray-900">{formatCurrency(model.cost)}</p>
+                    <p className="text-xs text-gray-500">{formatNumber(model.tokens)} tokens</p>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              No model usage data available yet
+            <div className="text-center py-8">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+              <p className="text-gray-500">No model usage data available yet</p>
+              <p className="text-sm text-gray-400 mt-1">Model costs will appear here after API usage</p>
             </div>
           )}
         </div>
@@ -357,19 +362,21 @@ function FinanceAdminDashboard() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           <button
-            onClick={() => navigate('/pricing-history')}
+            type="button"
+            onClick={() => navigate('/subscription')}
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
           >
             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
               <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
             </div>
-            <p className="font-medium text-gray-900">Pricing History</p>
-            <p className="text-xs text-gray-500 mt-1">View cost trends</p>
+            <p className="font-medium text-gray-900">Subscription</p>
+            <p className="text-xs text-gray-500 mt-1">View plan details</p>
           </button>
 
           <button
+            type="button"
             onClick={() => navigate('/simulations')}
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
           >
@@ -383,6 +390,7 @@ function FinanceAdminDashboard() {
           </button>
 
           <button
+            type="button"
             onClick={() => navigate('/invoices')}
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
           >
@@ -396,6 +404,7 @@ function FinanceAdminDashboard() {
           </button>
 
           <button
+            type="button"
             onClick={() => navigate('/reports')}
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
           >
@@ -405,7 +414,7 @@ function FinanceAdminDashboard() {
               </svg>
             </div>
             <p className="font-medium text-gray-900">Reports</p>
-            <p className="text-xs text-gray-500 mt-1">Generate reports</p>
+            <p className="text-xs text-gray-500 mt-1">View reports</p>
           </button>
         </div>
       </div>

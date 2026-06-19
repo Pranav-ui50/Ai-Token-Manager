@@ -41,6 +41,76 @@ router.get('/:organizationId',
 );
 
 /**
+ * @route   GET /api/billing/:organizationId/available-plans
+ * @desc    Get available plans for upgrade/downgrade with restrictions
+ * @access  Private (requires view_billing permission)
+ */
+router.get('/:organizationId/available-plans',
+  requirePermissions('view_billing'),
+  billingController.getPlansForChange
+);
+
+/**
+ * @route   POST /api/billing/:organizationId/validate-change
+ * @desc    Validate if plan change is allowed
+ * @access  Private (requires view_billing permission)
+ */
+router.post('/:organizationId/validate-change',
+  requirePermissions('view_billing'),
+  billingController.validatePlanChange
+);
+
+/**
+ * @route   POST /api/billing/:organizationId/change-plan
+ * @desc    Change plan with member management
+ * @access  Private (requires manage_billing permission)
+ */
+router.post('/:organizationId/change-plan',
+  requirePermissions('manage_billing'),
+  billingController.changePlan
+);
+
+/**
+ * @route   GET /api/billing/:organizationId/member-limit
+ * @desc    Check member limit for organization
+ * @access  Private (requires view_billing permission)
+ */
+router.get('/:organizationId/member-limit',
+  requirePermissions('view_billing'),
+  billingController.checkMemberLimit
+);
+
+/**
+ * @route   POST /api/billing/:organizationId/schedule-downgrade
+ * @desc    Schedule downgrade for end of billing period
+ * @access  Private (requires manage_billing permission)
+ */
+router.post('/:organizationId/schedule-downgrade',
+  requirePermissions('manage_billing'),
+  billingController.scheduleDowngrade
+);
+
+/**
+ * @route   DELETE /api/billing/:organizationId/schedule-downgrade
+ * @desc    Cancel scheduled downgrade
+ * @access  Private (requires manage_billing permission)
+ */
+router.delete('/:organizationId/schedule-downgrade',
+  requirePermissions('manage_billing'),
+  billingController.cancelScheduledDowngrade
+);
+
+/**
+ * @route   POST /api/billing/:organizationId/reenable-members
+ * @desc    Re-enable disabled members after upgrade
+ * @access  Private (requires manage_billing permission)
+ */
+router.post('/:organizationId/reenable-members',
+  requirePermissions('manage_billing'),
+  billingController.reenableMembers
+);
+
+/**
  * @route   PUT /api/billing/:organizationId/subscription
  * @desc    Update subscription plan
  * @access  Private (requires manage_billing permission)
@@ -177,7 +247,7 @@ router.post('/:organizationId/preview',
 // ==========================================
 
 /**
- * @route   GET /api/billing/plans
+ * @route   GET /api/billing/plans/public
  * @desc    Get available subscription plans
  * @access  Public
  */

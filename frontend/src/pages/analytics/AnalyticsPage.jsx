@@ -39,6 +39,90 @@ const CHART_COLORS = {
   info: '#0891B2'
 };
 
+// Custom label renderer for pie charts with collision avoidance
+const renderCustomizedPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, data }) => {
+  const RADIAN = Math.PI / 180;
+  // Calculate position for label - position outside the pie
+  const radius = outerRadius + 40; // Distance from center for label
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  // Calculate endpoint on the pie edge for the leader line
+  const pieEdgeX = cx + outerRadius * Math.cos(-midAngle * RADIAN);
+  const pieEdgeY = cy + outerRadius * Math.sin(-midAngle * RADIAN);
+
+  // Determine text alignment based on position
+  const isRightSide = x >= cx;
+  const textAnchor = isRightSide ? 'start' : 'end';
+
+  // Format percentage
+  const percentage = (percent * 100).toFixed(1);
+
+  // Calculate a small offset from the pie edge for the leader line start
+  const lineStartRadius = outerRadius + 5;
+  const lineStartX = cx + lineStartRadius * Math.cos(-midAngle * RADIAN);
+  const lineStartY = cy + lineStartRadius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <g>
+      {/* Leader line - two segments */}
+      <polyline
+        points={`${pieEdgeX},${pieEdgeY} ${lineStartX},${lineStartY} ${x},${y}`}
+        fill="none"
+        stroke={COLORS[index % COLORS.length]}
+        strokeWidth={1.5}
+        strokeOpacity={0.7}
+      />
+      {/* Provider name and percentage */}
+      <text
+        x={x + (isRightSide ? 5 : -5)}
+        y={y - 4}
+        textAnchor={textAnchor}
+        fill="#374151"
+        fontSize={12}
+        fontWeight={500}
+      >
+        {name}
+      </text>
+      <text
+        x={x + (isRightSide ? 5 : -5)}
+        y={y + 12}
+        textAnchor={textAnchor}
+        fill="#6B7280"
+        fontSize={11}
+      >
+        {`${percentage}%`}
+      </text>
+    </g>
+  );
+};
+
+// Alternative label for smaller charts - displays in legend style below chart
+const renderOuterLabels = (data, formatCurrency) => {
+  if (!data || data.length === 0) return null;
+
+  const total = data.reduce((sum, item) => sum + (item.cost || 0), 0);
+
+  return (
+    <div className="mt-4 space-y-2">
+      {data.map((item, index) => {
+        const percentage = total > 0 ? ((item.cost / total) * 100).toFixed(1) : 0;
+        return (
+          <div key={index} className="flex items-center gap-3 text-sm">
+            <div
+              className="w-3 h-3 rounded-full flex-shrink-0"
+              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+            />
+            <span className="font-medium text-gray-900 flex-1">{item.name}</span>
+            <span className="text-gray-600">{percentage}%</span>
+            <span className="text-gray-500 font-mono">{formatCurrency(item.cost)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 function AnalyticsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { currentOrganization } = useOrganization();
@@ -128,8 +212,9 @@ function AnalyticsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
           <p className="text-sm text-gray-500">Operational costs, profitability, and margin analytics</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => handleExport('excel')}
             disabled={isExporting}
             className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
@@ -140,6 +225,7 @@ function AnalyticsPage() {
             <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
           <button
+            type="button"
             onClick={() => handleExport('pdf')}
             disabled={isExporting}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
@@ -326,13 +412,50 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Trend (Last 7 Days)</h3>
           {costTrend && costTrend.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={costTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Line type="monotone" dataKey="cost" stroke={CHART_COLORS.primary} strokeWidth={2} name="Cost ($)" />
+              <LineChart data={costTrend} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  tickFormatter={(value) => {
+                    if (!value) return '';
+                    const date = new Date(value);
+                    return `${date.getMonth() + 1}/${date.getDate()}`;
+                  }}
+                  axisLine={{ stroke: '#d1d5db' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  tickFormatter={(value) => `$${value.toFixed(2)}`}
+                  axisLine={{ stroke: '#d1d5db' }}
+                  domain={['auto', 'auto']}
+                  allowDataOverflow={false}
+                />
+                <Tooltip
+                  formatter={(value) => formatCurrency(value)}
+                  labelFormatter={(label) => {
+                    if (!label) return '';
+                    const date = new Date(label);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  }}
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                <Line
+                  type="monotone"
+                  dataKey="cost"
+                  stroke={CHART_COLORS.primary}
+                  strokeWidth={2}
+                  name="Cost"
+                  dot={{ fill: CHART_COLORS.primary, strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6, stroke: CHART_COLORS.primary, strokeWidth: 2, fill: '#fff' }}
+                  connectNulls={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -391,7 +514,13 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
             </table>
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">No recent activity</p>
+          <div className="text-center py-8">
+            <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            <h4 className="text-sm font-medium text-gray-900 mb-1">No recent activity</h4>
+            <p className="text-sm text-gray-500">Activity will appear here when features are used. Create features and make API requests to see usage data.</p>
+          </div>
         )}
       </div>
     </div>
@@ -452,24 +581,39 @@ function CostsTab({ data, formatCurrency, formatNumber }) {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Provider</h3>
           {costsByProvider && costsByProvider.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={costsByProvider}
-                  dataKey="cost"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {costsByProvider.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-              </PieChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={costsByProvider}
+                    dataKey="cost"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={70}
+                    innerRadius={40}
+                    paddingAngle={2}
+                    labelLine={false}
+                    label={false}
+                  >
+                    {costsByProvider.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Legend-style display below chart for clear label visibility */}
+              {renderOuterLabels(costsByProvider, formatCurrency)}
+            </>
           ) : (
             <div className="h-[250px] flex items-center justify-center text-gray-400">
               No provider data available

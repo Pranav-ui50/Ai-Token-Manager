@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
+import { getCurrencySymbol } from '../../utils/currency.js';
 
 function AdminOrganizationDetailPage() {
   const { id } = useParams();
@@ -82,12 +83,10 @@ function AdminOrganizationDetailPage() {
     });
   };
 
-  const formatCurrency = (amount) => {
-    if (!amount && amount !== 0) return '$0.00';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
+  const formatCurrency = (amount, currency = 'INR') => {
+    if (!amount && amount !== 0) return `${getCurrencySymbol(currency)}0.00`;
+    const symbol = getCurrencySymbol(currency);
+    return `${symbol}${amount.toFixed(2)}`;
   };
 
   const formatNumber = (num) => {

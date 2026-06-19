@@ -2,51 +2,16 @@
  * Pricing Section
  *
  * Displays subscription plans dynamically from API.
+ * Uses PlansContext for centralized state management.
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import publicApi from '../../../services/api/public.api.js';
-
-// Default plans as fallback
-const DEFAULT_PLANS = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    tier: 'starter',
-    description: 'Great for small teams exploring AI APIs',
-    billing: { price: 29, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 500000, creditType: 'token' },
-    limits: { maxUsers: 3, maxApiCalls: 10000 },
-    isPopular: false
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    tier: 'professional',
-    description: 'Ideal for growing teams with advanced AI needs',
-    billing: { price: 99, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 2000000, creditType: 'token' },
-    limits: { maxUsers: 10, maxApiCalls: 50000 },
-    isPopular: true
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    tier: 'business',
-    description: 'For organizations with heavy AI API usage',
-    billing: { price: 299, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 10000000, creditType: 'token' },
-    limits: { maxUsers: 50, maxApiCalls: 200000 },
-    isPopular: false
-  }
-];
+import { usePlans } from '../../../context/PlansContext.jsx';
 
 const PricingSection = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState(DEFAULT_PLANS);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const { plans, loading, error, refreshPlans } = usePlans();
   const [billingInterval, setBillingInterval] = useState('month');
   const [currency, setCurrency] = useState('USD');
 
@@ -64,31 +29,6 @@ const PricingSection = () => {
     INR: '₹',
     EUR: '€',
     GBP: '£'
-  };
-
-  useEffect(() => {
-    fetchPlans();
-  }, []);
-
-  const fetchPlans = async () => {
-    try {
-      setLoading(true);
-      const response = await publicApi.getPlans();
-      if (response.success && response.data && response.data.length > 0) {
-        setPlans(response.data);
-      } else {
-        // Use default plans if API returns empty
-        console.log('Using default plans');
-        setPlans(DEFAULT_PLANS);
-      }
-    } catch (err) {
-      console.error('Failed to load plans from API, using defaults:', err);
-      // Use default plans on error
-      setPlans(DEFAULT_PLANS);
-      setError('');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const formatPrice = (price, curr = 'USD') => {
@@ -210,7 +150,7 @@ const PricingSection = () => {
           <div className="text-center mb-8">
             <p className="text-red-600">{error}</p>
             <button
-              onClick={fetchPlans}
+              onClick={refreshPlans}
               className="mt-2 text-[#DC2626] hover:underline"
             >
               Try again
@@ -221,7 +161,7 @@ const PricingSection = () => {
         {/* Plans Grid */}
         {displayPlans.length === 0 && !error ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">No plans available at the moment.</p>
+            <p className="text-gray-500">No plans available at the moment. Please contact support.</p>
           </div>
         ) : (
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
@@ -236,19 +176,19 @@ const PricingSection = () => {
                     isPopular ? 'border-[#DC2626] shadow-lg' : 'border-gray-200'
                   } overflow-hidden transition-all hover:shadow-xl`}
                 >
-                  {/* Popular Badge */}
-                  {isPopular && (
-                    <div className="absolute top-0 right-0 bg-[#DC2626] text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                      Most Popular
-                    </div>
-                  )}
-
                   <div className="p-6">
                     {/* Plan Header */}
                     <div className="mb-4">
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${tierStyle.badge}`}>
-                        {getTierName(plan.tier)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${tierStyle.badge}`}>
+                          {getTierName(plan.tier)}
+                        </span>
+                        {isPopular && (
+                          <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-[#DC2626] text-white">
+                            Popular
+                          </span>
+                        )}
+                      </div>
                       <h3 className="mt-2 text-xl font-bold text-gray-900">{plan.name}</h3>
                       {plan.description && (
                         <p className="text-sm text-gray-500 mt-1">{plan.description}</p>
@@ -274,30 +214,6 @@ const PricingSection = () => {
 
                     {/* Features */}
                     <div className="space-y-3 mb-6">
-                      {/* Included Credits */}
-                      {plan.credits?.includedCredits > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-gray-600">
-                            {plan.credits.includedCredits.toLocaleString()} {plan.credits.creditType || 'tokens'} included
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Usage Limits */}
-                      {plan.pricingModel?.includedTokens > 0 && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-gray-600">
-                            {plan.pricingModel.includedTokens.toLocaleString()} tokens/month
-                          </span>
-                        </div>
-                      )}
-
                       {/* Features List */}
                       {(plan.features || []).slice(0, 5).map((feature, index) => (
                         <div key={index} className="flex items-center gap-2 text-sm">
@@ -320,16 +236,43 @@ const PricingSection = () => {
                       ))}
 
                       {/* Plan Limits */}
-                      {plan.limits?.maxUsers && (
+                      {plan.limits?.maxProjects > 0 && (
                         <div className="flex items-center gap-2 text-sm">
                           <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          <span className="text-gray-600">Up to {plan.limits.maxUsers} users</span>
+                          <span className="text-gray-600">Up to {plan.limits.maxProjects} project{plan.limits.maxProjects > 1 ? 's' : ''}</span>
                         </div>
                       )}
 
-                      {plan.limits?.maxApiCalls && (
+                      {plan.limits?.maxFeatures > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">Up to {plan.limits.maxFeatures} feature{plan.limits.maxFeatures > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+
+                      {plan.limits?.maxSimulations > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">{plan.limits.maxSimulations.toLocaleString()} simulation{plan.limits.maxSimulations > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+
+                      {plan.limits?.maxUsers > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">Up to {plan.limits.maxUsers} user{plan.limits.maxUsers > 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+
+                      {plan.limits?.maxApiCalls > 0 && (
                         <div className="flex items-center gap-2 text-sm">
                           <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -338,8 +281,17 @@ const PricingSection = () => {
                         </div>
                       )}
 
+                      {plan.limits?.maxTokens > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-gray-600">{plan.limits.maxTokens.toLocaleString()} tokens</span>
+                        </div>
+                      )}
+
                       {/* Unlimited fallback */}
-                      {!plan.credits?.includedCredits && !plan.pricingModel?.includedTokens && !plan.limits?.maxApiCalls && (
+                      {!plan.limits?.maxProjects && !plan.limits?.maxFeatures && !plan.limits?.maxSimulations && !plan.limits?.maxApiCalls && !plan.limits?.maxUsers && !plan.features?.length && (
                         <div className="flex items-center gap-2 text-sm">
                           <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

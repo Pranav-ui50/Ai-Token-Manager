@@ -16,10 +16,11 @@ const featureSchema = new mongoose.Schema({
     index: true
   },
 
-  // Project (optional)
+  // Project (required - features must be linked to a project)
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
+    required: [true, 'Project/Product is required. Features must be linked to a project.'],
     index: true
   },
 
@@ -195,6 +196,21 @@ const featureSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'inactive', 'maintenance', 'deprecated'],
     default: 'active'
+  },
+
+  // For tracking disabled resources (plan limit management)
+  disabledAt: {
+    type: Date
+  },
+  disabledReason: {
+    type: String,
+    enum: ['plan_limit', 'manual', null],
+    default: null
+  },
+  previousStatus: {
+    type: String,
+    enum: ['active', 'inactive', 'maintenance', null],
+    default: null
   },
 
   // Metadata

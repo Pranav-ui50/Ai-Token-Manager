@@ -160,8 +160,20 @@ function MembersTab({ organization, organizationId }) {
     try {
       await updateMemberRole(organizationId, selectedMember.user._id, selectedMember.newRole);
       setShowRoleModal(false);
-      setSelectedMember(null);
-      showToast.roleUpdated();
+
+      // Check if the updated member is the current user
+      const updatedUserId = selectedMember.user._id || selectedMember.user;
+      if (updatedUserId?.toString() === currentUserId?.toString()) {
+        showToast.success('Role updated successfully. You will be logged out...');
+        // The backend will invalidate the session, user will be redirected to login
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1500);
+      } else {
+        const memberName = selectedMember.user.firstName || selectedMember.user.email;
+        showToast.success(`Role updated successfully. ${memberName} will be logged out and need to log in again to see their new permissions.`);
+        setSelectedMember(null);
+      }
     } catch (err) {
       showToast.error(err.response?.data?.message || 'Failed to update role');
     } finally {
@@ -244,11 +256,6 @@ function MembersTab({ organization, organizationId }) {
                     <div className="ml-3">
                       <div className="text-sm font-medium text-gray-900">
                         {member.user?.firstName} {member.user?.lastName}
-                        {isMemberOwner(member) && (
-                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                            Owner
-                          </span>
-                        )}
                       </div>
                       <div className="text-sm text-gray-500">
                         {member.user?.email}
@@ -322,61 +329,90 @@ function MembersTab({ organization, organizationId }) {
       >
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="First Name"
-              type="text"
-              name="firstName"
-              value={inviteForm.firstName}
-              onChange={(e) => setInviteForm(prev => ({ ...prev, firstName: e.target.value }))}
-              error={inviteErrors.firstName}
-              placeholder="John"
-              required
-            />
-            <Input
-              label="Last Name"
-              type="text"
-              name="lastName"
-              value={inviteForm.lastName}
-              onChange={(e) => setInviteForm(prev => ({ ...prev, lastName: e.target.value }))}
-              error={inviteErrors.lastName}
-              placeholder="Doe"
-              required
-            />
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">First Name<span className="text-red-500">*</span></label>
+                <span className="text-xs text-gray-400">{inviteForm.firstName.length}/50</span>
+              </div>
+              <input
+                type="text"
+                name="firstName"
+                value={inviteForm.firstName}
+                onChange={(e) => setInviteForm(prev => ({ ...prev, firstName: e.target.value }))}
+                maxLength={50}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 ${inviteErrors.firstName ? 'border-red-500' : 'border-gray-200'}`}
+                placeholder="John"
+              />
+              {inviteErrors.firstName && <p className="mt-1 text-xs text-red-500">{inviteErrors.firstName}</p>}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Last Name<span className="text-red-500">*</span></label>
+                <span className="text-xs text-gray-400">{inviteForm.lastName.length}/50</span>
+              </div>
+              <input
+                type="text"
+                name="lastName"
+                value={inviteForm.lastName}
+                onChange={(e) => setInviteForm(prev => ({ ...prev, lastName: e.target.value }))}
+                maxLength={50}
+                className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 ${inviteErrors.lastName ? 'border-red-500' : 'border-gray-200'}`}
+                placeholder="Doe"
+              />
+              {inviteErrors.lastName && <p className="mt-1 text-xs text-red-500">{inviteErrors.lastName}</p>}
+            </div>
           </div>
 
-          <Input
-            label="Email ID"
-            type="email"
-            name="email"
-            value={inviteForm.email}
-            onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-            error={inviteErrors.email}
-            placeholder="colleague@example.com"
-            required
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Email ID<span className="text-red-500">*</span></label>
+              <span className="text-xs text-gray-400">{inviteForm.email.length}/255</span>
+            </div>
+            <input
+              type="email"
+              name="email"
+              value={inviteForm.email}
+              onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+              maxLength={255}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 ${inviteErrors.email ? 'border-red-500' : 'border-gray-200'}`}
+              placeholder="colleague@example.com"
+            />
+            {inviteErrors.email && <p className="mt-1 text-xs text-red-500">{inviteErrors.email}</p>}
+          </div>
 
-          <Input
-            label="Password"
-            type="text"
-            name="password"
-            value={inviteForm.password}
-            onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
-            error={inviteErrors.password}
-            placeholder="Enter a password (min 8 characters)"
-            helperText="Password will be sent to the user via email"
-            required
-          />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-gray-700">Password<span className="text-red-500">*</span></label>
+              <span className="text-xs text-gray-400">{inviteForm.password.length}/100</span>
+            </div>
+            <input
+              type="text"
+              name="password"
+              value={inviteForm.password}
+              onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
+              maxLength={100}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 ${inviteErrors.password ? 'border-red-500' : 'border-gray-200'}`}
+              placeholder="Admin@123"
+            />
+            {inviteErrors.password && <p className="mt-1 text-xs text-red-500">{inviteErrors.password}</p>}
+            <p className="mt-1 text-xs text-gray-500">Password will be sent to the user via email</p>
+          </div>
 
-          <Select
-            label="Role"
-            name="roleId"
-            value={inviteForm.roleId}
-            onChange={(e) => setInviteForm(prev => ({ ...prev, roleId: e.target.value }))}
-            options={roles}
-            error={inviteErrors.roleId}
-            placeholder="Select a role"
-            required
-          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Role<span className="text-red-500">*</span></label>
+            <select
+              name="roleId"
+              value={inviteForm.roleId}
+              onChange={(e) => setInviteForm(prev => ({ ...prev, roleId: e.target.value }))}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 ${inviteErrors.roleId ? 'border-red-500' : 'border-gray-200'}`}
+            >
+              <option value="">Select a role</option>
+              {roles.map(role => (
+                <option key={role.value} value={role.value}>{role.label}</option>
+              ))}
+            </select>
+            {inviteErrors.roleId && <p className="mt-1 text-xs text-red-500">{inviteErrors.roleId}</p>}
+          </div>
 
           <div className="flex justify-end space-x-3 pt-4">
             <Button type="button" variant="secondary" onClick={() => setShowInviteModal(false)}>

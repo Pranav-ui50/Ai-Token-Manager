@@ -13,6 +13,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import config from './config/index.js';
 import logger from './config/logger.js';
@@ -25,6 +27,9 @@ import routes from './routes/index.js';
 import { initializeJobs, shutdownJobs } from './jobs/index.js';
 import realtimeService from './services/realtime.service.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Initialize Express app
 const app = express();
 
@@ -36,14 +41,16 @@ const server = createServer(app);
 // ===========================================
 
 // Set security HTTP headers
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' } // Allow images to be loaded cross-origin
+}));
 
 // Configure CORS
 const corsOptions = {
   origin: config.nodeEnv === 'development'
     ? true // Allow all origins in development
     : config.cors.origin, // Use specific origins in production
-  methods: config.cors.methods,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: config.cors.allowedHeaders,
   credentials: true
 };
@@ -79,6 +86,12 @@ app.use(express.json({ limit: '10mb' }));
 
 // Parse URL-encoded request body
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ===========================================
+// Static Files - Serve uploaded files
+// ===========================================
+
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ===========================================
 // Request Logging

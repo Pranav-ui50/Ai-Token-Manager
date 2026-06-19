@@ -156,6 +156,10 @@ const userSchema = new mongoose.Schema(
     passwordChangedAt: {
       type: Date,
       default: null
+    },
+    roleChangedAt: {
+      type: Date,
+      default: null
     }
   },
   {
@@ -205,12 +209,20 @@ userSchema.pre('save', async function (next) {
 // Method to compare password
 userSchema.methods.comparePassword = async function (candidatePassword) {
   try {
-    const user = await this.constructor.findById(this._id).select('+password');
-    if (!user || !user.password) {
-      console.error('[User] Password comparison failed: user or password not found');
-      throw new Error('User password not found');
+    // Use password from instance if available (already selected via .select('+password'))
+    // Otherwise fetch from database
+    let hashedPassword = this.password;
+
+    if (!hashedPassword) {
+      const user = await this.constructor.findById(this._id).select('+password');
+      if (!user || !user.password) {
+        console.error('[User] Password comparison failed: user or password not found');
+        throw new Error('User password not found');
+      }
+      hashedPassword = user.password;
     }
-    const isMatch = await bcrypt.compare(candidatePassword, user.password);
+
+    const isMatch = await bcrypt.compare(candidatePassword, hashedPassword);
     return isMatch;
   } catch (error) {
     console.error('[User] Password comparison error:', error.message);

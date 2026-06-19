@@ -203,6 +203,7 @@ class AuthService {
 
     // Compare password
     logger.debug(`[Auth] Comparing password for user: ${user._id}`);
+    logger.debug(`[Auth] User has password field: ${!!user.password}`);
     let isMatch = false;
     try {
       isMatch = await user.comparePassword(password);
@@ -321,8 +322,11 @@ class AuthService {
 
     logger.info(`[Auth] Password reset requested for: ${email}`);
 
+    // Normalize email for lookup (lowercase)
+    const normalizedEmail = email.toLowerCase();
+
     // Find user
-    const user = await User.findByEmail(email);
+    const user = await User.findByEmail(normalizedEmail);
     if (!user) {
       // Don't reveal if user exists or not
       logger.warn(`[Auth] Password reset requested for non-existent email: ${email}`);
@@ -338,11 +342,12 @@ class AuthService {
     // Invalidate existing tokens
     await PasswordReset.invalidateUserTokens(user._id);
 
-    // Create new reset token
-    const resetToken = await PasswordReset.createToken(user._id, user.email, ipAddress, userAgent);
+    // Create new reset token - use the email from the request (normalizedEmail) to ensure consistency
+    const resetToken = await PasswordReset.createToken(user._id, normalizedEmail, ipAddress, userAgent);
+    logger.debug(`[Auth] Reset token created for: ${normalizedEmail}, token: ${resetToken ? 'present' : 'undefined'}`);
 
-    // Generate reset URL
-    const resetUrl = `${config.client.url}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+    // Generate reset URL - use the same normalized email
+    const resetUrl = `${config.client.url}/reset-password?token=${resetToken}&email=${encodeURIComponent(normalizedEmail)}`;
 
     // Send email
     try {
@@ -357,6 +362,7 @@ class AuthService {
       logger.error('[Auth] Failed to send password reset email:', error);
       // In development, still return the token for testing
       if (config.nodeEnv === 'development') {
+        logger.debug(`[Auth] Returning reset token in development mode (email failed)`);
         return {
           message: 'If the email exists, a password reset link has been sent.',
           resetToken,
@@ -368,6 +374,7 @@ class AuthService {
       return { message: 'If the email exists, a password reset link has been sent.' };
     }
 
+    logger.debug(`[Auth] Returning success response, resetToken present: ${!!resetToken}`);
     return {
       message: 'If the email exists, a password reset link has been sent.',
       // In development, return the token for testing
@@ -385,9 +392,15 @@ class AuthService {
    */
   async resetPassword(token, email, newPassword) {
     logger.info(`[Auth] Password reset attempt for: ${email}`);
+    logger.debug(`[Auth] Token received (first 20 chars): ${token ? token.substring(0, 20) : 'undefined'}`);
+    logger.debug(`[Auth] Email received: ${email}`);
+
+    // Normalize email
+    const normalizedEmail = email.toLowerCase();
+    logger.debug(`[Auth] Email normalized: ${normalizedEmail}`);
 
     // Verify token
-    const resetRecord = await PasswordReset.verifyToken(token, email);
+    const resetRecord = await PasswordReset.verifyToken(token, normalizedEmail);
     if (!resetRecord) {
       logger.warn(`[Auth] Password reset failed - Invalid token for: ${email}`);
       throw new AppError('Invalid or expired reset token. Please request a new password reset.', 400, 'INVALID_RESET_TOKEN');

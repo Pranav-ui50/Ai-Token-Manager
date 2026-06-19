@@ -7,6 +7,7 @@
 import express from 'express';
 import settingsController from '../controllers/settings.controller.js';
 import { protect, checkOrganization } from '../middlewares/auth.middleware.js';
+import { avatarUpload } from '../middlewares/upload.middleware.js';
 import {
   validateOrganizationSettings,
   validateProfileSettings,
@@ -81,6 +82,7 @@ router.put(
  */
 router.post(
   '/profile/avatar',
+  avatarUpload.single('avatar'),
   settingsController.uploadAvatar
 );
 

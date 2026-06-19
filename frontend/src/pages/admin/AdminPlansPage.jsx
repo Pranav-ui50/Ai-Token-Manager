@@ -2,6 +2,7 @@
  * Admin Plans Management Page
  *
  * Super admin page for managing subscription plans (CRUD operations).
+ * Changes are automatically synced to all pages via PlansContext.
  */
 
 import { useState, useEffect } from 'react';
@@ -9,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../../services/api/axios.js';
 import { showToast } from '../../utils/toasts.js';
+import { PLANS_REFRESH_EVENT } from '../../context/PlansContext.jsx';
 
 const AdminPlansPage = () => {
   const navigate = useNavigate();
@@ -27,10 +29,10 @@ const AdminPlansPage = () => {
     status: 'active',
     isPopular: false,
     billing: {
-      price: 0,
+      price: '',
       currency: 'USD',
       interval: 'month',
-      trialDays: 14
+      trialDays: ''
     },
     pricingModel: {
       type: 'usage-based',
@@ -40,19 +42,22 @@ const AdminPlansPage = () => {
       }
     },
     credits: {
-      includedCredits: 0,
+      includedCredits: '',
       creditType: 'token'
     },
     limits: {
-      maxUsers: 1,
-      maxApiCalls: 1000,
-      maxTokens: 10000
+      maxProjects: '',
+      maxFeatures: '',
+      maxSimulations: '',
+      maxUsers: '',
+      maxApiCalls: '',
+      maxTokens: ''
     },
     settings: {
-      isPublic: true,
+      isPublic: false,
       isDefault: false,
-      allowUpgrade: true,
-      allowDowngrade: true
+      allowUpgrade: false,
+      allowDowngrade: false
     }
   });
 
@@ -73,13 +78,28 @@ const AdminPlansPage = () => {
   const fetchPlans = async () => {
     try {
       setLoading(true);
+      console.log('\n[DEBUG Frontend] ========================================');
+      console.log('[DEBUG Frontend] fetchPlans called');
       const response = await api.get('/admin/plans');
+      console.log('[DEBUG Frontend] Response status:', response.status);
+      console.log('[DEBUG Frontend] Response data:', JSON.stringify(response.data, null, 2));
       if (response.data.success) {
-        setPlans(response.data.data.plans || []);
+        const fetchedPlans = response.data.data.plans || [];
+        console.log('[DEBUG Frontend] Fetched plans count:', fetchedPlans.length);
+        if (fetchedPlans.length > 0) {
+          console.log('[DEBUG Frontend] First plan:', JSON.stringify(fetchedPlans[0], null, 2));
+          console.log('[DEBUG Frontend] First plan limits:', fetchedPlans[0].limits);
+          console.log('[DEBUG Frontend] First plan limits.maxProjects:', fetchedPlans[0].limits?.maxProjects);
+          console.log('[DEBUG Frontend] First plan limits.maxFeatures:', fetchedPlans[0].limits?.maxFeatures);
+          console.log('[DEBUG Frontend] First plan limits.maxSimulations:', fetchedPlans[0].limits?.maxSimulations);
+        }
+        setPlans(fetchedPlans);
       }
+      console.log('[DEBUG Frontend] ========================================\n');
     } catch (err) {
       showToast.error('Failed to fetch plans');
-      console.error(err);
+      console.error('[DEBUG Frontend] Error fetching plans:', err);
+      console.error('[DEBUG Frontend] Error response:', err.response?.data);
     } finally {
       setLoading(false);
     }
@@ -99,10 +119,10 @@ const AdminPlansPage = () => {
       status: 'active',
       isPopular: false,
       billing: {
-        price: 0,
+        price: '',
         currency: 'USD',
         interval: 'month',
-        trialDays: 14
+        trialDays: ''
       },
       pricingModel: {
         type: 'usage-based',
@@ -112,19 +132,23 @@ const AdminPlansPage = () => {
         }
       },
       credits: {
-        includedCredits: 0,
+        includedCredits: '',
         creditType: 'token'
       },
       limits: {
-        maxUsers: 1,
-        maxApiCalls: 1000,
-        maxTokens: 10000
+        // Empty string means unlimited - user can leave blank
+        maxProjects: '',
+        maxFeatures: '',
+        maxSimulations: '',
+        maxUsers: '',
+        maxApiCalls: '',
+        maxTokens: ''
       },
       settings: {
-        isPublic: true,
+        isPublic: false,
         isDefault: false,
-        allowUpgrade: true,
-        allowDowngrade: true
+        allowUpgrade: false,
+        allowDowngrade: false
       }
     });
     setFormErrors({});
@@ -139,8 +163,24 @@ const AdminPlansPage = () => {
 
   // Open modal for editing
   const handleEdit = (plan) => {
-    setEditingPlan(plan);
-    setFormData({
+    console.log('\n[DEBUG Frontend] ========================================');
+    console.log('[DEBUG Frontend] handleEdit called');
+    console.log('[DEBUG Frontend] plan._id:', plan._id);
+    console.log('[DEBUG Frontend] plan.name:', plan.name);
+    console.log('[DEBUG Frontend] plan.limits (raw):', JSON.stringify(plan.limits, null, 2));
+    console.log('[DEBUG Frontend] plan.limits.maxProjects:', plan.limits?.maxProjects, '(type:', typeof plan.limits?.maxProjects, ')');
+    console.log('[DEBUG Frontend] plan.limits.maxFeatures:', plan.limits?.maxFeatures, '(type:', typeof plan.limits?.maxFeatures, ')');
+    console.log('[DEBUG Frontend] plan.limits.maxSimulations:', plan.limits?.maxSimulations, '(type:', typeof plan.limits?.maxSimulations, ')');
+    console.log('[DEBUG Frontend] ========================================\n');
+
+    // Helper function to safely convert to string for input fields
+    const toString = (value) => {
+      if (value === null || value === undefined) return '';
+      return String(value);
+    };
+
+    // Build the form data object
+    const newFormData = {
       name: plan.name || '',
       slug: plan.slug || '',
       description: plan.description || '',
@@ -148,26 +188,29 @@ const AdminPlansPage = () => {
       status: plan.status || 'active',
       isPopular: plan.isPopular || false,
       billing: {
-        price: plan.billing?.price || 0,
+        price: toString(plan.billing?.price),
         currency: plan.billing?.currency || 'USD',
         interval: plan.billing?.interval || 'month',
-        trialDays: plan.billing?.trialDays || 14
+        trialDays: toString(plan.billing?.trialDays)
       },
       pricingModel: {
         type: plan.pricingModel?.type || 'usage-based',
         usageBased: {
-          includedTokens: plan.pricingModel?.usageBased?.includedTokens || 0,
-          includedRequests: plan.pricingModel?.usageBased?.includedRequests || 0
+          includedTokens: plan.pricingModel?.usageBased?.includedTokens ?? 0,
+          includedRequests: plan.pricingModel?.usageBased?.includedRequests ?? 0
         }
       },
       credits: {
-        includedCredits: plan.credits?.includedCredits || 0,
+        includedCredits: toString(plan.credits?.includedCredits),
         creditType: plan.credits?.creditType || 'token'
       },
       limits: {
-        maxUsers: plan.limits?.maxUsers || 1,
-        maxApiCalls: plan.limits?.maxApiCalls || 1000,
-        maxTokens: plan.limits?.maxTokens || 10000
+        maxProjects: toString(plan.limits?.maxProjects),
+        maxFeatures: toString(plan.limits?.maxFeatures),
+        maxSimulations: toString(plan.limits?.maxSimulations),
+        maxUsers: toString(plan.limits?.maxUsers),
+        maxApiCalls: toString(plan.limits?.maxApiCalls),
+        maxTokens: toString(plan.limits?.maxTokens)
       },
       settings: {
         isPublic: plan.settings?.isPublic ?? true,
@@ -175,7 +218,13 @@ const AdminPlansPage = () => {
         allowUpgrade: plan.settings?.allowUpgrade ?? true,
         allowDowngrade: plan.settings?.allowDowngrade ?? true
       }
-    });
+    };
+
+    console.log('[DEBUG Frontend] newFormData.limits:', JSON.stringify(newFormData.limits, null, 2));
+    console.log('[DEBUG Frontend] newFormData.billing:', JSON.stringify(newFormData.billing, null, 2));
+
+    setEditingPlan(plan);
+    setFormData(newFormData);
     setFormErrors({});
     setShowModal(true);
   };
@@ -228,29 +277,34 @@ const AdminPlansPage = () => {
       errors.description = 'Description cannot exceed 200 characters';
     }
 
-    // Price validation
-    if (formData.billing.price < 0) {
-      errors.price = 'Price cannot be negative';
+    // Price validation - allow empty or valid number
+    if (formData.billing.price && formData.billing.price !== '' && !/^\d{1,10}$/.test(formData.billing.price) && !/^\d{1,8}\.\d{0,2}$/.test(formData.billing.price)) {
+      errors.price = 'Price must be a valid number (max 10 digits)';
     }
 
-    // Credits validation
-    if (formData.credits.includedCredits < 0) {
-      errors.credits = 'Included credits cannot be negative';
+    // Credits validation - allow empty or valid number
+    if (formData.credits.includedCredits && formData.credits.includedCredits !== '' && !/^\d{1,10}$/.test(formData.credits.includedCredits)) {
+      errors.credits = 'Included credits must be a valid number (max 10 digits)';
     }
 
-    // Max users validation
-    if (formData.limits.maxUsers && formData.limits.maxUsers < 1) {
-      errors.maxUsers = 'Max users must be at least 1';
+    // Max users validation - allow empty or valid number
+    if (formData.limits.maxUsers && formData.limits.maxUsers !== '' && !/^\d{1,10}$/.test(formData.limits.maxUsers)) {
+      errors.maxUsers = 'Max users must be a valid number (max 10 digits)';
     }
 
-    // Max API calls validation
-    if (formData.limits.maxApiCalls && formData.limits.maxApiCalls < 1) {
-      errors.maxApiCalls = 'Max API calls must be at least 1';
+    // Max API calls validation - allow empty or valid number
+    if (formData.limits.maxApiCalls && formData.limits.maxApiCalls !== '' && !/^\d{1,10}$/.test(formData.limits.maxApiCalls)) {
+      errors.maxApiCalls = 'Max API calls must be a valid number (max 10 digits)';
     }
 
-    // Trial days validation
-    if (formData.billing.trialDays < 0) {
-      errors.trialDays = 'Trial days cannot be negative';
+    // Trial days validation - allow empty or valid positive number
+    if (formData.billing.trialDays && formData.billing.trialDays !== '') {
+      const trialDaysValue = parseInt(formData.billing.trialDays, 10);
+      if (isNaN(trialDaysValue) || trialDaysValue < 0) {
+        errors.trialDays = 'Trial days must be a valid positive number';
+      } else if (trialDaysValue > 10000000) {
+        errors.trialDays = 'Trial days cannot exceed 10,000,000';
+      }
     }
 
     setFormErrors(errors);
@@ -267,6 +321,25 @@ const AdminPlansPage = () => {
       // Auto-generate slug from name
       const slug = formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
+      // Helper function to convert string to number or return default
+      const parseNumber = (value, defaultValue = 0) => {
+        if (value === '' || value === null || value === undefined) return defaultValue;
+        const num = Number(value);
+        return isNaN(num) ? defaultValue : num;
+      };
+
+      // Helper function to convert string to number or return null
+      const parseNumberOrNull = (value) => {
+        if (value === '' || value === null || value === undefined) return null;
+        // If already a number, return it (unless NaN)
+        if (typeof value === 'number') {
+          return isNaN(value) ? null : Math.floor(value);
+        }
+        // Convert string to number
+        const num = parseInt(String(value), 10);
+        return isNaN(num) ? null : num;
+      };
+
       // Prepare data with proper nested structure
       const planData = {
         name: formData.name,
@@ -276,26 +349,29 @@ const AdminPlansPage = () => {
         status: formData.status,
         isPopular: formData.isPopular,
         billing: {
-          price: Number(formData.billing.price),
+          price: parseNumber(formData.billing.price, 0),
           currency: formData.billing.currency,
           interval: formData.billing.interval,
-          trialDays: Number(formData.billing.trialDays)
+          trialDays: parseNumber(formData.billing.trialDays, 0)
         },
         pricingModel: {
           type: formData.pricingModel.type,
           usageBased: {
-            includedTokens: Number(formData.pricingModel.usageBased.includedTokens) || 0,
-            includedRequests: Number(formData.pricingModel.usageBased.includedRequests) || 0
+            includedTokens: parseNumber(formData.pricingModel.usageBased.includedTokens, 0),
+            includedRequests: parseNumber(formData.pricingModel.usageBased.includedRequests, 0)
           }
         },
         credits: {
-          includedCredits: Number(formData.credits.includedCredits) || 0,
+          includedCredits: parseNumber(formData.credits.includedCredits, 0),
           creditType: formData.credits.creditType
         },
         limits: {
-          maxUsers: formData.limits.maxUsers ? Number(formData.limits.maxUsers) : null,
-          maxApiCalls: formData.limits.maxApiCalls ? Number(formData.limits.maxApiCalls) : null,
-          maxTokens: formData.limits.maxTokens ? Number(formData.limits.maxTokens) : null
+          maxProjects: parseNumberOrNull(formData.limits.maxProjects),
+          maxFeatures: parseNumberOrNull(formData.limits.maxFeatures),
+          maxSimulations: parseNumberOrNull(formData.limits.maxSimulations),
+          maxUsers: parseNumberOrNull(formData.limits.maxUsers),
+          maxApiCalls: parseNumberOrNull(formData.limits.maxApiCalls),
+          maxTokens: parseNumberOrNull(formData.limits.maxTokens)
         },
         settings: {
           isPublic: formData.settings.isPublic,
@@ -305,21 +381,54 @@ const AdminPlansPage = () => {
         }
       };
 
+      console.log('\n[DEBUG Frontend] ========================================');
+      console.log('[DEBUG Frontend] handleSave called');
+      console.log('[DEBUG Frontend] editingPlan:', editingPlan?._id || 'new plan');
+      console.log('[DEBUG Frontend] formData.limits:', JSON.stringify(formData.limits, null, 2));
+      console.log('[DEBUG Frontend] planData.limits:', JSON.stringify(planData.limits, null, 2));
+      console.log('[DEBUG Frontend] maxProjects:', planData.limits.maxProjects, '(type:', typeof planData.limits.maxProjects, ')');
+      console.log('[DEBUG Frontend] maxFeatures:', planData.limits.maxFeatures, '(type:', typeof planData.limits.maxFeatures, ')');
+      console.log('[DEBUG Frontend] maxSimulations:', planData.limits.maxSimulations, '(type:', typeof planData.limits.maxSimulations, ')');
+      console.log('[DEBUG Frontend] About to send API request...');
+      console.log('[DEBUG Frontend] ========================================\n');
+
       if (editingPlan) {
         // Update existing plan
-        await api.put(`/admin/plans/${editingPlan._id}`, planData);
+        console.log('[DEBUG Frontend] Updating plan with ID:', editingPlan._id);
+        const response = await api.put(`/admin/plans/${editingPlan._id}`, planData);
+        console.log('\n[DEBUG Frontend] ====== UPDATE RESPONSE ======');
+        console.log('[DEBUG Frontend] response.status:', response.status);
+        console.log('[DEBUG Frontend] response.data:', JSON.stringify(response.data, null, 2));
+        console.log('[DEBUG Frontend] response.data.data?.plan?.limits:', JSON.stringify(response.data.data?.plan?.limits, null, 2));
+        console.log('[DEBUG Frontend] ========================================\n');
         showToast.planUpdated();
       } else {
         // Create new plan
-        await api.post('/admin/plans', planData);
+        console.log('[DEBUG Frontend] Creating new plan...');
+        const response = await api.post('/admin/plans', planData);
+        console.log('\n[DEBUG Frontend] ====== CREATE RESPONSE ======');
+        console.log('[DEBUG Frontend] response.status:', response.status);
+        console.log('[DEBUG Frontend] response.data:', JSON.stringify(response.data, null, 2));
+        console.log('[DEBUG Frontend] response.data.data?.plan?.limits:', JSON.stringify(response.data.data?.plan?.limits, null, 2));
+        console.log('[DEBUG Frontend] ========================================\n');
         showToast.planCreated();
       }
 
+      // Dispatch event to refresh plans across all pages
+      window.dispatchEvent(new CustomEvent(PLANS_REFRESH_EVENT));
+
+      // Close modal and reset form
       setShowModal(false);
       resetForm();
-      fetchPlans();
+
+      // Fetch updated plans
+      await fetchPlans();
     } catch (err) {
       const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to save plan';
+      console.error('\n[DEBUG Frontend] ====== ERROR ======');
+      console.error('[DEBUG Frontend] Error saving plan:', err);
+      console.error('[DEBUG Frontend] Error response:', err.response?.data);
+      console.error('[DEBUG Frontend] ================================\n');
       showToast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -336,6 +445,10 @@ const AdminPlansPage = () => {
       setLoading(true);
       await api.delete(`/admin/plans/${planId}`);
       showToast.planDeleted();
+
+      // Dispatch event to refresh plans across all pages
+      window.dispatchEvent(new CustomEvent(PLANS_REFRESH_EVENT));
+
       fetchPlans();
     } catch (err) {
       const errorMessage = err.response?.data?.error?.message || 'Failed to delete plan';
@@ -350,6 +463,10 @@ const AdminPlansPage = () => {
     try {
       const newStatus = plan.status === 'active' ? 'draft' : 'active';
       await api.patch(`/admin/plans/${plan._id}/status`, { status: newStatus });
+
+      // Dispatch event to refresh plans across all pages
+      window.dispatchEvent(new CustomEvent(PLANS_REFRESH_EVENT));
+
       fetchPlans();
     } catch (err) {
       showToast.error('Failed to update plan status');
@@ -362,6 +479,10 @@ const AdminPlansPage = () => {
       await api.patch(`/admin/plans/${plan._id}/visibility`, {
         isPublic: !plan.settings?.isPublic
       });
+
+      // Dispatch event to refresh plans across all pages
+      window.dispatchEvent(new CustomEvent(PLANS_REFRESH_EVENT));
+
       fetchPlans();
     } catch (err) {
       showToast.error('Failed to update plan visibility');
@@ -438,7 +559,7 @@ const AdminPlansPage = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tier</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credits</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Limits</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Public</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Popular</th>
@@ -468,8 +589,43 @@ const AdminPlansPage = () => {
                       <div className="text-xs text-gray-500">{plan.billing.trialDays}-day trial</div>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {plan.credits?.includedCredits?.toLocaleString() || 0} {plan.credits?.creditType || 'tokens'}
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                      {plan.limits?.maxProjects !== null && plan.limits?.maxProjects !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {plan.limits.maxProjects} Projects
+                        </span>
+                      )}
+                      {plan.limits?.maxFeatures !== null && plan.limits?.maxFeatures !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {plan.limits.maxFeatures} Features
+                        </span>
+                      )}
+                      {plan.limits?.maxSimulations !== null && plan.limits?.maxSimulations !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          {plan.limits.maxSimulations} Sims
+                        </span>
+                      )}
+                      {plan.limits?.maxUsers !== null && plan.limits?.maxUsers !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                          {plan.limits.maxUsers} Users
+                        </span>
+                      )}
+                      {plan.limits?.maxApiCalls !== null && plan.limits?.maxApiCalls !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                          {plan.limits.maxApiCalls?.toLocaleString()} API
+                        </span>
+                      )}
+                      {plan.limits?.maxTokens !== null && plan.limits?.maxTokens !== undefined && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
+                          {plan.limits.maxTokens?.toLocaleString()} Tokens
+                        </span>
+                      )}
+                      {!plan.limits?.maxProjects && !plan.limits?.maxFeatures && !plan.limits?.maxSimulations &&
+                       !plan.limits?.maxUsers && !plan.limits?.maxApiCalls && !plan.limits?.maxTokens && (
+                        <span className="text-xs text-gray-400">No limits set</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
@@ -628,12 +784,18 @@ const AdminPlansPage = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">Price</label>
                       <input
-                        type="number"
+                        type="text"
                         name="billing.price"
-                        value={formData.billing.price}
-                        onChange={handleChange}
-                        min="0"
-                        step="0.01"
+                        value={formData.billing.price ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Allow empty value or valid number up to 10 digits (with decimals)
+                          if (value === '' || /^\d{1,10}$/.test(value) || /^\d{1,8}\.\d{0,2}$/.test(value)) {
+                            handleNestedChange('billing', 'price', value);
+                          }
+                        }}
+                        maxLength={10}
+                        placeholder="0"
                         className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.price ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                       />
                       {formErrors.price && (
@@ -671,11 +833,21 @@ const AdminPlansPage = () => {
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Trial Days</label>
                     <input
-                      type="number"
+                      type="text"
                       name="billing.trialDays"
-                      value={formData.billing.trialDays}
-                      onChange={handleChange}
-                      min="0"
+                      value={formData.billing.trialDays ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Allow empty value or valid integer up to 10000000
+                        if (value === '' || /^\d+$/.test(value)) {
+                          const numValue = parseInt(value, 10);
+                          if (value === '' || numValue <= 10000000) {
+                            handleNestedChange('billing', 'trialDays', value === '' ? '' : value);
+                          }
+                        }
+                      }}
+                      maxLength={10}
+                      placeholder="0"
                       className={`w-full sm:w-1/3 px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.trialDays ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
                     />
                     {formErrors.trialDays && (
@@ -684,53 +856,192 @@ const AdminPlansPage = () => {
                   </div>
                 </div>
 
-                {/* Credits & Limits */}
+                {/* Plan Limits */}
                 <div className="border-t border-gray-100 pt-5">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Credits & Limits</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Included Credits</label>
-                      <input
-                        type="number"
-                        name="credits.includedCredits"
-                        value={formData.credits.includedCredits}
-                        onChange={handleChange}
-                        min="0"
-                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.credits ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
-                      />
-                      {formErrors.credits && (
-                        <span className="text-xs text-red-500 mt-1">{formErrors.credits}</span>
-                      )}
+                  <h4 className="text-sm font-medium text-gray-700 mb-1">
+                    Plan Limits
+                  </h4>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Define the usage limits for this plan. Leave fields empty for unlimited access.
+                  </p>
+
+                  {/* Resource Limits */}
+                  <div className="mb-4">
+                    <h5 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Resources</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max Projects
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 5)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxProjects"
+                          value={formData.limits.maxProjects ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxProjects', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max Features
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 10)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxFeatures"
+                          value={formData.limits.maxFeatures ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxFeatures', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max Simulations
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 100)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxSimulations"
+                          value={formData.limits.maxSimulations ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxSimulations', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Users</label>
-                      <input
-                        type="number"
-                        name="limits.maxUsers"
-                        value={formData.limits.maxUsers || ''}
-                        onChange={handleChange}
-                        min="1"
-                        placeholder="Unlimited"
-                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxUsers ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
-                      />
-                      {formErrors.maxUsers && (
-                        <span className="text-xs text-red-500 mt-1">{formErrors.maxUsers}</span>
-                      )}
+                  </div>
+
+                  {/* Team & API Limits */}
+                  <div className="mb-4">
+                    <h5 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Team & API</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max Team Members
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 3)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxUsers"
+                          value={formData.limits.maxUsers ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxUsers', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxUsers ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                        />
+                        {formErrors.maxUsers && (
+                          <span className="text-xs text-red-500 mt-1">{formErrors.maxUsers}</span>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max API Calls
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 10000)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxApiCalls"
+                          value={formData.limits.maxApiCalls ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxApiCalls', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxApiCalls ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                        />
+                        {formErrors.maxApiCalls && (
+                          <span className="text-xs text-red-500 mt-1">{formErrors.maxApiCalls}</span>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Max Tokens
+                          <span className="text-gray-400 font-normal ml-1">(e.g., 100000)</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="limits.maxTokens"
+                          value={formData.limits.maxTokens ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('limits', 'maxTokens', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="Unlimited"
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Max API Calls</label>
-                      <input
-                        type="number"
-                        name="limits.maxApiCalls"
-                        value={formData.limits.maxApiCalls || ''}
-                        onChange={handleChange}
-                        min="1"
-                        placeholder="Unlimited"
-                        className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.maxApiCalls ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
-                      />
-                      {formErrors.maxApiCalls && (
-                        <span className="text-xs text-red-500 mt-1">{formErrors.maxApiCalls}</span>
-                      )}
+                  </div>
+
+                  {/* Credits */}
+                  <div>
+                    <h5 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Credits Included</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Included Credits</label>
+                        <input
+                          type="text"
+                          name="credits.includedCredits"
+                          value={formData.credits.includedCredits ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || /^\d{1,10}$/.test(value)) {
+                              handleNestedChange('credits', 'includedCredits', value);
+                            }
+                          }}
+                          maxLength={10}
+                          placeholder="0"
+                          className={`w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all ${formErrors.credits ? 'border-red-500 bg-red-50' : 'border-gray-200'}`}
+                        />
+                        {formErrors.credits && (
+                          <span className="text-xs text-red-500 mt-1">{formErrors.credits}</span>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Credit Type</label>
+                        <select
+                          name="credits.creditType"
+                          value={formData.credits.creditType}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent transition-all"
+                        >
+                          <option value="token">Tokens</option>
+                          <option value="request">API Requests</option>
+                          <option value="point">Points</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </div>

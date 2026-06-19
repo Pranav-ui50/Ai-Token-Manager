@@ -2,7 +2,6 @@
  * Super Admin Dashboard Page
  *
  * Main dashboard for super admins with platform statistics and overview.
- * Shows: Total Organizations, Active Subscriptions, Total Users, AI Providers, System Usage
  */
 
 import { useState, useEffect } from 'react';
@@ -13,7 +12,7 @@ function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentOrganizations, setRecentOrganizations] = useState([]);
   const [organizationsByPlan, setOrganizationsByPlan] = useState({});
-  const [organizationsByStatus, setOrganizationsByStatus] = useState({});
+  const [plans, setPlans] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -26,12 +25,15 @@ function AdminDashboardPage() {
       setIsLoading(true);
       setError(null);
 
-      const response = await adminApi.getDashboardStats();
+      const [dashboardResponse, plansResponse] = await Promise.all([
+        adminApi.getDashboardStats(),
+        adminApi.getPlans({ limit: 100 })
+      ]);
 
-      setStats(response.counts);
-      setRecentOrganizations(response.recentOrganizations || []);
-      setOrganizationsByPlan(response.organizationsByPlan || {});
-      setOrganizationsByStatus(response.organizationsByStatus || {});
+      setStats(dashboardResponse.counts);
+      setRecentOrganizations(dashboardResponse.recentOrganizations || []);
+      setOrganizationsByPlan(dashboardResponse.organizationsByPlan || {});
+      setPlans(plansResponse.plans || []);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
       setError(err.response?.data?.error?.message || 'Failed to load dashboard data');
@@ -83,8 +85,24 @@ function AdminDashboardPage() {
     );
   }
 
+  const tierColors = {
+    enterprise: 'bg-purple-500',
+    business: 'bg-indigo-500',
+    professional: 'bg-blue-500',
+    starter: 'bg-green-500',
+    free: 'bg-gray-400'
+  };
+
+  const tierLabels = {
+    enterprise: 'Enterprise',
+    business: 'Business',
+    professional: 'Professional',
+    starter: 'Starter',
+    free: 'Free'
+  };
+
   return (
-    <div className="space-y-6 p-1">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -102,41 +120,37 @@ function AdminDashboardPage() {
         </button>
       </div>
 
-      {/* Primary Stats Grid - Equal sized cards */}
+      {/* Primary Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Organizations */}
         <Link
           to="/admin/organizations"
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all hover:border-[#DC2626]/20"
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all hover:border-[#DC2626]/20"
         >
           <div className="flex items-start justify-between">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-500 mb-1">Total Organizations</p>
-              <p className="text-3xl font-bold text-gray-900">{formatNumber(stats?.organizations)}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                  {stats?.activeOrganizations || 0} active
-                </span>
-              </div>
+              <p className="text-2xl font-bold text-gray-900 truncate">{formatNumber(stats?.organizations)}</p>
+              <span className="inline-flex items-center px-2 py-0.5 mt-2 rounded text-xs font-medium bg-green-100 text-green-700">
+                {stats?.activeOrganizations || 0} active
+              </span>
             </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
             </div>
           </div>
         </Link>
 
-        {/* Active Subscriptions */}
         <Link
           to="/admin/plans"
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all hover:border-[#DC2626]/20"
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all hover:border-[#DC2626]/20"
         >
           <div className="flex items-start justify-between">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-500 mb-1">Active Subscriptions</p>
-              <p className="text-3xl font-bold text-gray-900">{formatNumber(stats?.activeOrganizations)}</p>
-              <div className="flex items-center gap-2 mt-2">
+              <p className="text-2xl font-bold text-gray-900 truncate">{formatNumber(stats?.activeOrganizations)}</p>
+              <div className="flex items-center gap-1 mt-2">
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                   {organizationsByPlan.professional || 0} pro
                 </span>
@@ -145,52 +159,46 @@ function AdminDashboardPage() {
                 </span>
               </div>
             </div>
-            <div className="h-12 w-12 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
         </Link>
 
-        {/* Total Users */}
         <Link
           to="/admin/users"
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all hover:border-[#DC2626]/20"
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all hover:border-[#DC2626]/20"
         >
           <div className="flex items-start justify-between">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-500 mb-1">Total Users</p>
-              <p className="text-3xl font-bold text-gray-900">{formatNumber(stats?.users)}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs text-gray-500">Across all organizations</span>
-              </div>
+              <p className="text-2xl font-bold text-gray-900 truncate">{formatNumber(stats?.users)}</p>
+              <p className="text-xs text-gray-500 mt-2">Across all organizations</p>
             </div>
-            <div className="h-12 w-12 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
           </div>
         </Link>
 
-        {/* AI Providers */}
         <Link
           to="/admin/providers"
-          className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all hover:border-[#DC2626]/20"
+          className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-all hover:border-[#DC2626]/20"
         >
           <div className="flex items-start justify-between">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-500 mb-1">AI Providers</p>
-              <p className="text-3xl font-bold text-gray-900">{formatNumber(stats?.providers)}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700">
-                  {formatNumber(stats?.models)} models
-                </span>
-              </div>
+              <p className="text-2xl font-bold text-gray-900 truncate">{formatNumber(stats?.providers)}</p>
+              <span className="inline-flex items-center px-2 py-0.5 mt-2 rounded text-xs font-medium bg-orange-100 text-orange-700">
+                {formatNumber(stats?.models)} models
+              </span>
             </div>
-            <div className="h-12 w-12 bg-orange-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-3">
+              <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
               </svg>
             </div>
@@ -198,72 +206,97 @@ function AdminDashboardPage() {
         </Link>
       </div>
 
-      {/* Charts Row */}
+      {/* Plans & Organizations Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Organizations by Plan */}
+        {/* Plans Overview */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Organizations by Plan</h3>
-            <Link to="/admin/plans" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Plans Overview</h3>
+            <Link to="/admin/plans" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap ml-2">
               Manage Plans
             </Link>
           </div>
-          <div className="space-y-4">
-            {[
-              { plan: 'enterprise', count: organizationsByPlan.enterprise || 0, color: 'bg-purple-500', label: 'Enterprise' },
-              { plan: 'professional', count: organizationsByPlan.professional || 0, color: 'bg-blue-500', label: 'Professional' },
-              { plan: 'starter', count: organizationsByPlan.starter || 0, color: 'bg-green-500', label: 'Starter' },
-              { plan: 'free', count: organizationsByPlan.free || 0, color: 'bg-gray-400', label: 'Free' }
-            ].map(({ plan, count, color, label }) => {
-              const total = stats?.organizations || 1;
-              const percentage = total > 0 ? (count / total) * 100 : 0;
-              return (
-                <div key={plan} className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-gray-600">{label}</span>
-                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${color} rounded-full transition-all duration-500`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
+          {plans.length === 0 ? (
+            <div className="text-center py-6">
+              <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+              <p className="text-gray-500 text-sm mb-2">No plans created yet</p>
+              <Link to="/admin/plans" className="text-sm text-[#DC2626] hover:underline">
+                Create your first plan
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto">
+              {plans.map((plan) => (
+                <div key={plan._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${tierColors[plan.tier] || 'bg-gray-400'}`}></div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{plan.name}</p>
+                      <p className="text-xs text-gray-500">{tierLabels[plan.tier] || plan.tier}</p>
+                    </div>
                   </div>
-                  <span className="w-12 text-sm font-semibold text-gray-900 text-right">{count}</span>
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {plan.billing?.currency || 'USD'} {plan.billing?.price || 0}
+                      <span className="text-xs text-gray-500 font-normal">/{plan.billing?.interval || 'month'}</span>
+                    </p>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      plan.status === 'active' ? 'bg-green-100 text-green-700' :
+                      plan.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {plan.status}
+                    </span>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Organizations by Status */}
+        {/* Organizations by Plan */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Organizations by Status</h3>
-            <Link to="/admin/organizations" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Organizations by Plan</h3>
+            <Link to="/admin/organizations" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap ml-2">
               View All
             </Link>
           </div>
-          <div className="space-y-4">
-            {[
-              { status: 'active', count: organizationsByStatus.active || 0, color: 'bg-green-500', label: 'Active' },
-              { status: 'trial', count: organizationsByStatus.trial || 0, color: 'bg-yellow-500', label: 'Trial' },
-              { status: 'suspended', count: organizationsByStatus.suspended || 0, color: 'bg-red-500', label: 'Suspended' },
-              { status: 'cancelled', count: organizationsByStatus.cancelled || 0, color: 'bg-gray-400', label: 'Cancelled' }
-            ].map(({ status, count, color, label }) => {
-              const total = stats?.organizations || 1;
-              const percentage = total > 0 ? (count / total) * 100 : 0;
-              return (
-                <div key={status} className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-gray-600">{label}</span>
-                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${color} rounded-full transition-all duration-500`}
-                      style={{ width: `${percentage}%` }}
-                    ></div>
+          {stats?.organizations === 0 ? (
+            <div className="text-center py-6">
+              <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <p className="text-gray-500 text-sm mb-2">No organizations yet</p>
+              <Link to="/admin/organizations" className="text-sm text-[#DC2626] hover:underline">
+                Create your first organization
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-5 gap-2">
+              {[
+                { plan: 'enterprise', count: organizationsByPlan.enterprise || 0, color: 'bg-purple-500', label: 'Enterprise' },
+                { plan: 'business', count: organizationsByPlan.business || 0, color: 'bg-indigo-500', label: 'Business' },
+                { plan: 'professional', count: organizationsByPlan.professional || 0, color: 'bg-blue-500', label: 'Professional' },
+                { plan: 'starter', count: organizationsByPlan.starter || 0, color: 'bg-green-500', label: 'Starter' },
+                { plan: 'free', count: organizationsByPlan.free || 0, color: 'bg-gray-400', label: 'Free' }
+              ].map(({ plan, count, color, label }) => {
+                const total = stats?.organizations || 1;
+                const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+                return (
+                  <div key={plan} className="bg-gray-50 rounded-lg p-3 text-center">
+                    <div className={`w-8 h-8 ${color} rounded-full mx-auto mb-2 flex items-center justify-center`}>
+                      <span className="text-white text-xs font-bold">{count}</span>
+                    </div>
+                    <p className="text-xs font-medium text-gray-900 truncate">{label}</p>
+                    <p className="text-xs text-gray-500">{percentage}%</p>
                   </div>
-                  <span className="w-12 text-sm font-semibold text-gray-900 text-right">{count}</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -273,16 +306,16 @@ function AdminDashboardPage() {
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900">Recent Organizations</h3>
-            <Link to="/admin/organizations" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
+            <Link to="/admin/organizations" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium whitespace-nowrap ml-2">
               View All
             </Link>
           </div>
           {recentOrganizations.length === 0 ? (
             <div className="p-8 text-center">
-              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
               </svg>
-              <p className="text-gray-500">No organizations yet</p>
+              <p className="text-gray-500 text-sm">No organizations yet</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -292,17 +325,17 @@ function AdminDashboardPage() {
                   to={`/admin/organizations/${org._id}`}
                   className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-lg flex items-center justify-center flex-shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-lg flex items-center justify-center flex-shrink-0">
                       <span className="text-sm font-bold text-white">{org.name?.charAt(0) || 'O'}</span>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{org.name}</p>
-                      <p className="text-xs text-gray-500">{org.slug}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{org.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{org.slug}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       org.subscription?.plan === 'enterprise' ? 'bg-purple-100 text-purple-700' :
                       org.subscription?.plan === 'professional' ? 'bg-blue-100 text-blue-700' :
                       org.subscription?.plan === 'starter' ? 'bg-green-100 text-green-700' :
@@ -310,7 +343,7 @@ function AdminDashboardPage() {
                     }`}>
                       {org.subscription?.plan || 'free'}
                     </span>
-                    <span className="text-xs text-gray-500">{formatDate(org.createdAt)}</span>
+                    <span className="text-xs text-gray-500 hidden sm:inline">{formatDate(org.createdAt)}</span>
                   </div>
                 </Link>
               ))}
@@ -321,17 +354,17 @@ function AdminDashboardPage() {
         {/* Quick Actions */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Link
               to="/admin/organizations"
-              className="flex items-center gap-3 px-4 py-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+              className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
             >
-              <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <div className="h-9 w-9 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-blue-900">Create Organization</p>
                 <p className="text-xs text-blue-700">Add new customer</p>
               </div>
@@ -339,14 +372,14 @@ function AdminDashboardPage() {
 
             <Link
               to="/admin/providers"
-              className="flex items-center gap-3 px-4 py-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
+              className="flex items-center gap-3 p-3 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
             >
-              <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <div className="h-9 w-9 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-green-900">Manage Providers</p>
                 <p className="text-xs text-green-700">Add AI providers</p>
               </div>
@@ -354,14 +387,14 @@ function AdminDashboardPage() {
 
             <Link
               to="/admin/plans"
-              className="flex items-center gap-3 px-4 py-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+              className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
             >
-              <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <div className="h-9 w-9 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-purple-900">Manage Plans</p>
                 <p className="text-xs text-purple-700">Configure pricing</p>
               </div>
@@ -369,46 +402,18 @@ function AdminDashboardPage() {
 
             <Link
               to="/audit-logs"
-              className="flex items-center gap-3 px-4 py-3 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
+              className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors"
             >
-              <div className="h-10 w-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <div className="h-9 w-9 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
                 <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 00-2-2h-2a2 2 0 00-2 2m3 10h.01M9 17h.01M15 13h.01M15 17h.01" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-orange-900">View Audit Logs</p>
                 <p className="text-xs text-orange-700">System activity</p>
               </div>
             </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* System Usage Overview */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">System Usage Overview</h3>
-          <Link to="/admin/settings" className="text-sm text-[#DC2626] hover:text-[#B91C1C] font-medium">
-            View Details
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">Total Projects</p>
-            <p className="text-2xl font-bold text-gray-900">{formatNumber(stats?.projects)}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">Total Features</p>
-            <p className="text-2xl font-bold text-gray-900">{formatNumber(stats?.features)}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">API Calls (30d)</p>
-            <p className="text-2xl font-bold text-gray-900">{formatNumber(stats?.apiCalls || 0)}</p>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-500 mb-1">Active Users (24h)</p>
-            <p className="text-2xl font-bold text-gray-900">{formatNumber(stats?.activeUsers || 0)}</p>
           </div>
         </div>
       </div>

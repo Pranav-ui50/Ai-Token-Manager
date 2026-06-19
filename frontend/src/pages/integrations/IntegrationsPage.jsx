@@ -31,6 +31,161 @@ const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-700'
 };
 
+// Character limits for form fields
+const NAME_MAX_LENGTH = 50;
+const DESCRIPTION_MAX_LENGTH = 300;
+const API_KEY_MAX_LENGTH = 300;
+const WEBHOOK_URL_MAX_LENGTH = 500;
+const MAX_RETRIES_MAX = 12;
+const RETRY_DELAY_MAX = 999999999999;
+const TIMEOUT_MAX = 999999999999;
+
+// Form validation errors
+const useFormErrors = () => {
+  const [errors, setErrors] = useState({});
+
+  const validateField = (field, value) => {
+    const newErrors = { ...errors };
+
+    if (field === 'name') {
+      if (!value || value.trim() === '') {
+        newErrors.name = 'Name is required';
+      } else if (!/^[a-zA-Z\s]*$/.test(value)) {
+        newErrors.name = 'Name can only contain letters and spaces';
+      } else if (value.length > NAME_MAX_LENGTH) {
+        newErrors.name = `Name must be less than ${NAME_MAX_LENGTH} characters`;
+      } else {
+        delete newErrors.name;
+      }
+    }
+
+    if (field === 'type') {
+      if (!value || value.trim() === '') {
+        newErrors.type = 'Type is required';
+      } else {
+        delete newErrors.type;
+      }
+    }
+
+    if (field === 'apiKey') {
+      if (!value || value.trim() === '') {
+        newErrors.apiKey = 'API Key is required';
+      } else if (value.length > API_KEY_MAX_LENGTH) {
+        newErrors.apiKey = `API Key must be less than ${API_KEY_MAX_LENGTH} characters`;
+      } else {
+        delete newErrors.apiKey;
+      }
+    }
+
+    if (field === 'webhookUrl') {
+      if (!value || value.trim() === '') {
+        newErrors.webhookUrl = 'Webhook URL is required';
+      } else if (value.length > WEBHOOK_URL_MAX_LENGTH) {
+        newErrors.webhookUrl = `Webhook URL must be less than ${WEBHOOK_URL_MAX_LENGTH} characters`;
+      } else {
+        delete newErrors.webhookUrl;
+      }
+    }
+
+    if (field === 'maxRetries') {
+      const numValue = parseInt(value, 10);
+      if (isNaN(numValue) || numValue < 0) {
+        newErrors.maxRetries = 'Max Retries must be 0 or greater';
+      } else if (numValue > MAX_RETRIES_MAX) {
+        newErrors.maxRetries = `Max Retries must be ${MAX_RETRIES_MAX} or less`;
+      } else {
+        delete newErrors.maxRetries;
+      }
+    }
+
+    if (field === 'retryDelay') {
+      const numValue = parseInt(value, 10);
+      if (isNaN(numValue) || numValue < 0) {
+        newErrors.retryDelay = 'Retry Delay must be 0 or greater';
+      } else if (numValue > RETRY_DELAY_MAX) {
+        newErrors.retryDelay = 'Retry Delay is too large';
+      } else {
+        delete newErrors.retryDelay;
+      }
+    }
+
+    if (field === 'timeout') {
+      const numValue = parseInt(value, 10);
+      if (isNaN(numValue) || numValue < 0) {
+        newErrors.timeout = 'Timeout must be 0 or greater';
+      } else if (numValue > TIMEOUT_MAX) {
+        newErrors.timeout = 'Timeout is too large';
+      } else {
+        delete newErrors.timeout;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateForm = (formData, isEdit = false) => {
+    const newErrors = {};
+
+    if (!formData.name || formData.name.trim() === '') {
+      newErrors.name = 'Name is required';
+    } else if (!/^[a-zA-Z\s]*$/.test(formData.name)) {
+      newErrors.name = 'Name can only contain letters and spaces';
+    } else if (formData.name.length > NAME_MAX_LENGTH) {
+      newErrors.name = `Name must be less than ${NAME_MAX_LENGTH} characters`;
+    }
+
+    if (!formData.type || formData.type.trim() === '') {
+      newErrors.type = 'Type is required';
+    }
+
+    // API Key validation for non-webhook types
+    if (!isEdit && formData.type !== 'webhook' && formData.type !== 'custom') {
+      if (!formData.credentials?.apiKey || formData.credentials.apiKey.trim() === '') {
+        newErrors.apiKey = 'API Key is required';
+      }
+    }
+
+    if (formData.credentials?.apiKey && formData.credentials.apiKey.length > API_KEY_MAX_LENGTH) {
+      newErrors.apiKey = `API Key must be less than ${API_KEY_MAX_LENGTH} characters`;
+    }
+
+    // Webhook URL validation for webhook type
+    if (formData.type === 'webhook' || formData.type === 'custom') {
+      if (!formData.config?.endpoint || formData.config.endpoint.trim() === '') {
+        newErrors.webhookUrl = 'Webhook URL is required';
+      } else if (formData.config.endpoint.length > WEBHOOK_URL_MAX_LENGTH) {
+        newErrors.webhookUrl = `Webhook URL must be less than ${WEBHOOK_URL_MAX_LENGTH} characters`;
+      }
+    }
+
+    // Max Retries validation
+    const maxRetries = parseInt(formData.config?.timeout || 30000, 10);
+    if (formData.config?.maxRetries !== undefined) {
+      const retries = parseInt(formData.config.maxRetries, 10);
+      if (isNaN(retries) || retries < 0) {
+        newErrors.maxRetries = 'Max Retries must be 0 or greater';
+      } else if (retries > MAX_RETRIES_MAX) {
+        newErrors.maxRetries = `Max Retries must be ${MAX_RETRIES_MAX} or less`;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const clearErrors = () => setErrors({});
+  const clearFieldError = (field) => {
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  };
+
+  return { errors, validateField, validateForm, clearErrors, clearFieldError };
+};
+
 function IntegrationsPage() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const { canManageIntegrations, canViewIntegrations } = usePermissions();
@@ -39,18 +194,24 @@ function IntegrationsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [filters, setFilters] = useState({ status: '', type: '' });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showEditApiKey, setShowEditApiKey] = useState(false);
+  const { errors, validateField, validateForm, clearErrors, clearFieldError } = useFormErrors();
 
   const [formData, setFormData] = useState({
     name: '',
-    type: 'openai',
+    type: '',
     description: '',
     config: {
       endpoint: '',
       authType: 'api_key',
-      timeout: 30000
+      timeout: 30000,
+      maxRetries: 0,
+      retryDelay: 200
     },
     credentials: {
       apiKey: '',
@@ -102,6 +263,11 @@ function IntegrationsPage() {
       return;
     }
 
+    // JS validation instead of HTML5 required
+    if (!validateForm(formData)) {
+      return;
+    }
+
     try {
       const response = await integrationApi.create({
         organizationId: orgId,
@@ -110,6 +276,7 @@ function IntegrationsPage() {
       setIntegrations(prev => [response.data, ...prev]);
       setShowCreateModal(false);
       resetForm();
+      clearErrors();
       showToast.integrationCreated();
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || 'Failed to create integration');
@@ -119,12 +286,18 @@ function IntegrationsPage() {
   const handleUpdate = async (e) => {
     e.preventDefault();
 
+    // JS validation - for edit, API key is optional
+    if (!validateForm(formData, true)) {
+      return;
+    }
+
     try {
       const response = await integrationApi.update(selectedIntegration._id, formData);
       setIntegrations(prev => prev.map(i => i._id === selectedIntegration._id ? response.data : i));
       setShowEditModal(false);
       setSelectedIntegration(null);
       resetForm();
+      clearErrors();
       showToast.integrationUpdated();
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || 'Failed to update integration');
@@ -132,11 +305,18 @@ function IntegrationsPage() {
   };
 
   const handleDelete = async (integration) => {
-    if (!confirm(`Are you sure you want to delete "${integration.name}"?`)) return;
+    setSelectedIntegration(integration);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedIntegration) return;
 
     try {
-      await integrationApi.delete(integration._id);
-      setIntegrations(prev => prev.filter(i => i._id !== integration._id));
+      await integrationApi.delete(selectedIntegration._id);
+      setIntegrations(prev => prev.filter(i => i._id !== selectedIntegration._id));
+      setShowDeleteModal(false);
+      setSelectedIntegration(null);
       showToast.integrationDeleted();
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || 'Failed to delete integration');
@@ -144,6 +324,22 @@ function IntegrationsPage() {
   };
 
   const handleTest = async (integration) => {
+    // Validate API key for non-webhook integrations
+    if (integration.type !== 'webhook' && integration.type !== 'custom') {
+      if (!integration.credentials || !integration.credentials.apiKey) {
+        showToast.error('API Key is required. Please edit the integration to add an API key.');
+        return;
+      }
+    }
+
+    // Validate webhook URL for webhook/custom integrations
+    if (integration.type === 'webhook' || integration.type === 'custom') {
+      if (!integration.config || !integration.config.endpoint) {
+        showToast.error('Webhook URL is required. Please edit the integration to add a webhook URL.');
+        return;
+      }
+    }
+
     setSelectedIntegration(integration);
     setTestResult(null);
     setShowTestModal(true);
@@ -186,12 +382,14 @@ function IntegrationsPage() {
   const resetForm = () => {
     setFormData({
       name: '',
-      type: 'openai',
+      type: '',
       description: '',
       config: {
         endpoint: '',
         authType: 'api_key',
-        timeout: 30000
+        timeout: 30000,
+        maxRetries: 0,
+        retryDelay: 200
       },
       credentials: {
         apiKey: '',
@@ -202,6 +400,9 @@ function IntegrationsPage() {
         interval: 3600000
       }
     });
+    setShowApiKey(false);
+    setShowEditApiKey(false);
+    clearErrors();
   };
 
   const openEditModal = (integration) => {
@@ -213,7 +414,9 @@ function IntegrationsPage() {
       config: {
         endpoint: integration.config?.endpoint || '',
         authType: integration.config?.authType || 'api_key',
-        timeout: integration.config?.timeout || 30000
+        timeout: integration.config?.timeout || 30000,
+        maxRetries: integration.config?.maxRetries ?? 0,
+        retryDelay: integration.config?.retryDelay ?? 200
       },
       credentials: {
         apiKey: '',
@@ -224,6 +427,7 @@ function IntegrationsPage() {
         interval: integration.sync?.interval || 3600000
       }
     });
+    clearErrors();
     setShowEditModal(true);
   };
 
@@ -247,7 +451,7 @@ function IntegrationsPage() {
         </div>
         {canManageIntegrations() && !showNoOrgState && (
           <button
-            onClick={() => { resetForm(); setShowCreateModal(true); }}
+            onClick={() => { resetForm(); clearErrors(); setShowCreateModal(true); }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -322,7 +526,7 @@ function IntegrationsPage() {
           </p>
           {canManageIntegrations() && !showNoOrgState && (
             <button
-              onClick={() => { resetForm(); setShowCreateModal(true); }}
+              onClick={() => { resetForm(); clearErrors(); setShowCreateModal(true); }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C]"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -431,54 +635,234 @@ function IntegrationsPage() {
       )}
 
       {/* Create Modal */}
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Add Integration" size="lg">
-        <form onSubmit={handleCreate} className="space-y-4">
+      <Modal isOpen={showCreateModal} onClose={() => { setShowCreateModal(false); clearErrors(); }} title="Add Integration" size="lg">
+        <form onSubmit={handleCreate} className="space-y-4" noValidate>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700">Name<span className="text-red-500">*</span></label>
+              <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
+            </div>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
+              onChange={(e) => {
+                // Only allow letters and spaces
+                const filteredValue = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                if (filteredValue.length <= NAME_MAX_LENGTH) {
+                  setFormData({ ...formData, name: filteredValue });
+                  clearFieldError('name');
+                }
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                errors.name ? 'border-red-500' : formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+              }`}
               placeholder="My Integration"
-              required
+              maxLength={NAME_MAX_LENGTH}
+              autoComplete="name"
             />
+            {errors.name && (
+              <p className="text-xs text-red-500 mt-1">{errors.name}</p>
+            )}
+            {!errors.name && formData.name.length === NAME_MAX_LENGTH && (
+              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+            )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Type<span className="text-red-500">*</span></label>
             <select
               value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
+              onChange={(e) => {
+                setFormData({ ...formData, type: e.target.value });
+                clearFieldError('type');
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                errors.type ? 'border-red-500' : 'border-gray-200'
+              }`}
             >
+              <option value="" disabled>Select integration type...</option>
               {INTEGRATION_TYPES.map(type => (
                 <option key={type.value} value={type.value}>{type.icon} {type.label}</option>
               ))}
             </select>
+            {errors.type && (
+              <p className="text-xs text-red-500 mt-1">{errors.type}</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+            </div>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              rows={3}
+              onChange={(e) => {
+                if (e.target.value.length <= DESCRIPTION_MAX_LENGTH) {
+                  setFormData({ ...formData, description: e.target.value });
+                }
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none ${
+                formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+              }`}
               placeholder="Integration description..."
+              maxLength={DESCRIPTION_MAX_LENGTH}
+              rows={3}
             />
+            {formData.description.length === DESCRIPTION_MAX_LENGTH && (
+              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+            )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-            <input
-              type="password"
-              value={formData.credentials.apiKey}
-              onChange={(e) => setFormData({ ...formData, credentials: { ...formData.credentials, apiKey: e.target.value } })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              placeholder="Enter API key"
-            />
-          </div>
+          {/* Webhook Configuration - Show for webhook and custom types */}
+          {(formData.type === 'webhook' || formData.type === 'custom') && (
+            <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700">Webhook Configuration</h4>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Webhook URL<span className="text-red-500">*</span></label>
+                  <span className="text-xs text-gray-400">{formData.config.endpoint.length}/{WEBHOOK_URL_MAX_LENGTH}</span>
+                </div>
+                <input
+                  type="url"
+                  value={formData.config.endpoint}
+                  onChange={(e) => {
+                    if (e.target.value.length <= WEBHOOK_URL_MAX_LENGTH) {
+                      setFormData({ ...formData, config: { ...formData.config, endpoint: e.target.value } });
+                      clearFieldError('webhookUrl');
+                    }
+                  }}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                    errors.webhookUrl ? 'border-red-500' : 'border-gray-200'
+                  }`}
+                  placeholder="https://example.com/webhook"
+                  maxLength={WEBHOOK_URL_MAX_LENGTH}
+                />
+                {errors.webhookUrl && (
+                  <p className="text-xs text-red-500 mt-1">{errors.webhookUrl}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Retries</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={MAX_RETRIES_MAX}
+                    value={formData.config.maxRetries}
+                    onChange={(e) => {
+                      const value = Math.min(Math.max(0, parseInt(e.target.value) || 0), MAX_RETRIES_MAX);
+                      setFormData({ ...formData, config: { ...formData.config, maxRetries: value } });
+                      clearFieldError('maxRetries');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.maxRetries ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
+                  {errors.maxRetries && (
+                    <p className="text-xs text-red-500 mt-1">{errors.maxRetries}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Retry Delay (ms)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.config.retryDelay}
+                    onChange={(e) => {
+                      const value = Math.max(0, parseInt(e.target.value) || 0);
+                      setFormData({ ...formData, config: { ...formData.config, retryDelay: value } });
+                      clearFieldError('retryDelay');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.retryDelay ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="200"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
+                  {errors.retryDelay && (
+                    <p className="text-xs text-red-500 mt-1">{errors.retryDelay}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Timeout (ms)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.config.timeout}
+                    onChange={(e) => {
+                      const value = Math.max(0, parseInt(e.target.value) || 0);
+                      setFormData({ ...formData, config: { ...formData.config, timeout: value } });
+                      clearFieldError('timeout');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.timeout ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="1000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
+                  {errors.timeout && (
+                    <p className="text-xs text-red-500 mt-1">{errors.timeout}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* API Key - Show for non-webhook types */}
+          {formData.type !== 'webhook' && formData.type !== 'custom' && (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-gray-700">API Key<span className="text-red-500">*</span></label>
+                <span className="text-xs text-gray-400">{formData.credentials.apiKey.length}/{API_KEY_MAX_LENGTH}</span>
+              </div>
+              <div className="relative">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={formData.credentials.apiKey}
+                  onChange={(e) => {
+                    if (e.target.value.length <= API_KEY_MAX_LENGTH) {
+                      setFormData({ ...formData, credentials: { ...formData.credentials, apiKey: e.target.value } });
+                      clearFieldError('apiKey');
+                    }
+                  }}
+                  className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                    errors.apiKey ? 'border-red-500' : formData.credentials.apiKey.length === API_KEY_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                  placeholder="Enter API key"
+                  maxLength={API_KEY_MAX_LENGTH}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showApiKey ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {errors.apiKey && (
+                <p className="text-xs text-red-500 mt-1">{errors.apiKey}</p>
+              )}
+              {!errors.apiKey && formData.credentials.apiKey.length === API_KEY_MAX_LENGTH && (
+                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input
@@ -486,7 +870,7 @@ function IntegrationsPage() {
               id="syncEnabled"
               checked={formData.sync.enabled}
               onChange={(e) => setFormData({ ...formData, sync: { ...formData.sync, enabled: e.target.checked } })}
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
             />
             <label htmlFor="syncEnabled" className="text-sm text-gray-700">Enable automatic sync</label>
           </div>
@@ -494,7 +878,7 @@ function IntegrationsPage() {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => setShowCreateModal(false)}
+              onClick={() => { setShowCreateModal(false); clearErrors(); }}
               className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
             >
               Cancel
@@ -510,39 +894,224 @@ function IntegrationsPage() {
       </Modal>
 
       {/* Edit Modal */}
-      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Integration" size="lg">
-        <form onSubmit={handleUpdate} className="space-y-4">
+      <Modal isOpen={showEditModal} onClose={() => { setShowEditModal(false); clearErrors(); }} title="Edit Integration" size="lg">
+        <form onSubmit={handleUpdate} className="space-y-4" noValidate>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700">Name<span className="text-red-500">*</span></label>
+              <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
+            </div>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              required
+              onChange={(e) => {
+                // Only allow letters and spaces
+                const filteredValue = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                if (filteredValue.length <= NAME_MAX_LENGTH) {
+                  setFormData({ ...formData, name: filteredValue });
+                  clearFieldError('name');
+                }
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                errors.name ? 'border-red-500' : formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+              }`}
+              maxLength={NAME_MAX_LENGTH}
+              autoComplete="name"
             />
+            {errors.name && (
+              <p className="text-xs text-red-500 mt-1">{errors.name}</p>
+            )}
+            {!errors.name && formData.name.length === NAME_MAX_LENGTH && (
+              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <select
+              value={formData.type}
+              disabled
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] bg-gray-50 cursor-not-allowed"
+            >
+              {INTEGRATION_TYPES.map(type => (
+                <option key={type.value} value={type.value}>{type.icon} {type.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Integration type cannot be changed after creation</p>
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm font-medium text-gray-700">Description</label>
+              <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+            </div>
             <textarea
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
+              onChange={(e) => {
+                if (e.target.value.length <= DESCRIPTION_MAX_LENGTH) {
+                  setFormData({ ...formData, description: e.target.value });
+                }
+              }}
+              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none ${
+                formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+              }`}
+              maxLength={DESCRIPTION_MAX_LENGTH}
               rows={3}
             />
+            {formData.description.length === DESCRIPTION_MAX_LENGTH && (
+              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+            )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">New API Key (leave empty to keep current)</label>
-            <input
-              type="password"
-              value={formData.credentials.apiKey}
-              onChange={(e) => setFormData({ ...formData, credentials: { ...formData.credentials, apiKey: e.target.value } })}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none "
-              placeholder="Enter new API key to update"
-            />
-          </div>
+          {/* Webhook Configuration - Show for webhook and custom types */}
+          {(formData.type === 'webhook' || formData.type === 'custom') && (
+            <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700">Webhook Configuration</h4>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Webhook URL<span className="text-red-500">*</span></label>
+                  <span className="text-xs text-gray-400">{formData.config.endpoint.length}/{WEBHOOK_URL_MAX_LENGTH}</span>
+                </div>
+                <input
+                  type="url"
+                  value={formData.config.endpoint}
+                  onChange={(e) => {
+                    if (e.target.value.length <= WEBHOOK_URL_MAX_LENGTH) {
+                      setFormData({ ...formData, config: { ...formData.config, endpoint: e.target.value } });
+                      clearFieldError('webhookUrl');
+                    }
+                  }}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                    errors.webhookUrl ? 'border-red-500' : 'border-gray-200'
+                  }`}
+                  placeholder="https://example.com/webhook"
+                  maxLength={WEBHOOK_URL_MAX_LENGTH}
+                />
+                {errors.webhookUrl && (
+                  <p className="text-xs text-red-500 mt-1">{errors.webhookUrl}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Retries</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={MAX_RETRIES_MAX}
+                    value={formData.config.maxRetries}
+                    onChange={(e) => {
+                      const value = Math.min(Math.max(0, parseInt(e.target.value) || 0), MAX_RETRIES_MAX);
+                      setFormData({ ...formData, config: { ...formData.config, maxRetries: value } });
+                      clearFieldError('maxRetries');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.maxRetries ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
+                  {errors.maxRetries && (
+                    <p className="text-xs text-red-500 mt-1">{errors.maxRetries}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Retry Delay (ms)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.config.retryDelay}
+                    onChange={(e) => {
+                      const value = Math.max(0, parseInt(e.target.value) || 0);
+                      setFormData({ ...formData, config: { ...formData.config, retryDelay: value } });
+                      clearFieldError('retryDelay');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.retryDelay ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="200"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
+                  {errors.retryDelay && (
+                    <p className="text-xs text-red-500 mt-1">{errors.retryDelay}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Timeout (ms)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.config.timeout}
+                    onChange={(e) => {
+                      const value = Math.max(0, parseInt(e.target.value) || 0);
+                      setFormData({ ...formData, config: { ...formData.config, timeout: value } });
+                      clearFieldError('timeout');
+                    }}
+                    className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                      errors.timeout ? 'border-red-500' : 'border-gray-200'
+                    }`}
+                    placeholder="1000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
+                  {errors.timeout && (
+                    <p className="text-xs text-red-500 mt-1">{errors.timeout}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* API Key - Show for non-webhook types */}
+          {formData.type !== 'webhook' && formData.type !== 'custom' && (
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-gray-700">New API Key <span className="text-xs text-gray-400">(leave empty to keep current)</span></label>
+                <span className="text-xs text-gray-400">{formData.credentials.apiKey.length}/{API_KEY_MAX_LENGTH}</span>
+              </div>
+              <div className="relative">
+                <input
+                  type={showEditApiKey ? 'text' : 'password'}
+                  value={formData.credentials.apiKey}
+                  onChange={(e) => {
+                    if (e.target.value.length <= API_KEY_MAX_LENGTH) {
+                      setFormData({ ...formData, credentials: { ...formData.credentials, apiKey: e.target.value } });
+                      clearFieldError('apiKey');
+                    }
+                  }}
+                  className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
+                    errors.apiKey ? 'border-red-500' : formData.credentials.apiKey.length === API_KEY_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                  placeholder="Enter new API key to update"
+                  maxLength={API_KEY_MAX_LENGTH}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowEditApiKey(!showEditApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showEditApiKey ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.478 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {errors.apiKey && (
+                <p className="text-xs text-red-500 mt-1">{errors.apiKey}</p>
+              )}
+              {!errors.apiKey && formData.credentials.apiKey.length === API_KEY_MAX_LENGTH && (
+                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input
@@ -550,7 +1119,7 @@ function IntegrationsPage() {
               id="editSyncEnabled"
               checked={formData.sync.enabled}
               onChange={(e) => setFormData({ ...formData, sync: { ...formData.sync, enabled: e.target.checked } })}
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
             />
             <label htmlFor="editSyncEnabled" className="text-sm text-gray-700">Enable automatic sync</label>
           </div>
@@ -558,7 +1127,7 @@ function IntegrationsPage() {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => setShowEditModal(false)}
+              onClick={() => { setShowEditModal(false); clearErrors(); }}
               className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
             >
               Cancel
@@ -612,6 +1181,40 @@ function IntegrationsPage() {
           >
             Close
           </button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal isOpen={showDeleteModal} onClose={() => { setShowDeleteModal(false); setSelectedIntegration(null); }} title="Delete Integration" size="md">
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h4 className="font-medium text-red-800">This action cannot be undone</h4>
+                <p className="text-sm text-red-700 mt-1">
+                  Are you sure you want to delete <span className="font-semibold">{selectedIntegration?.name}</span>? This will permanently remove the integration and all associated data.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowDeleteModal(false); setSelectedIntegration(null); }}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Delete Integration
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

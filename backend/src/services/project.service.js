@@ -240,18 +240,85 @@ class ProjectService {
       throw new AppError('Access denied', 403, 'FORBIDDEN');
     }
 
-    // Get feature stats
-    const featureStats = await Feature.aggregate([
-      { $match: { project: project._id } },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalTokens: { $sum: '$stats.totalTokens' },
-          totalCost: { $sum: '$stats.totalCost' }
+    // Get all features for this project with their usage history and model pricing
+    const features = await Feature.find({ project: projectId })
+      .populate('model', 'name displayName pricing')
+      .lean();
+
+    // Calculate feature stats by status with accurate token and cost calculation
+    const statsByStatus = {};
+
+    for (const feature of features) {
+      const status = feature.status || 'active';
+
+      if (!statsByStatus[status]) {
+        statsByStatus[status] = {
+          _id: status,
+          count: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          features: []
+        };
+      }
+
+      // Calculate total tokens from usage history if stats are empty
+      let tokensFromHistory = 0;
+      let costFromHistory = 0;
+
+      if (feature.usageHistory && feature.usageHistory.length > 0) {
+        for (const usage of feature.usageHistory) {
+          tokensFromHistory += usage.tokens || 0;
+          costFromHistory += usage.cost || 0;
         }
       }
-    ]);
+
+      // Use the higher of stats or history (in case stats weren't properly synced)
+      let totalTokens = Math.max(feature.stats?.totalTokens || 0, tokensFromHistory);
+      let totalCost = Math.max(feature.stats?.totalCost || 0, costFromHistory);
+
+      // If no actual usage recorded, calculate estimated cost based on token estimates and model pricing
+      if (totalTokens === 0 && totalCost === 0) {
+        const inputTokens = feature.tokenEstimates?.inputTokensPerRequest || 0;
+        const outputTokens = feature.tokenEstimates?.outputTokensPerRequest || 0;
+        const totalRequests = feature.stats?.totalRequests || 0;
+
+        // If there are requests recorded but tokens/cost are 0, calculate from estimates
+        if (totalRequests > 0 && (inputTokens > 0 || outputTokens > 0)) {
+          totalTokens = (inputTokens + outputTokens) * totalRequests;
+
+          // Calculate cost based on model pricing
+          const modelPricing = feature.model?.pricing || {};
+          const inputPrice = modelPricing.inputPrice || 0;
+          const outputPrice = modelPricing.outputPrice || 0;
+          const pricePerUnit = modelPricing.pricePerUnit || 1000000; // Default: per million tokens
+
+          // Calculate costs (price is per unit, typically per million tokens)
+          const inputCost = (inputTokens * totalRequests * inputPrice) / pricePerUnit;
+          const outputCost = (outputTokens * totalRequests * outputPrice) / pricePerUnit;
+
+          // Add infrastructure overhead
+          const overheadPercentage = feature.infrastructureCost?.overheadPercentage || 0;
+          const fixedCostPerRequest = feature.infrastructureCost?.fixedCostPerRequest || 0;
+
+          const baseCost = inputCost + outputCost;
+          const overheadCost = baseCost * (overheadPercentage / 100);
+          totalCost = baseCost + overheadCost + (fixedCostPerRequest * totalRequests);
+        }
+      }
+
+      statsByStatus[status].count += 1;
+      statsByStatus[status].totalTokens += totalTokens;
+      statsByStatus[status].totalCost += totalCost;
+      statsByStatus[status].features.push({
+        id: feature._id,
+        name: feature.name,
+        tokens: totalTokens,
+        cost: totalCost
+      });
+    }
+
+    // Convert to array for response
+    const featureStats = Object.values(statsByStatus);
 
     const totalFeatures = await Feature.countDocuments({ project: projectId });
     const activeFeatures = await Feature.countDocuments({ project: projectId, status: 'active' });

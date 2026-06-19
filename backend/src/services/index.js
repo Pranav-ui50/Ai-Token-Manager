@@ -25,6 +25,8 @@ import apiKeyService from './apiKey.service.js';
 import webhookService from './webhook.service.js';
 import auditService from './audit.service.js';
 import settingsService from './settings.service.js';
+import limitService from './limit.service.js';
+import limitEnforcementService from './limitEnforcement.service.js';
 
 export {
   authService,
@@ -47,7 +49,9 @@ export {
   apiKeyService,
   webhookService,
   auditService,
-  settingsService
+  settingsService,
+  limitService,
+  limitEnforcementService
 };
 
 export default {
@@ -71,5 +75,7 @@ export default {
   apiKey: apiKeyService,
   webhook: webhookService,
   audit: auditService,
-  settings: settingsService
+  settings: settingsService,
+  limit: limitService,
+  limitEnforcement: limitEnforcementService
 };

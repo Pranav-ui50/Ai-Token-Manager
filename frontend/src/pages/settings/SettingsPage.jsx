@@ -5,7 +5,7 @@
  * Red & White theme styling.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import settingsApi from '../../services/api/settings.api.js';
@@ -13,17 +13,68 @@ import organizationApi from '../../services/api/organization.api.js';
 import Modal from '../../components/common/Modal.jsx';
 import { showToast } from '../../utils/toasts.js';
 
+// Get the backend base URL for serving static files
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const BACKEND_URL = API_BASE_URL.replace('/api', '');
+
 const SETTINGS_TABS = [
   { id: 'organization', label: 'Organization', icon: 'building' },
   { id: 'profile', label: 'Profile', icon: 'user' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell' },
   { id: 'security', label: 'Security', icon: 'shield' },
   { id: 'danger', label: 'Danger Zone', icon: 'exclamation' }
 ];
 
+// Character limits for organization form
+const ORG_NAME_MAX_LENGTH = 30;
+const ORG_DESCRIPTION_MAX_LENGTH = 300;
+const ORG_WEBSITE_MAX_LENGTH = 300;
+
+// Character limits for profile form
+const FIRST_NAME_MAX_LENGTH = 30;
+const LAST_NAME_MAX_LENGTH = 30;
+const PHONE_MAX_LENGTH = 15;
+
+// Password validation helper
+const validatePassword = (password) => {
+  const errors = [];
+  if (password.length < 8) {
+    errors.push('At least 8 characters');
+  }
+  if (password.length > 50) {
+    errors.push('Maximum 50 characters');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('At least one uppercase letter');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('At least one lowercase letter');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('At least one number');
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('At least one special character (!@#$%^&*...)');
+  }
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+};
+
+// Get password strength
+const getPasswordStrength = (password) => {
+  if (!password) return { level: 'none', color: 'bg-gray-200' };
+  const { errors } = validatePassword(password);
+  const score = 6 - errors.length;
+  if (score <= 2) return { level: 'Weak', color: 'bg-red-500' };
+  if (score <= 4) return { level: 'Medium', color: 'bg-yellow-500' };
+  if (score === 5) return { level: 'Strong', color: 'bg-green-500' };
+  return { level: 'Very Strong', color: 'bg-green-600' };
+};
+
 function SettingsPage() {
-  const { user } = useAuth();
-  const { currentOrganization, updateOrganization } = useOrganization();
+  const { user, setUser } = useAuth();
+  const { currentOrganization, getOrganization, setCurrentOrganization } = useOrganization();
   const [activeTab, setActiveTab] = useState('organization');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -43,16 +94,6 @@ function SettingsPage() {
     phone: ''
   });
 
-  // Notification settings
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    weeklyReport: true,
-    billingAlerts: true,
-    memberInvites: true,
-    securityAlerts: true
-  });
-
   // Security settings
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -60,14 +101,46 @@ function SettingsPage() {
     confirmPassword: ''
   });
 
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
-  const [twoFactorSetup, setTwoFactorSetup] = useState(null);
-  const [twoFactorToken, setTwoFactorToken] = useState('');
-
   // Delete organization modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+
+  // Avatar upload
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Handle avatar upload
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      showToast.error('Please select a valid image file (JPG, PNG, or GIF)');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      showToast.error('Image size must be less than 2MB');
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const result = await settingsApi.uploadAvatar(file);
+      // Update user in auth context
+      if (result && result.url && setUser) {
+        setUser({ ...user, avatar: result.url });
+      }
+      showToast.success('Avatar updated successfully');
+    } catch (err) {
+      showToast.error(err.response?.data?.message || 'Failed to upload avatar');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   // Load initial data
   useEffect(() => {
@@ -92,39 +165,71 @@ function SettingsPage() {
     }
   }, [user]);
 
-  // Load notification and 2FA settings
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const [notifSettings, twoFactorStatus] = await Promise.all([
-          settingsApi.getNotificationSettings(),
-          settingsApi.getTwoFactorStatus()
-        ]);
-        setNotificationSettings(notifSettings);
-        setTwoFactorEnabled(twoFactorStatus.enabled);
-      } catch (err) {
-        console.error('Failed to load settings:', err);
-      }
-    };
-    loadSettings();
-  }, []);
-
   const handleOrgSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      await settingsApi.updateOrganizationSettings(currentOrganization._id || currentOrganization.id, orgForm);
-      showToast.settingsSaved();
-      if (updateOrganization) {
-        await updateOrganization();
+      const organizationId = currentOrganization._id || currentOrganization.id;
+
+      // Track what fields were originally loaded vs what they are now
+      // to properly handle clearing vs not modifying
+      const originalData = {
+        name: currentOrganization.name || '',
+        description: currentOrganization.description || '',
+        website: currentOrganization.website || '',
+        industry: currentOrganization.industry || ''
+      };
+
+      // Prepare data - always send name (required), send other fields only if changed
+      const dataToSend = {};
+
+      // Name is required - always send it (trimmed)
+      const trimmedName = orgForm.name?.trim() || '';
+      dataToSend.name = trimmedName;
+
+      // Optional fields - send only if changed (including cleared)
+      const trimmedDescription = orgForm.description?.trim() || '';
+      const trimmedWebsite = orgForm.website?.trim() || '';
+      const trimmedIndustry = orgForm.industry?.trim() || '';
+
+      if (trimmedDescription !== originalData.description) {
+        dataToSend.description = trimmedDescription;
       }
+      if (trimmedWebsite !== originalData.website) {
+        dataToSend.website = trimmedWebsite;
+      }
+      if (trimmedIndustry !== originalData.industry) {
+        dataToSend.industry = trimmedIndustry;
+      }
+
+      // Update organization settings via API
+      const updatedOrganization = await settingsApi.updateOrganizationSettings(organizationId, dataToSend);
+
+      // Update the context with the updated organization data
+      if (updatedOrganization && setCurrentOrganization) {
+        setCurrentOrganization(updatedOrganization);
+      } else if (getOrganization) {
+        // Fallback: fetch fresh organization data
+        await getOrganization(organizationId);
+      }
+
+      showToast.settingsSaved();
     } catch (err) {
       console.error('Organization settings error:', err);
-      const errorMessage = err?.response?.data?.error?.message
-        || err?.response?.data?.message
-        || (err?.response?.data?.error?.details?.[0]?.message)
-        || 'Failed to update organization settings';
+      const errorData = err?.response?.data;
+      let errorMessage = 'Failed to update organization settings';
+
+      // Handle validation errors with specific field messages
+      if (errorData?.error?.details && Array.isArray(errorData.error.details)) {
+        const fieldErrors = errorData.error.details.map(d => `${d.field}: ${d.message}`).join(', ');
+        errorMessage = fieldErrors || errorData.error?.message || errorMessage;
+      } else if (errorData?.error?.message) {
+        errorMessage = errorData.error.message;
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+
       showToast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -136,10 +241,32 @@ function SettingsPage() {
     setIsSubmitting(true);
 
     try {
-      await settingsApi.updateProfile(profileForm);
+      // Only send fields that can be updated (exclude email)
+      const { firstName, lastName, phone } = profileForm;
+      const response = await settingsApi.updateProfile({ firstName, lastName, phone });
+
+      // Update user in auth context
+      if (response && setUser) {
+        const updatedUser = response.data || response;
+        setUser({ ...user, ...updatedUser });
+      }
       showToast.profileUpdated();
     } catch (err) {
-      showToast.error(err.response?.data?.message || 'Failed to update profile');
+      // Handle validation errors with detailed messages
+      const errorData = err.response?.data;
+      let errorMessage = 'Failed to update profile';
+
+      if (errorData?.error?.details && Array.isArray(errorData.error.details)) {
+        // Format validation errors
+        const details = errorData.error.details.map(d => `${d.field}: ${d.message}`).join(', ');
+        errorMessage = details || errorData.error?.message || errorMessage;
+      } else if (errorData?.error?.message) {
+        errorMessage = errorData.error.message;
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+
+      showToast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -149,8 +276,24 @@ function SettingsPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
+    // Validate passwords match
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       showToast.error('Passwords do not match');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate password strength
+    const { isValid, errors } = validatePassword(passwordForm.newPassword);
+    if (!isValid) {
+      showToast.error(`Password requirements: ${errors.join(', ')}`);
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate current password is provided
+    if (!passwordForm.currentPassword) {
+      showToast.error('Current password is required');
       setIsSubmitting(false);
       return;
     }
@@ -204,12 +347,6 @@ function SettingsPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
         );
-      case 'bell':
-        return (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-        );
       case 'shield':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,15 +377,22 @@ function SettingsPage() {
             <form onSubmit={handleOrgSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Organization Name
+                  Organization Name<span className="text-red-500 ml-0.5">*</span>
                 </label>
                 <input
                   type="text"
                   value={orgForm.name}
-                  onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                  onChange={(e) => setOrgForm({ ...orgForm, name: e.target.value.slice(0, ORG_NAME_MAX_LENGTH) })}
+                  maxLength={ORG_NAME_MAX_LENGTH}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   placeholder="Enter organization name"
                 />
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs text-gray-500">Required</span>
+                  <span className={`text-xs ${orgForm.name.length > ORG_NAME_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                    {orgForm.name.length}/{ORG_NAME_MAX_LENGTH}
+                  </span>
+                </div>
               </div>
 
               <div>
@@ -257,11 +401,17 @@ function SettingsPage() {
                 </label>
                 <textarea
                   value={orgForm.description}
-                  onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })}
+                  onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value.slice(0, ORG_DESCRIPTION_MAX_LENGTH) })}
+                  maxLength={ORG_DESCRIPTION_MAX_LENGTH}
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent resize-none"
                   placeholder="Brief description of your organization"
                 />
+                <div className="flex justify-end mt-1">
+                  <span className={`text-xs ${orgForm.description.length > ORG_DESCRIPTION_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                    {orgForm.description.length}/{ORG_DESCRIPTION_MAX_LENGTH}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -272,10 +422,16 @@ function SettingsPage() {
                   <input
                     type="url"
                     value={orgForm.website}
-                    onChange={(e) => setOrgForm({ ...orgForm, website: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setOrgForm({ ...orgForm, website: e.target.value.slice(0, ORG_WEBSITE_MAX_LENGTH) })}
+                    maxLength={ORG_WEBSITE_MAX_LENGTH}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="https://example.com"
                   />
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${orgForm.website.length > ORG_WEBSITE_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {orgForm.website.length}/{ORG_WEBSITE_MAX_LENGTH}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -284,7 +440,7 @@ function SettingsPage() {
                   <select
                     value={orgForm.industry}
                     onChange={(e) => setOrgForm({ ...orgForm, industry: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   >
                     <option value="">Select industry</option>
                     <option value="technology">Technology</option>
@@ -320,14 +476,34 @@ function SettingsPage() {
 
             {/* Avatar Section */}
             <div className="flex items-center gap-6">
-              <div className="w-20 h-20 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-2xl font-bold text-white">
-                  {user?.firstName?.charAt(0)?.toUpperCase() || 'U'}
-                </span>
+              <div className="w-20 h-20 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {user?.avatar ? (
+                  <img
+                    src={user.avatar.startsWith('http') ? user.avatar : `${BACKEND_URL}${user.avatar}`}
+                    alt={`${user.firstName}'s avatar`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl font-bold text-white">
+                    {user?.firstName?.charAt(0)?.toUpperCase() || 'U'}
+                  </span>
+                )}
               </div>
               <div>
-                <button className="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-                  Change Avatar
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleAvatarChange}
+                  accept="image/jpeg,image/jpg,image/png,image/gif"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {avatarUploading ? 'Uploading...' : 'Change Avatar'}
                 </button>
                 <p className="text-xs text-gray-500 mt-1">JPG, GIF or PNG. Max 2MB</p>
               </div>
@@ -337,27 +513,41 @@ function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    First Name
+                    First Name<span className="text-red-500 ml-0.5">*</span>
                   </label>
                   <input
                     type="text"
                     value={profileForm.firstName}
-                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value.slice(0, FIRST_NAME_MAX_LENGTH) })}
+                    maxLength={FIRST_NAME_MAX_LENGTH}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="Enter first name"
                   />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-gray-500">Required</span>
+                    <span className={`text-xs ${profileForm.firstName.length > FIRST_NAME_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {profileForm.firstName.length}/{FIRST_NAME_MAX_LENGTH}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Last Name
+                    Last Name<span className="text-red-500 ml-0.5">*</span>
                   </label>
                   <input
                     type="text"
                     value={profileForm.lastName}
-                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value.slice(0, LAST_NAME_MAX_LENGTH) })}
+                    maxLength={LAST_NAME_MAX_LENGTH}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="Enter last name"
                   />
+                  <div className="flex justify-between mt-1">
+                    <span className="text-xs text-gray-500">Required</span>
+                    <span className={`text-xs ${profileForm.lastName.length > LAST_NAME_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {profileForm.lastName.length}/{LAST_NAME_MAX_LENGTH}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -381,12 +571,16 @@ function SettingsPage() {
                   <input
                     type="tel"
                     value={profileForm.phone}
-                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                    maxLength={10}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
-                    placeholder="Enter 10-digit number"
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value.replace(/\D/g, '').slice(0, PHONE_MAX_LENGTH) })}
+                    maxLength={PHONE_MAX_LENGTH}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                    placeholder="Enter phone number"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Enter 10 digits (numbers only)</p>
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${profileForm.phone.length > PHONE_MAX_LENGTH * 0.9 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {profileForm.phone.length}/{PHONE_MAX_LENGTH}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -400,66 +594,6 @@ function SettingsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        );
-
-      case 'notifications':
-        return (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Notification Preferences</h3>
-              <p className="text-sm text-gray-500">Choose how you want to be notified</p>
-            </div>
-
-            <div className="space-y-4">
-              {[
-                { key: 'emailNotifications', label: 'Email Notifications', description: 'Receive notifications via email' },
-                { key: 'pushNotifications', label: 'Push Notifications', description: 'Receive push notifications in browser' },
-                { key: 'weeklyReport', label: 'Weekly Reports', description: 'Receive weekly activity reports' },
-                { key: 'billingAlerts', label: 'Billing Alerts', description: 'Get notified about billing events' },
-                { key: 'memberInvites', label: 'Member Invites', description: 'Get notified when new members join' },
-                { key: 'securityAlerts', label: 'Security Alerts', description: 'Get notified about security events' }
-              ].map((setting) => (
-                <div key={setting.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                  <div>
-                    <p className="font-medium text-gray-900">{setting.label}</p>
-                    <p className="text-sm text-gray-500">{setting.description}</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notificationSettings[setting.key]}
-                      onChange={(e) => setNotificationSettings({
-                        ...notificationSettings,
-                        [setting.key]: e.target.checked
-                      })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#DC2626]"></div>
-                  </label>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end pt-4">
-              <button
-                onClick={async () => {
-                  setIsSubmitting(true);
-                  try {
-                    await settingsApi.updateNotificationSettings(notificationSettings);
-                    setSuccess('Notification preferences updated');
-                  } catch (err) {
-                    setError(err.response?.data?.message || 'Failed to update notification settings');
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }}
-                disabled={isSubmitting}
-                className="px-6 py-2.5 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
-              >
-                {isSubmitting ? 'Saving...' : 'Save Preferences'}
-              </button>
-            </div>
           </div>
         );
 
@@ -482,8 +616,9 @@ function SettingsPage() {
                   <input
                     type="password"
                     value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value.slice(0, 50) })}
+                    maxLength={50}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="Enter current password"
                     required
                   />
@@ -495,11 +630,61 @@ function SettingsPage() {
                   <input
                     type="password"
                     value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value.slice(0, 50) })}
+                    maxLength={50}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="Enter new password"
                     required
                   />
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${passwordForm.newPassword.length > 45 ? 'text-orange-500' : 'text-gray-400'}`}>
+                      {passwordForm.newPassword.length}/50
+                    </span>
+                  </div>
+                  {/* Password strength indicator */}
+                  {passwordForm.newPassword && (
+                    <div className="mt-2">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs text-gray-500">Strength:</span>
+                        <span className={`text-xs font-medium ${getPasswordStrength(passwordForm.newPassword).color.replace('bg-', 'text-')}`}>
+                          {getPasswordStrength(passwordForm.newPassword).level}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${getPasswordStrength(passwordForm.newPassword).color} transition-all duration-300`}
+                          style={{ width: `${Math.min(100, (6 - validatePassword(passwordForm.newPassword).errors.length) * 20)}%` }}
+                        />
+                      </div>
+                      {/* Password requirements */}
+                      <div className="mt-3 space-y-1">
+                        <p className="text-xs text-gray-500 mb-1">Password must contain:</p>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { test: (p) => p.length >= 8, label: '8+ characters' },
+                            { test: (p) => p.length <= 50, label: 'Max 50 chars' },
+                            { test: (p) => /[A-Z]/.test(p), label: 'Uppercase letter' },
+                            { test: (p) => /[a-z]/.test(p), label: 'Lowercase letter' },
+                            { test: (p) => /[0-9]/.test(p), label: 'Number' },
+                            { test: (p) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(p), label: 'Special char' }
+                          ].map((req, idx) => (
+                            <div key={idx} className="flex items-center gap-1">
+                              <svg
+                                className={`w-3 h-3 ${req.test(passwordForm.newPassword) ? 'text-green-500' : 'text-gray-300'}`}
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                              <span className={`text-xs ${req.test(passwordForm.newPassword) ? 'text-green-600' : 'text-gray-400'}`}>
+                                {req.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -508,11 +693,15 @@ function SettingsPage() {
                   <input
                     type="password"
                     value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value.slice(0, 50) })}
+                    maxLength={50}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="Confirm new password"
                     required
                   />
+                  {passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && (
+                    <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                  )}
                 </div>
                 <button
                   type="submit"
@@ -524,49 +713,6 @@ function SettingsPage() {
               </form>
             </div>
 
-            {/* Two-Factor Authentication */}
-            <div className="bg-gray-50 rounded-xl p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-gray-900">Two-Factor Authentication</h4>
-                  <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
-                </div>
-                <button
-                  onClick={async () => {
-                    if (twoFactorEnabled) {
-                      // Disable 2FA
-                      const password = prompt('Enter your password to disable 2FA:');
-                      if (password) {
-                        try {
-                          await settingsApi.disableTwoFactor(password);
-                          setTwoFactorEnabled(false);
-                          setSuccess('Two-factor authentication disabled');
-                        } catch (err) {
-                          setError(err.response?.data?.message || 'Failed to disable 2FA');
-                        }
-                      }
-                    } else {
-                      // Setup 2FA
-                      try {
-                        const setup = await settingsApi.setupTwoFactor();
-                        setTwoFactorSetup(setup);
-                        setShowTwoFactorModal(true);
-                      } catch (err) {
-                        setError(err.response?.data?.message || 'Failed to setup 2FA');
-                      }
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    twoFactorEnabled
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-[#DC2626] text-white hover:bg-[#B91C1C]'
-                  }`}
-                >
-                  {twoFactorEnabled ? 'Enabled' : 'Enable 2FA'}
-                </button>
-              </div>
-            </div>
           </div>
         );
 
@@ -706,107 +852,6 @@ function SettingsPage() {
               className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? 'Deleting...' : 'Delete Organization'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* 2FA Modal */}
-      <Modal
-        isOpen={showTwoFactorModal}
-        onClose={() => {
-          setShowTwoFactorModal(false);
-          setTwoFactorSetup(null);
-          setTwoFactorToken('');
-        }}
-        title="Enable Two-Factor Authentication"
-        size="md"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Two-factor authentication adds an extra layer of security to your account by requiring a code from your authenticator app when you sign in.
-          </p>
-
-          {twoFactorSetup ? (
-            <>
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <div className="w-48 h-48 bg-white border-2 border-gray-200 rounded-lg mx-auto flex items-center justify-center overflow-hidden">
-                  {twoFactorSetup.qrCodeUrl ? (
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(twoFactorSetup.qrCodeUrl)}`}
-                      alt="2FA QR Code"
-                      className="w-full h-full"
-                    />
-                  ) : (
-                    <span className="text-xs text-gray-400">QR Code</span>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Scan with your authenticator app</p>
-                {twoFactorSetup.manualEntryKey && (
-                  <p className="text-xs text-gray-600 mt-2">
-                    Manual entry key: <code className="bg-gray-200 px-1 rounded">{twoFactorSetup.manualEntryKey}</code>
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter verification code
-                </label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={twoFactorToken}
-                  onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, ''))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent text-center text-2xl tracking-widest"
-                  placeholder="000000"
-                />
-              </div>
-            </>
-          ) : (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
-            </div>
-          )}
-
-          <div className="flex gap-3 pt-4">
-            <button
-              onClick={() => {
-                setShowTwoFactorModal(false);
-                setTwoFactorSetup(null);
-                setTwoFactorToken('');
-              }}
-              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={async () => {
-                if (!twoFactorToken || twoFactorToken.length !== 6) {
-                  setError('Please enter a valid 6-digit code');
-                  return;
-                }
-                setIsSubmitting(true);
-                try {
-                  const result = await settingsApi.verifyTwoFactor(twoFactorToken, twoFactorSetup.secret);
-                  setTwoFactorEnabled(true);
-                  setShowTwoFactorModal(false);
-                  setTwoFactorSetup(null);
-                  setTwoFactorToken('');
-                  setSuccess('Two-factor authentication enabled successfully');
-                  if (result.backupCodes) {
-                    alert(`Save these backup codes: ${result.backupCodes.join(', ')}`);
-                  }
-                } catch (err) {
-                  setError(err.response?.data?.message || 'Invalid verification code');
-                } finally {
-                  setIsSubmitting(false);
-                }
-              }}
-              disabled={isSubmitting || !twoFactorSetup || twoFactorToken.length !== 6}
-              className="flex-1 px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors disabled:opacity-50"
-            >
-              {isSubmitting ? 'Verifying...' : 'Enable 2FA'}
             </button>
           </div>
         </div>

@@ -5,6 +5,7 @@
  */
 
 import billingService from '../services/billing.service.js';
+import subscriptionService from '../services/subscription.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
 
 class BillingController {
@@ -292,6 +293,183 @@ class BillingController {
       res.json({
         success: true,
         data: preview
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ==========================================
+  // Subscription Management Endpoints
+  // ==========================================
+
+  /**
+   * Get available plans for upgrade/downgrade
+   * GET /api/organizations/:id/billing/available-plans
+   */
+  async getPlansForChange(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+
+      const result = await subscriptionService.getAvailablePlans(organizationId);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Validate plan change (check if allowed)
+   * POST /api/organizations/:id/billing/validate-change
+   */
+  async validatePlanChange(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const { targetPlanId, billingCycle } = req.body;
+
+      const validation = await subscriptionService.validatePlanChange(
+        organizationId,
+        targetPlanId,
+        billingCycle || 'monthly'
+      );
+
+      res.json({
+        success: true,
+        data: validation
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Process plan change with member management
+   * POST /api/organizations/:id/billing/change-plan
+   */
+  async changePlan(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const { targetPlanId, billingCycle } = req.body;
+      const userId = req.user.id;
+
+      const result = await subscriptionService.processPlanChange(
+        organizationId,
+        targetPlanId,
+        billingCycle || 'monthly',
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Plan changed successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Check member limit before adding
+   * GET /api/organizations/:id/billing/member-limit
+   */
+  async checkMemberLimit(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+
+      const result = await subscriptionService.checkMemberLimit(organizationId);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Schedule downgrade for end of billing period
+   * POST /api/organizations/:id/billing/schedule-downgrade
+   */
+  async scheduleDowngrade(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const { targetPlanId } = req.body;
+      const userId = req.user.id;
+
+      const result = await subscriptionService.scheduleDowngrade(
+        organizationId,
+        targetPlanId,
+        userId
+      );
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Cancel scheduled downgrade
+   * DELETE /api/organizations/:id/billing/schedule-downgrade
+   */
+  async cancelScheduledDowngrade(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+
+      const result = await subscriptionService.cancelScheduledDowngrade(organizationId, userId);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Re-enable disabled members after upgrade
+   * POST /api/organizations/:id/billing/reenable-members
+   */
+  async reenableMembers(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+
+      const result = await subscriptionService.reamedDisabledMembers(organizationId, userId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: `${result.reamed} member(s) re-enabled successfully`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Manually process expired subscriptions (admin only)
+   * POST /api/admin/billing/process-expired
+   */
+  async processExpiredSubscriptions(req, res, next) {
+    try {
+      const result = await subscriptionService.processExpiredSubscriptions();
+
+      res.json({
+        success: true,
+        data: result,
+        message: `Processed ${result.processed} expired subscriptions`
       });
     } catch (error) {
       next(error);

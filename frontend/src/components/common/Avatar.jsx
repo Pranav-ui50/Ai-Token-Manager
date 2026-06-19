@@ -4,6 +4,10 @@
  * User avatar with initials fallback.
  */
 
+// Get the backend base URL for serving static files
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const BACKEND_URL = API_BASE_URL.replace('/api', '');
+
 function Avatar({ src, alt, name, size = 'md', className = '' }) {
   const sizes = {
     xs: 'h-6 w-6 text-xs',
@@ -35,10 +39,23 @@ function Avatar({ src, alt, name, size = 'md', className = '' }) {
     return colors[hash % colors.length];
   };
 
-  if (src) {
+  // Process avatar URL - prepend backend URL if it's a relative path
+  const getAvatarUrl = (avatarSrc) => {
+    if (!avatarSrc) return null;
+    // If it's already a full URL, use it as is
+    if (avatarSrc.startsWith('http://') || avatarSrc.startsWith('https://')) {
+      return avatarSrc;
+    }
+    // Otherwise, prepend the backend URL
+    return `${BACKEND_URL}${avatarSrc}`;
+  };
+
+  const avatarUrl = getAvatarUrl(src);
+
+  if (avatarUrl) {
     return (
       <img
-        src={src}
+        src={avatarUrl}
         alt={alt || name || 'Avatar'}
         className={`${sizes[size]} rounded-full object-cover ${className}`}
       />

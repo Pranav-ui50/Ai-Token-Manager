@@ -174,15 +174,29 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DASHBOARD
   ],
 
-  // Viewer - Read-only analytics access
+  // Viewer - Read-only access across organization
   viewer: [
+    // Dashboard
     PERMISSIONS.VIEW_DASHBOARD,
-    PERMISSIONS.VIEW_ANALYTICS,
-    PERMISSIONS.VIEW_REPORTS,
-    PERMISSIONS.VIEW_PROVIDERS,
-    PERMISSIONS.VIEW_MODELS,
+
+    // Projects - read only
+    PERMISSIONS.VIEW_PROJECTS,
+
+    // Features - read only
     PERMISSIONS.VIEW_FEATURES,
-    PERMISSIONS.VIEW_PROJECTS
+
+    // Plans - read only
+    PERMISSIONS.VIEW_PLANS,
+
+    // Simulations - read only
+    PERMISSIONS.VIEW_SIMULATIONS,
+
+    // Analytics - read only
+    PERMISSIONS.VIEW_ANALYTICS,
+
+    // Reports - view and export
+    PERMISSIONS.VIEW_REPORTS,
+    PERMISSIONS.EXPORT_REPORTS
   ]
 };
 
@@ -312,7 +326,7 @@ export function usePermissions() {
    */
   const canManageModels = () => {
     const role = getUserRole();
-    return role === 'super_admin' || role === 'org_owner';
+    return role === 'super_admin';
   };
 
   /**

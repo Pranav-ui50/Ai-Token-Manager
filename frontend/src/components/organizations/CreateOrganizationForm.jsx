@@ -49,7 +49,8 @@ function CreateOrganizationForm({ onSuccess, onCancel }) {
     try {
       const organization = await createOrganization(formData);
       onSuccess?.();
-      navigate(`/organizations/${organization._id}`);
+      // Redirect to dashboard after creating organization
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create organization');
     } finally {

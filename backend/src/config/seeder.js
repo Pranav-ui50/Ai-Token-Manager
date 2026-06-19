@@ -25,6 +25,46 @@ export const seedRoles = async () => {
       logger.info('Default roles seeded successfully');
     } else {
       logger.info(`Roles already exist (${rolesCount} roles found)`);
+
+      // Update existing roles with latest permissions from constants
+      logger.info('Updating existing roles with latest permissions...');
+      const defaultRoles = [
+        {
+          name: ROLES.SUPER_ADMIN,
+          permissions: ROLE_PERMISSIONS[ROLES.SUPER_ADMIN]
+        },
+        {
+          name: ROLES.ORG_OWNER,
+          permissions: ROLE_PERMISSIONS[ROLES.ORG_OWNER]
+        },
+        {
+          name: ROLES.FINANCE_ADMIN,
+          permissions: ROLE_PERMISSIONS[ROLES.FINANCE_ADMIN]
+        },
+        {
+          name: ROLES.PRODUCT_MANAGER,
+          permissions: ROLE_PERMISSIONS[ROLES.PRODUCT_MANAGER]
+        },
+        {
+          name: ROLES.DEVELOPER,
+          permissions: ROLE_PERMISSIONS[ROLES.DEVELOPER]
+        },
+        {
+          name: ROLES.VIEWER,
+          permissions: ROLE_PERMISSIONS[ROLES.VIEWER]
+        }
+      ];
+
+      for (const roleData of defaultRoles) {
+        const result = await Role.updateOne(
+          { name: roleData.name },
+          { $set: { permissions: roleData.permissions } }
+        );
+        if (result.modifiedCount > 0) {
+          logger.info(`  - Updated permissions for ${roleData.name} role`);
+        }
+      }
+      logger.info('Role permissions updated successfully');
     }
   } catch (error) {
     logger.error('Error seeding roles:', error);
@@ -767,7 +807,7 @@ const DEFAULT_PLANS = [
     billing: { price: 29, yearlyPrice: 278.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 500000, includedRequests: 5000 } },
     credits: { includedCredits: 500000, creditType: 'token' },
-    limits: { maxUsers: 3, maxApiCalls: 10000, maxTokens: 500000 },
+    limits: { maxProjects: 3, maxFeatures: 10, maxSimulations: 100, maxUsers: 3, maxApiCalls: 10000, maxTokens: 500000 },
     isPopular: false,
     displayOrder: 1
   },
@@ -779,7 +819,7 @@ const DEFAULT_PLANS = [
     billing: { price: 99, yearlyPrice: 950.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 2000000, includedRequests: 20000 } },
     credits: { includedCredits: 2000000, creditType: 'token' },
-    limits: { maxUsers: 10, maxApiCalls: 50000, maxTokens: 2000000 },
+    limits: { maxProjects: 10, maxFeatures: 50, maxSimulations: 500, maxUsers: 10, maxApiCalls: 50000, maxTokens: 2000000 },
     isPopular: true,
     displayOrder: 2
   },
@@ -791,7 +831,7 @@ const DEFAULT_PLANS = [
     billing: { price: 299, yearlyPrice: 2870.4, currency: 'USD', interval: 'month', trialDays: 14 }, // 20% discount yearly
     pricingModel: { type: 'usage-based', usageBased: { includedTokens: 10000000, includedRequests: 100000 } },
     credits: { includedCredits: 10000000, creditType: 'token' },
-    limits: { maxUsers: 50, maxApiCalls: 200000, maxTokens: 10000000 },
+    limits: { maxProjects: 50, maxFeatures: 200, maxSimulations: 2000, maxUsers: 50, maxApiCalls: 200000, maxTokens: 10000000 },
     isPopular: false,
     displayOrder: 3
   }

@@ -6,6 +6,7 @@
 
 import featureService from '../services/feature.service.js';
 import auditService from '../services/audit.service.js';
+import limitService from '../services/limit.service.js';
 import Feature from '../models/Feature.js';
 import AIModel from '../models/AIModel.js';
 import { AppError } from '../middlewares/error.middleware.js';
@@ -23,6 +24,14 @@ class FeatureController {
       if (!organizationId) {
         throw new AppError('Organization is required. Please select an organization.', 400, 'ORGANIZATION_REQUIRED');
       }
+
+      // Validate project is provided - features must be linked to a project
+      if (!req.body.project) {
+        throw new AppError('Project/Product is required. Features must be linked to a project.', 400, 'PROJECT_REQUIRED');
+      }
+
+      // Check feature limit before creating
+      await limitService.validateLimit(organizationId, 'features', 1);
 
       const featureData = {
         ...req.body,

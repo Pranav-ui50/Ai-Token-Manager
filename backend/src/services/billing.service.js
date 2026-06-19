@@ -12,6 +12,7 @@ import mongoose from 'mongoose';
 import Organization from '../models/Organization.js';
 import Invoice from '../models/Invoice.js';
 import AuditLog from '../models/AuditLog.js';
+import Plan from '../models/Plan.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -47,105 +48,6 @@ const initPaymentProviders = async () => {
   }
 };
 
-// Subscription plans configuration
-const SUBSCRIPTION_PLANS = {
-  free: {
-    id: 'free',
-    name: 'Free',
-    displayName: 'Free Plan',
-    price: 0,
-    currency: 'USD',
-    billingCycle: 'monthly',
-    features: {
-      maxProjects: 1,
-      maxFeatures: 5,
-      maxSimulations: 10,
-      maxTeamMembers: 1,
-      apiCalls: 1000,
-      tokens: 10000,
-      storage: 100, // MB
-      reports: 'basic',
-      support: 'community'
-    },
-    limits: {
-      features: ['basic_analytics', 'single_provider'],
-      notIncluded: ['advanced_simulations', 'priority_support', 'custom_reports']
-    }
-  },
-  starter: {
-    id: 'starter',
-    name: 'Starter',
-    displayName: 'Starter Plan',
-    price: 29,
-    currency: 'USD',
-    stripePriceId: process.env.STRIPE_STARTER_PRICE_ID,
-    razorpayPlanId: process.env.RAZORPAY_STARTER_PLAN_ID,
-    billingCycle: ['monthly', 'yearly'],
-    yearlyDiscount: 0.2, // 20% discount
-    features: {
-      maxProjects: 5,
-      maxFeatures: 20,
-      maxSimulations: 100,
-      maxTeamMembers: 5,
-      apiCalls: 10000,
-      tokens: 100000,
-      storage: 1000, // MB
-      reports: 'standard',
-      support: 'email'
-    },
-    limits: {
-      features: ['basic_analytics', 'multiple_providers', 'export_reports']
-    }
-  },
-  professional: {
-    id: 'professional',
-    name: 'Professional',
-    displayName: 'Professional Plan',
-    price: 99,
-    currency: 'USD',
-    stripePriceId: process.env.STRIPE_PROFESSIONAL_PRICE_ID,
-    razorpayPlanId: process.env.RAZORPAY_PROFESSIONAL_PLAN_ID,
-    billingCycle: ['monthly', 'yearly'],
-    yearlyDiscount: 0.2,
-    features: {
-      maxProjects: 20,
-      maxFeatures: 100,
-      maxSimulations: 1000,
-      maxTeamMembers: 25,
-      apiCalls: 100000,
-      tokens: 1000000,
-      storage: 10000, // MB
-      reports: 'advanced',
-      support: 'priority'
-    },
-    limits: {
-      features: ['all_starter', 'advanced_simulations', 'custom_reports', 'api_access']
-    }
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Enterprise',
-    displayName: 'Enterprise Plan',
-    price: 'custom',
-    currency: 'USD',
-    billingCycle: ['monthly', 'yearly'],
-    features: {
-      maxProjects: 'unlimited',
-      maxFeatures: 'unlimited',
-      maxSimulations: 'unlimited',
-      maxTeamMembers: 'unlimited',
-      apiCalls: 'unlimited',
-      tokens: 'unlimited',
-      storage: 'unlimited',
-      reports: 'custom',
-      support: 'dedicated'
-    },
-    limits: {
-      features: ['all_features', 'custom_integrations', 'sla', 'dedicated_support']
-    }
-  }
-};
-
 class BillingService {
   constructor() {
     // Initialize payment providers on first use
@@ -163,19 +65,102 @@ class BillingService {
   }
 
   /**
+   * Get plan details from database by tier or ID
+   * @param {string} planIdentifier - Plan tier (free, starter, etc.) or plan ID
+   * @param {string} organizationId - Organization ID to match plan ownership
+   * @returns {Object|null} Plan object with limits
+   */
+  async getPlanFromDatabase(planIdentifier, organizationId = null) {
+    let query = { status: 'active' };
+
+    // Check if it's a valid ObjectId
+    if (planIdentifier && planIdentifier.match(/^[0-9a-fA-F]{24}$/)) {
+      query._id = planIdentifier;
+    } else if (planIdentifier) {
+      // Search by tier
+      query.tier = planIdentifier.toLowerCase();
+    } else {
+      // Get default plan
+      query['settings.isDefault'] = true;
+    }
+
+    // If organizationId provided, also try to find org-specific plan
+    if (organizationId) {
+      const orgPlan = await Plan.findOne({ ...query, organization: organizationId })
+        .populate('features.feature', 'name slug category');
+      if (orgPlan) return orgPlan;
+    }
+
+    // Fall back to global plans (no organization filter)
+    return await Plan.findOne(query).populate('features.feature', 'name slug category');
+  }
+
+  /**
+   * Get plan limits for usage calculation
+   * @param {Object} plan - Plan document from database
+   * @returns {Object} Limits object with maxProjects, maxFeatures, etc.
+   */
+  getPlanLimits(plan) {
+    if (!plan) {
+      // Default fallback limits
+      return {
+        maxProjects: 1,
+        maxFeatures: 5,
+        maxSimulations: 10,
+        maxTeamMembers: 1,
+        apiCalls: 1000,
+        tokens: 10000,
+        storage: 100
+      };
+    }
+
+    return {
+      maxProjects: plan.limits?.maxProjects || null,
+      maxFeatures: plan.limits?.maxFeatures || null,
+      maxSimulations: plan.limits?.maxSimulations || null,
+      maxTeamMembers: plan.limits?.maxUsers || null,
+      apiCalls: plan.limits?.maxApiCalls || null,
+      tokens: plan.limits?.maxTokens || plan.credits?.includedCredits || null,
+      storage: plan.limits?.maxStorage || null
+    };
+  }
+
+  /**
    * Get billing information for organization
    */
   async getBilling(organizationId) {
     const organization = await Organization.findById(organizationId)
-      .populate('owner', 'firstName lastName email');
+      .populate('owner', 'firstName lastName email avatar');
 
     if (!organization) {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
     const subscription = organization.subscription || {};
-    const planKey = (subscription.plan || 'free').toLowerCase();
-    const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free;
+
+    // Get plan from database
+    const dbPlan = await this.getPlanFromDatabase(subscription.plan, organization._id.toString());
+
+    // Format plan details
+    const planDetails = dbPlan ? {
+      id: dbPlan._id,
+      tier: dbPlan.tier,
+      name: dbPlan.name,
+      displayName: dbPlan.name,
+      price: dbPlan.billing?.price || 0,
+      currency: dbPlan.billing?.currency || 'USD',
+      billingInterval: dbPlan.billing?.interval || 'month',
+      limits: this.getPlanLimits(dbPlan),
+      features: dbPlan.features || []
+    } : {
+      id: 'free',
+      tier: 'free',
+      name: 'Free',
+      displayName: 'Free Plan',
+      price: 0,
+      currency: 'USD',
+      limits: this.getPlanLimits(null)
+    };
 
     return {
       organization: {
@@ -184,6 +169,7 @@ class BillingService {
       },
       subscription: {
         plan: subscription.plan || 'free',
+        planId: dbPlan?._id || null,
         status: subscription.status || 'trial',
         trialEndsAt: subscription.trialEndsAt,
         currentPeriodStart: subscription.currentPeriodStart,
@@ -193,12 +179,14 @@ class BillingService {
         cancelReason: subscription.cancelReason
       },
       plan: {
-        id: plan.id,
-        name: plan.name,
-        displayName: plan.displayName,
-        features: plan.features,
-        price: plan.price === 'custom' ? 'Contact Sales' : plan.price,
-        currency: plan.currency
+        id: planDetails.id,
+        tier: planDetails.tier,
+        name: planDetails.name,
+        displayName: planDetails.displayName,
+        features: planDetails.features,
+        limits: planDetails.limits,
+        price: planDetails.price,
+        currency: planDetails.currency
       },
       billingDetails: organization.billingDetails || {},
       paymentMethods: (organization.paymentMethods || []).map(pm => ({
@@ -225,32 +213,37 @@ class BillingService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    // Validate plan
-    if (!SUBSCRIPTION_PLANS[plan]) {
+    // Get plan from database
+    const dbPlan = await this.getPlanFromDatabase(plan, organization._id.toString());
+    if (!dbPlan) {
       throw new AppError('Invalid subscription plan', 400, 'INVALID_PLAN');
     }
 
-    const planConfig = SUBSCRIPTION_PLANS[plan];
     const oldPlan = organization.subscription?.plan || 'free';
 
     // Handle enterprise plan
-    if (planConfig.price === 'custom') {
+    if (dbPlan.billing?.price === 'custom' || dbPlan.tier === 'enterprise') {
       throw new AppError('Please contact sales for enterprise pricing', 400, 'CONTACT_SALES');
     }
 
     // Validate billing cycle
-    if (planConfig.billingCycle !== 'monthly' && !planConfig.billingCycle.includes(billingCycle)) {
-      throw new AppError('Invalid billing cycle for this plan', 400, 'INVALID_BILLING_CYCLE');
+    const planInterval = dbPlan.billing?.interval || 'month';
+    if (planInterval === 'month' && billingCycle === 'yearly') {
+      // Allow yearly for monthly plans (apply discount)
+    } else if (planInterval === 'year' && billingCycle === 'monthly') {
+      throw new AppError('This plan is only available with yearly billing', 400, 'INVALID_BILLING_CYCLE');
     }
 
     // Calculate price
-    let price = planConfig.price;
-    if (billingCycle === 'yearly' && planConfig.yearlyDiscount) {
-      price = price * 12 * (1 - planConfig.yearlyDiscount);
+    const basePrice = dbPlan.billing?.price || 0;
+    let price = basePrice;
+    if (billingCycle === 'yearly') {
+      // Apply 20% yearly discount (configurable)
+      price = basePrice * 12 * 0.8;
     }
 
     // Process payment for paid plans
-    if (planConfig.price > 0) {
+    if (basePrice > 0) {
       // Check for payment method
       const defaultPaymentMethod = organization.paymentMethods?.find(pm => pm.isDefault);
       if (!defaultPaymentMethod) {
@@ -260,9 +253,9 @@ class BillingService {
       // Process payment based on provider
       try {
         if (defaultPaymentMethod.provider === 'stripe' && stripe) {
-          await this.processStripePayment(organization, planConfig, billingCycle, defaultPaymentMethod);
+          await this.processStripePayment(organization, dbPlan, billingCycle, defaultPaymentMethod);
         } else if (defaultPaymentMethod.provider === 'razorpay' && razorpay) {
-          await this.processRazorpayPayment(organization, planConfig, billingCycle, defaultPaymentMethod);
+          await this.processRazorpayPayment(organization, dbPlan, billingCycle, defaultPaymentMethod);
         }
       } catch (paymentError) {
         logger.error('Payment processing failed:', paymentError);
@@ -281,7 +274,8 @@ class BillingService {
 
     // Update subscription
     organization.subscription = {
-      plan,
+      plan: dbPlan.tier || plan,
+      planId: dbPlan._id,
       status: 'active',
       billingCycle,
       currentPeriodStart: now,
@@ -292,8 +286,8 @@ class BillingService {
     await organization.save();
 
     // Generate invoice for paid plans
-    if (planConfig.price > 0) {
-      await this.generateInvoice(organization, planConfig, billingCycle, userId);
+    if (basePrice > 0) {
+      await this.generateInvoice(organization, dbPlan, billingCycle, userId);
     }
 
     // Log audit
@@ -304,21 +298,22 @@ class BillingService {
       resourceType: 'organization',
       resourceId: organization._id,
       resourceName: organization.name,
-      description: `Subscription updated from ${oldPlan} to ${plan} (${billingCycle})`,
+      description: `Subscription updated from ${oldPlan} to ${dbPlan.name} (${billingCycle})`,
       beforeState: { plan: oldPlan },
-      afterState: { plan, billingCycle }
+      afterState: { plan: dbPlan.tier, billingCycle }
     });
 
-    logger.info(`Subscription updated: ${organizationId} to ${plan} (${billingCycle}) by ${userId}`);
+    logger.info(`Subscription updated: ${organizationId} to ${dbPlan.name} (${billingCycle}) by ${userId}`);
 
     return {
       subscription: organization.subscription,
       plan: {
-        id: planConfig.id,
-        name: planConfig.name,
-        displayName: planConfig.displayName,
-        price: planConfig.price,
-        currency: planConfig.currency
+        id: dbPlan._id,
+        tier: dbPlan.tier,
+        name: dbPlan.name,
+        displayName: dbPlan.name,
+        price: dbPlan.billing?.price || 0,
+        currency: dbPlan.billing?.currency || 'USD'
       }
     };
   }
@@ -430,10 +425,18 @@ class BillingService {
 
     logger.info(`Subscription reactivated: ${organizationId} by ${userId}`);
 
-    const planKey = (organization.subscription.plan || 'free').toLowerCase();
+    // Get plan from database
+    const dbPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+
     return {
       status: 'active',
-      plan: SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free,
+      plan: {
+        id: dbPlan?._id || 'free',
+        tier: dbPlan?.tier || 'free',
+        name: dbPlan?.name || 'Free',
+        displayName: dbPlan?.name || 'Free Plan',
+        limits: this.getPlanLimits(dbPlan)
+      },
       message: 'Subscription reactivated successfully'
     };
   }
@@ -458,7 +461,7 @@ class BillingService {
     // Get counts
     const [projectCount, featureCount, simulationCount] = await Promise.all([
       Project.countDocuments({ organization: organizationId, isActive: true }),
-      Feature.countDocuments({ organization: organizationId, isActive: true }),
+      Feature.countDocuments({ organization: organizationId, status: 'active' }),
       Simulation.countDocuments({ organization: organizationId })
     ]);
 
@@ -481,9 +484,21 @@ class BillingService {
 
     const usage = featureUsage[0] || { totalRequests: 0, totalTokens: 0, totalCost: 0 };
 
-    // Normalize plan name to lowercase for lookup
-    const planKey = (organization.subscription?.plan || 'free').toLowerCase();
-    const plan = SUBSCRIPTION_PLANS[planKey] || SUBSCRIPTION_PLANS.free;
+    // Get plan from database for dynamic limits
+    const dbPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+    const limits = this.getPlanLimits(dbPlan);
+
+    // Helper function to calculate percentage
+    const calculatePercentage = (used, limit) => {
+      if (!limit || limit === 'unlimited' || limit === null) return 0;
+      return Math.round((used / limit) * 100);
+    };
+
+    // Helper function to format limit display
+    const formatLimit = (limit) => {
+      if (!limit || limit === null) return 'unlimited';
+      return limit;
+    };
 
     return {
       period: {
@@ -493,33 +508,33 @@ class BillingService {
       usage: {
         projects: {
           used: projectCount,
-          limit: plan.features.maxProjects,
-          percentage: plan.features.maxProjects === 'unlimited' ? 0 : Math.round((projectCount / plan.features.maxProjects) * 100)
+          limit: formatLimit(limits.maxProjects),
+          percentage: calculatePercentage(projectCount, limits.maxProjects)
         },
         features: {
           used: featureCount,
-          limit: plan.features.maxFeatures,
-          percentage: plan.features.maxFeatures === 'unlimited' ? 0 : Math.round((featureCount / plan.features.maxFeatures) * 100)
+          limit: formatLimit(limits.maxFeatures),
+          percentage: calculatePercentage(featureCount, limits.maxFeatures)
         },
         simulations: {
           used: simulationCount,
-          limit: plan.features.maxSimulations,
-          percentage: plan.features.maxSimulations === 'unlimited' ? 0 : Math.round((simulationCount / plan.features.maxSimulations) * 100)
+          limit: formatLimit(limits.maxSimulations),
+          percentage: calculatePercentage(simulationCount, limits.maxSimulations)
         },
         teamMembers: {
           used: organization.members?.length || 0,
-          limit: plan.features.maxTeamMembers,
-          percentage: plan.features.maxTeamMembers === 'unlimited' ? 0 : Math.round(((organization.members?.length || 0) / plan.features.maxTeamMembers) * 100)
+          limit: formatLimit(limits.maxTeamMembers),
+          percentage: calculatePercentage(organization.members?.length || 0, limits.maxTeamMembers)
         },
         apiCalls: {
           used: usage.totalRequests,
-          limit: plan.features.apiCalls,
-          percentage: plan.features.apiCalls === 'unlimited' ? 0 : Math.round((usage.totalRequests / plan.features.apiCalls) * 100)
+          limit: formatLimit(limits.apiCalls),
+          percentage: calculatePercentage(usage.totalRequests, limits.apiCalls)
         },
         tokens: {
           used: usage.totalTokens,
-          limit: plan.features.tokens,
-          percentage: plan.features.tokens === 'unlimited' ? 0 : Math.round((usage.totalTokens / plan.features.tokens) * 100)
+          limit: formatLimit(limits.tokens),
+          percentage: calculatePercentage(usage.totalTokens, limits.tokens)
         }
       },
       cost: {
@@ -527,9 +542,10 @@ class BillingService {
         currency: 'USD'
       },
       plan: {
-        id: plan.id,
-        name: plan.name,
-        displayName: plan.displayName
+        id: dbPlan?._id || 'free',
+        tier: dbPlan?.tier || 'free',
+        name: dbPlan?.name || 'Free',
+        displayName: dbPlan?.name || 'Free Plan'
       }
     };
   }
@@ -1043,16 +1059,28 @@ class BillingService {
    * Get available plans
    */
   async getAvailablePlans() {
-    return Object.entries(SUBSCRIPTION_PLANS).map(([key, plan]) => ({
-      id: key,
+    // Get all active public plans from database
+    const plans = await Plan.find({
+      status: 'active',
+      'settings.isPublic': true
+    })
+      .populate('features.feature', 'name slug category')
+      .sort({ displayOrder: 1, tier: 1 });
+
+    return plans.map(plan => ({
+      id: plan._id,
+      tier: plan.tier,
       name: plan.name,
-      displayName: plan.displayName,
-      price: plan.price,
-      currency: plan.currency,
-      billingCycle: plan.billingCycle,
-      yearlyDiscount: plan.yearlyDiscount,
-      features: plan.features,
-      limits: plan.limits
+      displayName: plan.name,
+      description: plan.description,
+      price: plan.billing?.price || 0,
+      currency: plan.billing?.currency || 'USD',
+      billingCycle: plan.billing?.interval || 'month',
+      yearlyDiscount: plan.billing?.yearlyDiscount || 0,
+      features: plan.features || [],
+      limits: this.getPlanLimits(plan),
+      credits: plan.credits,
+      isPopular: plan.isPopular
     }));
   }
 
@@ -1065,24 +1093,26 @@ class BillingService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
-    const currentPlanKey = (organization.subscription?.plan || 'free').toLowerCase();
-    const currentPlan = SUBSCRIPTION_PLANS[currentPlanKey] || SUBSCRIPTION_PLANS.free;
-    const newPlanKey = plan.toLowerCase();
-    const newPlan = SUBSCRIPTION_PLANS[newPlanKey];
+    // Get current and new plan from database
+    const currentPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+    const newPlan = await this.getPlanFromDatabase(plan, organization._id.toString());
 
     if (!newPlan) {
       throw new AppError('Invalid plan', 400, 'INVALID_PLAN');
     }
 
-    if (newPlan.price === 'custom') {
+    // Handle enterprise plan
+    if (newPlan.tier === 'enterprise' || newPlan.billing?.price === 'custom') {
       return {
         currentPlan: {
           id: organization.subscription?.plan || 'free',
-          name: currentPlan.name,
-          price: currentPlan.price
+          tier: currentPlan?.tier || 'free',
+          name: currentPlan?.name || 'Free',
+          price: currentPlan?.billing?.price || 0
         },
         newPlan: {
-          id: plan,
+          id: newPlan._id,
+          tier: newPlan.tier,
           name: newPlan.name,
           price: 'Contact Sales'
         },
@@ -1096,14 +1126,15 @@ class BillingService {
     const daysRemaining = Math.max(0, Math.ceil((currentPeriodEnd - now) / (24 * 60 * 60 * 1000)));
     const daysInPeriod = organization.subscription?.billingCycle === 'yearly' ? 365 : 30;
 
-    let newPrice = typeof newPlan.price === 'number' ? newPlan.price : 0;
-    if (billingCycle === 'yearly' && newPlan.yearlyDiscount) {
-      newPrice = newPrice * 12 * (1 - newPlan.yearlyDiscount);
+    // Calculate prices
+    let newPrice = newPlan.billing?.price || 0;
+    if (billingCycle === 'yearly') {
+      newPrice = newPrice * 12 * 0.8; // 20% yearly discount
     }
 
-    let currentPrice = typeof currentPlan.price === 'number' ? currentPlan.price : 0;
-    if (organization.subscription?.billingCycle === 'yearly' && currentPlan.yearlyDiscount) {
-      currentPrice = currentPlan.price * 12 * (1 - currentPlan.yearlyDiscount);
+    let currentPrice = currentPlan?.billing?.price || 0;
+    if (organization.subscription?.billingCycle === 'yearly') {
+      currentPrice = currentPrice * 12 * 0.8;
     }
 
     // Calculate prorated credit/charge
@@ -1113,13 +1144,15 @@ class BillingService {
 
     return {
       currentPlan: {
-        id: organization.subscription?.plan || 'free',
-        name: currentPlan.name,
+        id: currentPlan?._id || 'free',
+        tier: currentPlan?.tier || 'free',
+        name: currentPlan?.name || 'Free',
         price: currentPrice,
         billingCycle: organization.subscription?.billingCycle || 'monthly'
       },
       newPlan: {
-        id: plan,
+        id: newPlan._id,
+        tier: newPlan.tier,
         name: newPlan.name,
         price: newPrice,
         billingCycle
@@ -1154,9 +1187,10 @@ class BillingService {
       throw new AppError('Stripe is not configured', 500, 'PAYMENT_PROVIDER_NOT_AVAILABLE');
     }
 
-    const price = billingCycle === 'yearly' && plan.yearlyDiscount
-      ? plan.price * 12 * (1 - plan.yearlyDiscount)
-      : plan.price;
+    const basePrice = plan.billing?.price || 0;
+    const price = billingCycle === 'yearly'
+      ? basePrice * 12 * 0.8 // 20% yearly discount
+      : basePrice;
 
     // Create or get Stripe customer
     let stripeCustomerId = organization.subscription?.stripeCustomerId;
@@ -1174,7 +1208,7 @@ class BillingService {
     // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(price * 100), // Convert to cents
-      currency: plan.currency?.toLowerCase() || 'usd',
+      currency: plan.billing?.currency?.toLowerCase() || 'usd',
       customer: stripeCustomerId,
       payment_method: paymentMethod.externalId,
       confirm: true,
@@ -1184,7 +1218,7 @@ class BillingService {
       },
       metadata: {
         organizationId: organization._id.toString(),
-        planId: plan.id,
+        planId: plan._id?.toString() || plan.id,
         billingCycle
       }
     });
@@ -1211,19 +1245,20 @@ class BillingService {
       throw new AppError('Razorpay is not configured', 500, 'PAYMENT_PROVIDER_NOT_AVAILABLE');
     }
 
-    const price = billingCycle === 'yearly' && plan.yearlyDiscount
-      ? plan.price * 12 * (1 - plan.yearlyDiscount)
-      : plan.price;
+    const basePrice = plan.billing?.price || 0;
+    const price = billingCycle === 'yearly'
+      ? basePrice * 12 * 0.8 // 20% yearly discount
+      : basePrice;
     const amountInPaise = Math.round(price * 100);
 
     // Create Razorpay order
     const order = await razorpay.orders.create({
       amount: amountInPaise,
-      currency: plan.currency === 'USD' ? 'USD' : 'INR',
+      currency: plan.billing?.currency === 'USD' ? 'USD' : 'INR',
       receipt: `org_${organization._id}_${Date.now()}`,
       notes: {
         organizationId: organization._id.toString(),
-        planId: plan.id,
+        planId: plan._id?.toString() || plan.id,
         billingCycle
       }
     });
@@ -1294,9 +1329,10 @@ class BillingService {
       periodEnd.setMonth(periodEnd.getMonth() + 1);
     }
 
-    const price = billingCycle === 'yearly' && plan.yearlyDiscount
-      ? plan.price * 12 * (1 - plan.yearlyDiscount)
-      : plan.price;
+    const basePrice = plan.billing?.price || 0;
+    const price = billingCycle === 'yearly'
+      ? basePrice * 12 * 0.8 // 20% yearly discount
+      : basePrice;
 
     const invoice = await Invoice.create({
       organization: organization._id,
@@ -1307,7 +1343,7 @@ class BillingService {
         end: periodEnd
       },
       items: [{
-        description: `${plan.displayName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'} Subscription`,
+        description: `${plan.name} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'} Subscription`,
         type: 'subscription',
         quantity: 1,
         unitPrice: price,
@@ -1315,7 +1351,7 @@ class BillingService {
       }],
       subtotal: price,
       total: price,
-      currency: plan.currency || 'USD',
+      currency: plan.billing?.currency || 'USD',
       status: 'paid',
       dueDate: now,
       payment: {
@@ -1324,7 +1360,7 @@ class BillingService {
         paidAt: now
       },
       subscription: {
-        planId: plan.id,
+        planId: plan._id?.toString() || plan.id,
         planName: plan.name,
         billingCycle
       },

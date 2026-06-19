@@ -39,6 +39,13 @@ const STATUS_COLORS = {
   failing: 'bg-red-100 text-red-700'
 };
 
+// Character limits for form fields
+const NAME_MAX_LENGTH = 60;
+const URL_MAX_LENGTH = 200;
+const DESCRIPTION_MAX_LENGTH = 300;
+const HEADER_MAX_LENGTH = 50;
+const NUMBER_MAX_DIGITS = 15;
+
 function WebhooksPage() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const { canManageWebhooks } = usePermissions();
@@ -48,6 +55,7 @@ function WebhooksPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedWebhook, setSelectedWebhook] = useState(null);
   const [testResult, setTestResult] = useState(null);
   const [deliveryHistory, setDeliveryHistory] = useState([]);
@@ -99,7 +107,9 @@ function WebhooksPage() {
         organizationId: currentOrganization._id,
         ...formData
       });
-      setWebhooks(prev => [response.data.webhook, ...prev]);
+      // API returns { success, message, data: { webhook, secret } }
+      const webhookData = response.data.webhook || response.data;
+      setWebhooks(prev => [webhookData, ...prev]);
       setNewSecret(response.data.secret);
       setShowCreateModal(false);
       resetForm();
@@ -125,11 +135,18 @@ function WebhooksPage() {
   };
 
   const handleDelete = async (webhook) => {
-    if (!confirm(`Are you sure you want to delete "${webhook.name}"?`)) return;
+    setSelectedWebhook(webhook);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedWebhook) return;
 
     try {
-      await webhookApi.delete(webhook._id);
-      setWebhooks(prev => prev.filter(w => w._id !== webhook._id));
+      await webhookApi.delete(selectedWebhook._id);
+      setWebhooks(prev => prev.filter(w => w._id !== selectedWebhook._id));
+      setShowDeleteModal(false);
+      setSelectedWebhook(null);
       showToast.webhookDeleted();
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || 'Failed to delete webhook');
@@ -389,7 +406,7 @@ function WebhooksPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {webhooks.map(webhook => (
+          {webhooks.filter(Boolean).map(webhook => (
             <div key={webhook._id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="p-5">
                 <div className="flex items-start justify-between">
@@ -420,10 +437,10 @@ function WebhooksPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span>Deliveries: {webhook.stats?.totalDeliveries || 0}</span>
-                      <span>Success: {webhook.stats?.successfulDeliveries || 0}</span>
-                      <span>Failed: {webhook.stats?.failedDeliveries || 0}</span>
-                      <span>Last: {formatDate(webhook.stats?.lastDeliveryAt)}</span>
+                      <span>Deliveries: {(webhook.stats?.totalDelivered || 0) + (webhook.stats?.totalFailed || 0)}</span>
+                      <span>Success: {webhook.stats?.totalDelivered || 0}</span>
+                      <span>Failed: {webhook.stats?.totalFailed || 0}</span>
+                      <span>Last: {formatDate(webhook.stats?.lastDeliveredAt)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
@@ -441,12 +458,12 @@ function WebhooksPage() {
                         </button>
                         <button
                           onClick={() => handleToggleStatus(webhook)}
-                          className={`p-2 rounded-lg ${
-                            webhook.active
-                              ? 'text-green-500 hover:bg-green-50'
+                          className={`p-2 rounded-lg transition-colors ${
+                            webhook.status === 'active'
+                              ? 'text-green-600 bg-green-50 hover:bg-green-100'
                               : 'text-gray-400 hover:bg-gray-50'
                           }`}
-                          title={webhook.active ? 'Deactivate' : 'Activate'}
+                          title={webhook.status === 'active' ? 'Deactivate' : 'Activate'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -508,50 +525,89 @@ function WebhooksPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Name <span className="text-red-500">*</span>
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Name<span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
+                </div>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  onChange={(e) => {
+                    if (e.target.value.length <= NAME_MAX_LENGTH) {
+                      setFormData({ ...formData, name: e.target.value });
+                    }
+                  }}
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all ${
+                    formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="e.g., Production Webhook"
+                  maxLength={NAME_MAX_LENGTH}
                   required
                 />
+                {formData.name.length === NAME_MAX_LENGTH && (
+                  <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  URL <span className="text-red-500">*</span>
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    URL<span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-gray-400">{formData.url.length}/{URL_MAX_LENGTH}</span>
+                </div>
                 <input
                   type="url"
                   value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  onChange={(e) => {
+                    if (e.target.value.length <= URL_MAX_LENGTH) {
+                      setFormData({ ...formData, url: e.target.value });
+                    }
+                  }}
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all ${
+                    formData.url.length === URL_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="https://your-server.com/webhook"
+                  maxLength={URL_MAX_LENGTH}
                   required
                 />
+                {formData.url.length === URL_MAX_LENGTH && (
+                  <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+                )}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+              </div>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none"
+                onChange={(e) => {
+                  if (e.target.value.length <= DESCRIPTION_MAX_LENGTH) {
+                    setFormData({ ...formData, description: e.target.value });
+                  }
+                }}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none ${
+                  formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                }`}
                 rows={2}
                 placeholder="Describe the purpose of this webhook..."
+                maxLength={DESCRIPTION_MAX_LENGTH}
               />
+              {formData.description.length === DESCRIPTION_MAX_LENGTH && (
+                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+              )}
             </div>
           </div>
 
           {/* Events Section */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">
-              Events <span className="text-red-500">*</span>
+              Events<span className="text-red-500">*</span>
             </h3>
             <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -593,25 +649,47 @@ function WebhooksPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">Custom Headers</h3>
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
-              <input
-                type="text"
-                value={headerKey}
-                onChange={(e) => setHeaderKey(e.target.value)}
-                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                placeholder="Header name (e.g., X-Custom-Header)"
-              />
-              <input
-                type="text"
-                value={headerValue}
-                onChange={(e) => setHeaderValue(e.target.value)}
-                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                placeholder="Header value"
-              />
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs text-gray-500">Header Name</label>
+                  <span className="text-xs text-gray-400">{headerKey.length}/{HEADER_MAX_LENGTH}</span>
+                </div>
+                <input
+                  type="text"
+                  value={headerKey}
+                  onChange={(e) => {
+                    if (e.target.value.length <= HEADER_MAX_LENGTH) {
+                      setHeaderKey(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  placeholder="X-Custom-Header"
+                  maxLength={HEADER_MAX_LENGTH}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs text-gray-500">Header Value</label>
+                  <span className="text-xs text-gray-400">{headerValue.length}/{HEADER_MAX_LENGTH}</span>
+                </div>
+                <input
+                  type="text"
+                  value={headerValue}
+                  onChange={(e) => {
+                    if (e.target.value.length <= HEADER_MAX_LENGTH) {
+                      setHeaderValue(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  placeholder="Header value"
+                  maxLength={HEADER_MAX_LENGTH}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleAddHeader}
                 disabled={!headerKey || !headerValue}
-                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium whitespace-nowrap"
+                className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium whitespace-nowrap self-end"
               >
                 Add Header
               </button>
@@ -644,42 +722,54 @@ function WebhooksPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Retries</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.retryConfig.maxRetries}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    retryConfig: { ...formData.retryConfig, maxRetries: parseInt(e.target.value) || 0 }
-                  })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({
+                      ...formData,
+                      retryConfig: { ...formData.retryConfig, maxRetries: value === '' ? 0 : parseInt(value) || 0 }
+                    });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={0}
-                  max={10}
+                  placeholder="0"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Retry Delay (ms)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.retryConfig.retryDelay}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    retryConfig: { ...formData.retryConfig, retryDelay: parseInt(e.target.value) || 1000 }
-                  })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({
+                      ...formData,
+                      retryConfig: { ...formData.retryConfig, retryDelay: value === '' ? 0 : parseInt(value) || 0 }
+                    });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={100}
-                  step={100}
+                  placeholder="200"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Timeout (ms)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.timeout}
-                  onChange={(e) => setFormData({ ...formData, timeout: parseInt(e.target.value) || 30000 })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({ ...formData, timeout: value === '' ? 0 : parseInt(value) || 0 });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={1000}
-                  step={1000}
+                  placeholder="1000"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
               </div>
@@ -732,47 +822,86 @@ function WebhooksPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Name <span className="text-red-500">*</span>
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Name<span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
+                </div>
                 <input
                   type="text"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  onChange={(e) => {
+                    if (e.target.value.length <= NAME_MAX_LENGTH) {
+                      setFormData({ ...formData, name: e.target.value });
+                    }
+                  }}
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all ${
+                    formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  maxLength={NAME_MAX_LENGTH}
                   required
                 />
+                {formData.name.length === NAME_MAX_LENGTH && (
+                  <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  URL <span className="text-red-500">*</span>
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    URL<span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs text-gray-400">{formData.url.length}/{URL_MAX_LENGTH}</span>
+                </div>
                 <input
                   type="url"
                   value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
+                  onChange={(e) => {
+                    if (e.target.value.length <= URL_MAX_LENGTH) {
+                      setFormData({ ...formData, url: e.target.value });
+                    }
+                  }}
+                  className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all ${
+                    formData.url.length === URL_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  maxLength={URL_MAX_LENGTH}
                   required
                 />
+                {formData.url.length === URL_MAX_LENGTH && (
+                  <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+                )}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-sm font-medium text-gray-700">Description</label>
+                <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
+              </div>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none"
+                onChange={(e) => {
+                  if (e.target.value.length <= DESCRIPTION_MAX_LENGTH) {
+                    setFormData({ ...formData, description: e.target.value });
+                  }
+                }}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all resize-none ${
+                  formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-300'
+                }`}
                 rows={2}
+                maxLength={DESCRIPTION_MAX_LENGTH}
               />
+              {formData.description.length === DESCRIPTION_MAX_LENGTH && (
+                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
+              )}
             </div>
           </div>
 
           {/* Events Section */}
           <div>
             <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide border-b pb-2 mb-3">
-              Events <span className="text-red-500">*</span>
+              Events<span className="text-red-500">*</span>
             </h3>
             <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -809,42 +938,54 @@ function WebhooksPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Max Retries</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.retryConfig.maxRetries}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    retryConfig: { ...formData.retryConfig, maxRetries: parseInt(e.target.value) || 0 }
-                  })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({
+                      ...formData,
+                      retryConfig: { ...formData.retryConfig, maxRetries: value === '' ? 0 : parseInt(value) || 0 }
+                    });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={0}
-                  max={10}
+                  placeholder="0"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Number of retry attempts</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Retry Delay (ms)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.retryConfig.retryDelay}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    retryConfig: { ...formData.retryConfig, retryDelay: parseInt(e.target.value) || 1000 }
-                  })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({
+                      ...formData,
+                      retryConfig: { ...formData.retryConfig, retryDelay: value === '' ? 0 : parseInt(value) || 0 }
+                    });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={100}
-                  step={100}
+                  placeholder="200"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Initial delay between retries</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Timeout (ms)</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.timeout}
-                  onChange={(e) => setFormData({ ...formData, timeout: parseInt(e.target.value) || 30000 })}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, NUMBER_MAX_DIGITS);
+                    setFormData({ ...formData, timeout: value === '' ? 0 : parseInt(value) || 0 });
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-                  min={1000}
-                  step={1000}
+                  placeholder="1000"
+                  maxLength={NUMBER_MAX_DIGITS}
                 />
                 <p className="text-xs text-gray-500 mt-1">Request timeout duration</p>
               </div>
@@ -974,6 +1115,45 @@ function WebhooksPage() {
           >
             Close
           </button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => { setShowDeleteModal(false); setSelectedWebhook(null); }}
+        title="Delete Webhook"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h4 className="font-medium text-red-800">This action cannot be undone</h4>
+                <p className="text-sm text-red-700 mt-1">
+                  Are you sure you want to delete <span className="font-semibold">{selectedWebhook?.name}</span>? This will permanently remove the webhook and stop all event notifications to this endpoint.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowDeleteModal(false); setSelectedWebhook(null); }}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Delete Webhook
+            </button>
+          </div>
         </div>
       </Modal>
     </div>

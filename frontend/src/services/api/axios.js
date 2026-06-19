@@ -9,7 +9,17 @@ import { AUTH_KEYS } from '../../utils/constants.js';
 import { storage } from '../../utils/helpers.js';
 
 // Base URL from environment or default
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// In development, use '/api' to go through Vite proxy
+// In production, use the full URL from environment variable
+const BASE_URL = import.meta.env.DEV
+  ? '/api'  // In development, use Vite proxy
+  : (import.meta.env.VITE_API_URL || '/api');
+
+// Log configuration in development
+if (import.meta.env.DEV) {
+  console.log('[API] Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+  console.log('[API] Using BASE_URL:', BASE_URL);
+}
 
 // Log configuration in development
 if (import.meta.env.DEV) {
@@ -24,6 +34,11 @@ const apiClient = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+// Debug: Log the baseURL in development
+if (import.meta.env.DEV) {
+  console.log('[API] apiClient baseURL:', apiClient.defaults.baseURL);
+}
 
 // Auth endpoints that should NOT trigger token refresh on 401
 const PUBLIC_ENDPOINTS = [
@@ -100,6 +115,32 @@ apiClient.interceptors.response.use(
 
     // If not a 401 error, just reject
     if (error.response?.status !== 401) {
+      return Promise.reject(error);
+    }
+
+    // Check for specific error codes that should force logout
+    const errorCode = error.response?.data?.code || error.response?.data?.error?.code;
+
+    // If ROLE_CHANGED, PASSWORD_CHANGED, or session invalid - force logout without token refresh
+    if (errorCode === 'ROLE_CHANGED' || errorCode === 'PASSWORD_CHANGED') {
+      console.log('[API] Session invalidated due to', errorCode);
+
+      // Clear all auth data
+      storage.remove(AUTH_KEYS.TOKEN);
+      storage.remove(AUTH_KEYS.REFRESH_TOKEN);
+      storage.remove(AUTH_KEYS.USER);
+
+      // Store message to show on login page
+      const message = errorCode === 'ROLE_CHANGED'
+        ? 'Your role has been updated. Please log in again to see your new permissions.'
+        : 'Your password was changed. Please log in again.';
+      sessionStorage.setItem('auth_message', message);
+
+      // Redirect to login
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+
       return Promise.reject(error);
     }
 

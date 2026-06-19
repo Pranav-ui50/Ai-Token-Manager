@@ -97,20 +97,41 @@ export const AuthProvider = ({ children }) => {
         console.log('[Auth] Initializing auth state...');
         const accessToken = storage.get(AUTH_KEYS.TOKEN);
         const refreshToken = storage.get(AUTH_KEYS.REFRESH_TOKEN);
-        const user = storage.get(AUTH_KEYS.USER);
+        const cachedUser = storage.get(AUTH_KEYS.USER);
 
         console.log('[Auth] Storage state:', {
           hasAccessToken: !!accessToken,
           hasRefreshToken: !!refreshToken,
-          hasUser: !!user
+          hasUser: !!cachedUser
         });
 
-        if (accessToken && user) {
+        if (accessToken && cachedUser) {
+          // First, restore session from cache for immediate UI
           dispatch({
             type: actionTypes.AUTH_SUCCESS,
-            payload: { user, accessToken, refreshToken }
+            payload: { user: cachedUser, accessToken, refreshToken }
           });
           console.log('[Auth] Restored session from storage');
+
+          // Then, fetch fresh user data from server to ensure role is up-to-date
+          try {
+            const response = await authApi.getCurrentUser();
+            if (response.success && response.data.user) {
+              const freshUser = response.data.user;
+              console.log('[Auth] Fresh user data fetched:', {
+                email: freshUser.email,
+                role: freshUser.role?.name || freshUser.role
+              });
+
+              // Update storage and state with fresh user data
+              storage.set(AUTH_KEYS.USER, freshUser);
+              dispatch({ type: actionTypes.UPDATE_USER, payload: freshUser });
+              console.log('[Auth] User data refreshed from server');
+            }
+          } catch (refreshError) {
+            console.error('[Auth] Failed to fetch fresh user data:', refreshError);
+            // Continue with cached user data - role update will be reflected on next login
+          }
         } else {
           dispatch({ type: actionTypes.SET_LOADING, payload: false });
           console.log('[Auth] No stored session found');
@@ -451,6 +472,12 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: actionTypes.CLEAR_ERROR });
   }, []);
 
+  // Set user directly (for updating after settings change)
+  const setUser = useCallback((userData) => {
+    storage.set(AUTH_KEYS.USER, userData);
+    dispatch({ type: actionTypes.UPDATE_USER, payload: userData });
+  }, []);
+
   const value = {
     ...state,
     login,
@@ -462,7 +489,8 @@ export const AuthProvider = ({ children }) => {
     getCurrentUser,
     updateProfile,
     changePassword,
-    clearError
+    clearError,
+    setUser
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

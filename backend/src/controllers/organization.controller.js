@@ -6,6 +6,7 @@
 
 import organizationService from '../services/organization.service.js';
 import auditService from '../services/audit.service.js';
+import limitService from '../services/limit.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
 
 class OrganizationController {
@@ -47,6 +48,12 @@ class OrganizationController {
    */
   async getById(req, res, next) {
     try {
+      // Prevent caching to ensure fresh data
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('Surrogate-Control', 'no-store');
+
       const organization = await organizationService.getById(
         req.params.id,
         req.user.id
@@ -153,6 +160,9 @@ class OrganizationController {
    */
   async inviteMember(req, res, next) {
     try {
+      // Check team member limit before inviting
+      await limitService.validateLimit(req.params.id, 'teamMembers', 1);
+
       const result = await organizationService.inviteMember(
         req.params.id,
         req.body,
@@ -173,6 +183,9 @@ class OrganizationController {
    */
   async addMember(req, res, next) {
     try {
+      // Check team member limit before adding
+      await limitService.validateLimit(req.params.id, 'teamMembers', 1);
+
       const result = await organizationService.addMember(
         req.params.id,
         req.body,
@@ -331,6 +344,43 @@ class OrganizationController {
       res.json({
         success: true,
         message: 'Member role updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update member status
+   */
+  async updateMemberStatus(req, res, next) {
+    try {
+      await organizationService.updateMemberStatus(
+        req.params.id,
+        req.params.memberId,
+        req.body.status,
+        req.user.id
+      );
+
+      // Log status change
+      await auditService.logSuccess({
+        organization: req.params.id,
+        user: req.user.id,
+        action: 'member_status_changed',
+        resourceType: 'user',
+        resourceId: req.params.memberId,
+        description: `Member status updated to ${req.body.status}`,
+        context: {
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+          requestMethod: req.method,
+          requestPath: req.path
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'Member status updated successfully'
       });
     } catch (error) {
       next(error);

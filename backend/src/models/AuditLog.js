@@ -8,8 +8,6 @@ const ACTION_TYPES = [
   'password_reset',
   'password_changed',
   'email_verified',
-  '2fa_enabled',
-  '2fa_disabled',
 
   // CRUD actions
   'create',
@@ -29,6 +27,7 @@ const ACTION_TYPES = [
   // Organization actions
   'organization_created',
   'organization_updated',
+  'organization_settings_updated',
   'organization_deleted',
 
   // Project actions
@@ -80,6 +79,7 @@ const ACTION_TYPES = [
 
   // Settings actions
   'settings_updated',
+  'profile_updated',
 
   // Bulk actions
   'bulk_create',

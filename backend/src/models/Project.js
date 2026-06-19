@@ -53,6 +53,26 @@ const projectSchema = new mongoose.Schema(
       of: mongoose.Schema.Types.Mixed,
       default: {}
     },
+    // Status field for plan limit management
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'disabled'],
+      default: 'active'
+    },
+    // For tracking disabled resources
+    disabledAt: {
+      type: Date
+    },
+    disabledReason: {
+      type: String,
+      enum: ['plan_limit', 'manual', null],
+      default: null
+    },
+    previousStatus: {
+      type: String,
+      enum: ['active', 'inactive', null],
+      default: null
+    },
     isActive: {
       type: Boolean,
       default: true

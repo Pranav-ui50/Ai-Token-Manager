@@ -3,6 +3,7 @@
  *
  * Modern Red & White themed registration page with organization creation.
  * Users can select a plan directly on this page or via URL parameter.
+ * Uses PlansContext for centralized plan management.
  *
  * Flow:
  * - User can come with a pre-selected plan from pricing page
@@ -14,54 +15,20 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { usePlans } from '../../context/PlansContext.jsx';
 import { storage } from '../../utils/helpers.js';
 import { AUTH_KEYS } from '../../utils/constants.js';
 import publicApi from '../../services/api/public.api.js';
 import registrationPaymentApi from '../../services/api/registrationPayment.api.js';
 import { showToast } from '../../utils/toasts.js';
 
-// Default plans as fallback
-const DEFAULT_PLANS = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    tier: 'starter',
-    description: 'Great for small teams exploring AI APIs',
-    billing: { price: 29, yearlyPrice: 278.4, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 500000, creditType: 'token' },
-    limits: { maxUsers: 3, maxApiCalls: 10000 },
-    isPopular: false
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    tier: 'professional',
-    description: 'Ideal for growing teams with advanced AI needs',
-    billing: { price: 99, yearlyPrice: 950.4, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 2000000, creditType: 'token' },
-    limits: { maxUsers: 10, maxApiCalls: 50000 },
-    isPopular: true
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    tier: 'business',
-    description: 'For organizations with heavy AI API usage',
-    billing: { price: 299, yearlyPrice: 2870.4, currency: 'USD', interval: 'month', trialDays: 14 },
-    credits: { includedCredits: 10000000, creditType: 'token' },
-    limits: { maxUsers: 50, maxApiCalls: 200000 },
-    isPopular: false
-  }
-];
-
 const RegisterPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isLoading: authLoading, error, clearError, isAuthenticated } = useAuth();
+  const { plans, loading: loadingPlans, error: plansError } = usePlans();
 
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [availablePlans, setAvailablePlans] = useState([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const planId = searchParams.get('plan');
@@ -107,29 +74,8 @@ const RegisterPage = () => {
     return `${symbol}${convertedPrice.toLocaleString('en-US')}`;
   };
 
-  // Fetch all available plans
-  useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        setLoadingPlans(true);
-        const response = await publicApi.getPlans();
-        if (response.success && response.data && response.data.length > 0) {
-          // Filter out free plans
-          const paidPlans = response.data.filter(plan => plan.tier !== 'free' && plan.tier !== 'enterprise');
-          setAvailablePlans(paidPlans.length > 0 ? paidPlans : DEFAULT_PLANS);
-        } else {
-          setAvailablePlans(DEFAULT_PLANS);
-        }
-      } catch (err) {
-        console.error('Failed to fetch plans:', err);
-        setAvailablePlans(DEFAULT_PLANS);
-      } finally {
-        setLoadingPlans(false);
-      }
-    };
-
-    fetchPlans();
-  }, []);
+  // Get available paid plans from context
+  const availablePlans = plans.filter(plan => plan.tier !== 'free' && plan.tier !== 'enterprise');
 
   // Fetch selected plan details if plan ID is provided in URL
   useEffect(() => {

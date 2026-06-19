@@ -12,6 +12,7 @@ import Role from '../models/Role.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 import emailService from './email.service.js';
+import subscriptionService from './subscription.service.js';
 
 class OrganizationService {
   /**
@@ -48,6 +49,7 @@ class OrganizationService {
       members: [{
         user: userId,
         role: ownerRole._id,
+        status: 'active',
         joinedAt: new Date()
       }]
     });
@@ -70,9 +72,10 @@ class OrganizationService {
    */
   async getById(organizationId, userId) {
     const organization = await Organization.findById(organizationId)
-      .populate('owner', 'firstName lastName email')
+      .populate('owner', 'firstName lastName email avatar')
       .populate('members.user', 'firstName lastName email avatar')
-      .populate('members.role', 'name displayName');
+      .populate('members.role', 'name displayName')
+      .populate('subscription.planId', 'name tier billing.price billing.interval settings.isDefault limits credits');
 
     if (!organization) {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
@@ -301,6 +304,16 @@ class OrganizationService {
     const allowedRoles = ['org_owner', 'finance_admin'];
     if (!allowedRoles.includes(memberRole.name)) {
       throw new AppError('Only organization owners and finance admins can add members', 403, 'FORBIDDEN');
+    }
+
+    // Check member limit based on current plan
+    const memberLimitCheck = await subscriptionService.checkMemberLimit(organizationId);
+    if (!memberLimitCheck.canAdd) {
+      throw new AppError(
+        `Member limit reached. Your current plan allows ${memberLimitCheck.maxMembers} members. You currently have ${memberLimitCheck.currentMembers} members. Please upgrade your plan to add more members.`,
+        400,
+        'MEMBER_LIMIT_EXCEEDED'
+      );
     }
 
     // Check if user already exists
@@ -583,9 +596,59 @@ class OrganizationService {
 
     await organization.save();
 
+    // Update user's role and roleChangedAt timestamp to invalidate existing sessions
+    await User.findByIdAndUpdate(memberId, {
+      role: roleId,
+      roleChangedAt: new Date()
+    });
+
     logger.info(`Member role updated: ${memberId} to ${role.name} in organization ${organizationId}`);
 
     return { message: 'Member role updated successfully' };
+  }
+
+  /**
+   * Update member status
+   * @param {string} organizationId - Organization ID
+   * @param {string} memberId - Member user ID
+   * @param {string} status - New status ('active' or 'inactive')
+   * @param {string} userId - Requester user ID
+   * @returns {Object} Result
+   */
+  async updateMemberStatus(organizationId, memberId, status, userId) {
+    const organization = await Organization.findById(organizationId);
+
+    if (!organization) {
+      throw new AppError('Organization not found', 404, 'NOT_FOUND');
+    }
+
+    // Only owner can update member status
+    if (!organization.isOwner(userId)) {
+      throw new AppError('Only the organization owner can update member status', 403, 'FORBIDDEN');
+    }
+
+    // Cannot change owner's status
+    if (memberId === organization.owner.toString()) {
+      throw new AppError('Cannot change the organization owner status', 400, 'CANNOT_CHANGE_OWNER_STATUS');
+    }
+
+    // Validate status
+    if (!['active', 'inactive', 'disabled'].includes(status)) {
+      throw new AppError('Invalid status. Status must be "active", "inactive", or "disabled"', 400, 'INVALID_STATUS');
+    }
+
+    // Find and update member status
+    const member = organization.members.find(m => m.user.toString() === memberId);
+    if (!member) {
+      throw new AppError('Member not found in organization', 404, 'MEMBER_NOT_FOUND');
+    }
+
+    member.status = status;
+    await organization.save();
+
+    logger.info(`Member status updated: ${memberId} to ${status} in organization ${organizationId}`);
+
+    return { message: 'Member status updated successfully' };
   }
 
   /**

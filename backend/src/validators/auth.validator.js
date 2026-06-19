@@ -37,7 +37,7 @@ export const registerValidation = [
     .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
 
   body('password')
     .notEmpty()
@@ -93,7 +93,7 @@ export const loginValidation = [
     .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
 
   body('password')
     .notEmpty()
@@ -129,7 +129,7 @@ export const forgotPasswordValidation = [
     .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
 
   validate
 ];
@@ -152,7 +152,7 @@ export const resetPasswordValidation = [
     .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
 
   body('password')
     .notEmpty()
@@ -217,7 +217,7 @@ export const resendVerificationValidation = [
     .withMessage('Email cannot exceed 60 characters')
     .isEmail()
     .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+    .customSanitizer(value => value.toLowerCase()), // Only lowercase, don't remove dots
 
   validate
 ];
@@ -241,8 +241,13 @@ export const updateProfileValidation = [
   body('avatar')
     .optional()
     .trim()
-    .isURL()
-    .withMessage('Avatar must be a valid URL'),
+    .custom((value) => {
+      // Allow relative paths starting with /uploads/ or full URLs
+      if (value.startsWith('/uploads/') || value.startsWith('http://') || value.startsWith('https://')) {
+        return true;
+      }
+      throw new Error('Avatar must be a valid URL or path');
+    }),
 
   validate
 ];

@@ -50,13 +50,23 @@ export const protect = async (req, res, next) => {
       }
     }
 
+    // Check if role was changed after token was issued
+    const roleChangedAt = user.roleChangedAt;
+    if (roleChangedAt) {
+      const JWTTimestamp = decoded.iat;
+      const roleChangedTimestamp = Math.floor(new Date(roleChangedAt).getTime() / 1000);
+      if (JWTTimestamp < roleChangedTimestamp) {
+        throw new AppError('Your role has been updated. Please log in again to see your new permissions.', 401, 'ROLE_CHANGED');
+      }
+    }
+
     // Add user to request
     req.user = {
       id: user._id.toString(),
       userId: user._id.toString(), // Keep for backward compatibility
       email: user.email,
       role: user.role,
-      organization: user.organization?._id?.toString() || null,
+      organization: user.organization?._id?.toString() || user.organization?.toString() || null,
       permissions: user.role?.permissions || []
     };
 
@@ -86,7 +96,7 @@ export const optionalAuth = async (req, res, next) => {
             userId: user._id.toString(), // Keep for backward compatibility
             email: user.email,
             role: user.role,
-            organization: user.organization?._id?.toString() || null,
+            organization: user.organization?._id?.toString() || user.organization?.toString() || null,
             permissions: user.role?.permissions || []
           };
         }

@@ -17,6 +17,40 @@ export function getCurrencySymbol(currency = 'USD') {
 }
 
 /**
+ * Format number using Indian numbering system
+ * Indian system: 2,39,678 (lakhs), 1,00,00,000 (crores)
+ * @param {number} num - Number to format
+ * @returns {string} Formatted number with Indian comma placement
+ */
+export function formatIndianNumber(num) {
+  if (num === null || num === undefined) return '';
+  if (num < 0) return '-' + formatIndianNumber(Math.abs(num));
+
+  const numStr = Math.floor(num).toString();
+
+  // For numbers less than 1000, no formatting needed
+  if (numStr.length <= 3) {
+    return numStr;
+  }
+
+  // Get the last 3 digits
+  const lastThree = numStr.slice(-3);
+  // Get the remaining digits
+  const remaining = numStr.slice(0, -3);
+
+  // Format remaining digits with commas every 2 digits (Indian system)
+  let formatted = '';
+  for (let i = remaining.length - 1, count = 0; i >= 0; i--, count++) {
+    if (count > 0 && count % 2 === 0) {
+      formatted = ',' + formatted;
+    }
+    formatted = remaining[i] + formatted;
+  }
+
+  return formatted + ',' + lastThree;
+}
+
+/**
  * Format currency with proper symbol and locale
  * @param {number} amount - Amount to format
  * @param {string} currency - Currency code
@@ -25,6 +59,13 @@ export function getCurrencySymbol(currency = 'USD') {
  */
 export function formatCurrencyWithSymbol(amount, currency = 'USD', locale = 'en-US') {
   if (amount === null || amount === undefined) return '';
+
+  // Use Indian numbering system for INR
+  if (currency?.toUpperCase() === 'INR') {
+    const symbol = getCurrencySymbol('INR');
+    const formattedNumber = formatIndianNumber(amount);
+    return `${symbol}${formattedNumber}`;
+  }
 
   // Validate currency
   const validCurrency = CURRENCY.SUPPORTED.includes(currency?.toUpperCase())
@@ -78,6 +119,13 @@ export function getCurrencyLabel(baseLabel, currency = 'USD') {
 export function formatSimpleCurrency(amount, currency = 'USD', decimals = 2) {
   if (amount === null || amount === undefined) return '';
   const symbol = getCurrencySymbol(currency);
+
+  // Use Indian numbering system for INR
+  if (currency?.toUpperCase() === 'INR') {
+    const formattedNumber = formatIndianNumber(amount);
+    return `${symbol}${formattedNumber}`;
+  }
+
   return `${symbol}${amount.toFixed(decimals)}`;
 }
 
@@ -98,6 +146,7 @@ export function getSupportedCurrencies() {
 
 export default {
   getCurrencySymbol,
+  formatIndianNumber,
   formatCurrencyWithSymbol,
   formatPricePerMillion,
   getCurrencyLabel,

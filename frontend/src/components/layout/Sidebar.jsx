@@ -7,7 +7,12 @@
 
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useSiteSettings } from '../../context/SiteSettingsContext.jsx';
 import { ROLE_LABELS } from '../../utils/constants.js';
+
+// Get the backend base URL for serving static files
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const BACKEND_URL = API_BASE_URL.replace('/api', '');
 
 // Base menu items configuration by role
 // For org_owner, organization link is computed dynamically
@@ -28,13 +33,6 @@ const getBaseMenuItems = (userOrganizationId) => ({
   ],
   org_owner: [
     { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-    // Organization link is computed based on user's organization ID
-    // For org_owner, they can only belong to ONE organization
-    {
-      path: userOrganizationId ? `/organizations/${userOrganizationId}` : '/organizations',
-      icon: 'building',
-      label: 'Organization Settings'
-    },
     { path: '/projects', icon: 'folder', label: 'Projects' },
     { path: '/analytics', icon: 'trending-up', label: 'Analytics' },
     { path: '/team', icon: 'users', label: 'Team Members' },
@@ -49,7 +47,7 @@ const getBaseMenuItems = (userOrganizationId) => ({
   ],
   finance_admin: [
     { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-    { path: '/pricing-history', icon: 'currency-dollar', label: 'Pricing History' },
+    { path: '/subscription', icon: 'credit-card', label: 'Subscription' },
     { path: '/simulations', icon: 'calculator', label: 'Simulations' },
     { path: '/invoices', icon: 'document-text', label: 'Invoices' },
     { path: '/reports', icon: 'chart-bar', label: 'Reports' },
@@ -68,31 +66,24 @@ const getBaseMenuItems = (userOrganizationId) => ({
     { path: '/feature-cost', icon: 'currency-dollar', label: 'Feature Cost' },
     { path: '/usage-analytics', icon: 'chart-bar', label: 'Usage Insights' },
 
-    // Pricing Section
-    { section: 'Pricing' },
-    { path: '/plans', icon: 'view-grid', label: 'Pricing Plans' },
+    // Analytics Section
+    { section: 'Analytics' },
     { path: '/profit-analysis', icon: 'trending-up', label: 'Profit Analysis' },
-
-    // Planning Section
-    { section: 'Planning' },
-    { path: '/simulations', icon: 'calculator', label: 'Simulations' },
-
-    // Reports Section
-    { section: 'Reports' },
-    { path: '/analytics', icon: 'chart-pie', label: 'Analytics' }
+    { path: '/analytics', icon: 'chart-pie', label: 'Reports & Analytics' }
   ],
   developer: [
     { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-    { path: '/api-keys', icon: 'key', label: 'API Keys' },
     { path: '/integrations', icon: 'puzzle', label: 'Integrations' },
     { path: '/webhooks', icon: 'webhook', label: 'Webhooks' },
     { path: '/audit-logs', icon: 'clipboard-list', label: 'Audit Logs' },
-    { path: '/usage', icon: 'chart-pie', label: 'Token Usage' },
-    { path: '/docs', icon: 'book', label: 'Documentation' }
+    { path: '/usage', icon: 'chart-pie', label: 'Token Usage' }
   ],
   viewer: [
     { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-    { path: '/reports', icon: 'chart-bar', label: 'Reports' },
+    { path: '/projects', icon: 'folder', label: 'Projects' },
+    { path: '/features', icon: 'cube', label: 'Features' },
+    { path: '/plans', icon: 'view-grid', label: 'Plans' },
+    { path: '/simulations', icon: 'calculator', label: 'Simulations' },
     { path: '/analytics', icon: 'trending-up', label: 'Analytics' }
   ]
 });
@@ -240,6 +231,7 @@ const Icons = {
 
 function Sidebar({ isOpen, onClose }) {
   const { user, logout } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
 
   // Handle role - can be string or populated object
@@ -285,8 +277,8 @@ function Sidebar({ isOpen, onClose }) {
             </svg>
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Token Manager</h1>
-            <p className="text-xs text-gray-500">API Pricing</p>
+            <h1 className="text-lg font-bold text-gray-900">{settings?.siteName || 'API Token Manager'}</h1>
+            <p className="text-xs text-gray-500">{settings?.siteDescription || 'AI API Token Cost Management'}</p>
           </div>
         </div>
 
@@ -338,10 +330,18 @@ function Sidebar({ isOpen, onClose }) {
         {/* User Section - Fixed at bottom */}
         <div className="flex-shrink-0 border-t border-gray-200 p-4 bg-white">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-bold text-white">
-                {user?.firstName?.charAt(0)?.toUpperCase() || 'U'}
-              </span>
+            <div className="w-10 h-10 bg-gradient-to-br from-[#DC2626] to-[#B91C1C] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {user?.avatar ? (
+                <img
+                  src={user.avatar.startsWith('http') ? user.avatar : `${BACKEND_URL}${user.avatar}`}
+                  alt={`${user.firstName}'s avatar`}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-sm font-bold text-white">
+                  {user?.firstName?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
+              )}
             </div>
             <div className="flex-1 min-w-0 overflow-hidden">
               <p className="text-sm font-medium text-gray-900 truncate">

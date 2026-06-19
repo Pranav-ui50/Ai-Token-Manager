@@ -1,7 +1,7 @@
 /**
  * Organizations Page
  *
- * Displays organizations list. For org_owner, redirects to their organization.
+ * Displays organizations list. For org_owner, shows their organization info.
  * For super_admin, shows all organizations.
  * Note: Organization is created during registration, so org_owner always has one.
  */
@@ -21,11 +21,12 @@ function OrganizationsPage() {
   const userRole = user?.role?.name || user?.role || 'viewer';
   const userOrganizationId = user?.organization?._id || user?.organization || null;
 
-  // For org_owner: redirect to their organization settings
+  // For org_owner: redirect to team/settings page
   // They should always have an organization (created during registration)
   useEffect(() => {
     if (userRole === 'org_owner' && userOrganizationId) {
-      navigate(`/organizations/${userOrganizationId}`, { replace: true });
+      // Redirect to team page instead of organization detail
+      navigate('/team', { replace: true });
     }
   }, [userRole, userOrganizationId, navigate]);
 
@@ -35,7 +36,8 @@ function OrganizationsPage() {
   }, [fetchOrganizations]);
 
   const handleOrganizationClick = (orgId) => {
-    navigate(`/organizations/${orgId}`);
+    // For super_admin, navigate to admin organization detail
+    navigate(`/admin/organizations/${orgId}`);
   };
 
   // Show loading while redirecting org_owner
@@ -47,7 +49,7 @@ function OrganizationsPage() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <p className="mt-4 text-gray-500">Redirecting to your organization...</p>
+          <p className="mt-4 text-gray-500">Redirecting to your team...</p>
         </div>
       </div>
     );

@@ -5,66 +5,31 @@
  */
 
 import { useState, useEffect } from 'react';
-import adminApi from '../../services/api/admin.api.js';
+import { useSiteSettings } from '../../context/SiteSettingsContext.jsx';
+import { showToast } from '../../utils/toasts.js';
 
 const SETTINGS_TABS = [
   { id: 'general', label: 'General', icon: 'cog' },
-  { id: 'features', label: 'Features', icon: 'sparkles' },
-  { id: 'limits', label: 'Limits', icon: 'chart-bar' },
   { id: 'email', label: 'Email', icon: 'mail' },
   { id: 'security', label: 'Security', icon: 'shield' }
 ];
 
 function AdminSettingsPage() {
+  const { settings: siteSettings, updateSettings: updateSiteSettings } = useSiteSettings();
   const [activeTab, setActiveTab] = useState('general');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
 
   // General settings
   const [generalSettings, setGeneralSettings] = useState({
     siteName: 'API Token Manager',
-    siteDescription: 'AI API Token Cost Management Platform',
-    defaultCurrency: 'USD',
-    defaultTimezone: 'UTC',
-    dateFormat: 'MM/DD/YYYY',
-    maintenanceMode: false
-  });
-
-  // Feature flags
-  const [featureSettings, setFeatureSettings] = useState({
-    enableRegistration: true,
-    enableOrganizations: true,
-    enableProjects: true,
-    enableFeatures: true,
-    enableAnalytics: true,
-    enableBilling: true,
-    enableApiKeys: true,
-    enableWebhooks: true,
-    enableIntegrations: true,
-    enableReports: true,
-    enableSimulations: true,
-    enableTwoFactor: true
-  });
-
-  // Rate limits
-  const [limitSettings, setLimitSettings] = useState({
-    maxOrganizations: 10,
-    maxProjectsPerOrganization: 50,
-    maxFeaturesPerProject: 100,
-    maxApiKeysPerOrganization: 20,
-    maxWebhooksPerOrganization: 10,
-    maxTeamMembersPerOrganization: 50,
-    apiRateLimitPerMinute: 60,
-    apiRateLimitPerHour: 1000,
-    maxRequestsPerMonth: 1000000
+    siteDescription: 'AI API Token Cost Management Platform'
   });
 
   // Email settings
   const [emailSettings, setEmailSettings] = useState({
     smtpHost: '',
-    smtpPort: 587,
+    smtpPort: '587',
     smtpUser: '',
     smtpPassword: '',
     fromEmail: 'noreply@example.com',
@@ -76,17 +41,13 @@ function AdminSettingsPage() {
 
   // Security settings
   const [securitySettings, setSecuritySettings] = useState({
-    requireEmailVerification: true,
-    requireTwoFactor: false,
     sessionTimeout: 60,
     maxLoginAttempts: 5,
     passwordMinLength: 8,
     passwordRequireUppercase: true,
     passwordRequireLowercase: true,
     passwordRequireNumbers: true,
-    passwordRequireSpecialChars: true,
-    enableAuditLogs: true,
-    enableIpWhitelist: false
+    passwordRequireSpecialChars: true
   });
 
   // Load settings
@@ -94,45 +55,66 @@ function AdminSettingsPage() {
     const loadSettings = async () => {
       try {
         setIsLoading(true);
-        // In a real app, these would come from the backend
-        // For now, we'll use default values
+
+        // Load from context if available
+        if (siteSettings) {
+          setGeneralSettings({
+            siteName: siteSettings.siteName || 'API Token Manager',
+            siteDescription: siteSettings.siteDescription || 'AI API Token Cost Management Platform'
+          });
+        }
+
+        // Load other settings from localStorage
+        try {
+          const stored = localStorage.getItem('adminSettings');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.email) {
+              setEmailSettings(prev => ({ ...prev, ...parsed.email }));
+            }
+            if (parsed.security) {
+              setSecuritySettings(prev => ({ ...prev, ...parsed.security }));
+            }
+          }
+        } catch (e) {
+          console.log('Using default settings');
+        }
+
         setIsLoading(false);
       } catch (err) {
         console.error('Failed to load settings:', err);
-        setError('Failed to load settings');
+        showToast.error('Failed to load settings');
         setIsLoading(false);
       }
     };
     loadSettings();
-  }, []);
+  }, [siteSettings]);
 
   // Save settings
   const handleSaveSettings = async () => {
     try {
       setIsSaving(true);
-      setError(null);
 
-      // In a real app, this would save to the backend
-      // For now, we'll simulate a save
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Save to localStorage for persistence
+      localStorage.setItem('adminSettings', JSON.stringify({
+        email: emailSettings,
+        security: securitySettings
+      }));
 
-      setSuccess('Settings saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      // Update the context with new settings (also saves to localStorage)
+      await updateSiteSettings({
+        siteName: generalSettings.siteName,
+        siteDescription: generalSettings.siteDescription
+      });
+
+      showToast.success('Settings saved successfully');
     } catch (err) {
       console.error('Failed to save settings:', err);
-      setError('Failed to save settings');
+      showToast.error('Failed to save settings');
     } finally {
       setIsSaving(false);
     }
   };
-
-  // Clear messages
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
 
   if (isLoading) {
     return (
@@ -158,18 +140,6 @@ function AdminSettingsPage() {
           {isSaving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
-
-      {/* Alerts */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
-          {success}
-        </div>
-      )}
 
       <div className="flex gap-6">
         {/* Sidebar Tabs */}
@@ -217,220 +187,31 @@ function AdminSettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Site Name</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Site Name</label>
+                    <span className="text-xs text-gray-400">{generalSettings.siteName?.length || 0}/30</span>
+                  </div>
                   <input
                     type="text"
                     value={generalSettings.siteName}
                     onChange={(e) => setGeneralSettings(prev => ({ ...prev, siteName: e.target.value }))}
+                    maxLength={30}
+                    placeholder="Enter site name"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Currency</label>
-                  <select
-                    value={generalSettings.defaultCurrency}
-                    onChange={(e) => setGeneralSettings(prev => ({ ...prev, defaultCurrency: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="INR">INR (₹)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Timezone</label>
-                  <select
-                    value={generalSettings.defaultTimezone}
-                    onChange={(e) => setGeneralSettings(prev => ({ ...prev, defaultTimezone: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  >
-                    <option value="UTC">UTC</option>
-                    <option value="America/New_York">Eastern Time</option>
-                    <option value="America/Chicago">Central Time</option>
-                    <option value="America/Denver">Mountain Time</option>
-                    <option value="America/Los_Angeles">Pacific Time</option>
-                    <option value="Europe/London">London</option>
-                    <option value="Europe/Paris">Paris</option>
-                    <option value="Asia/Tokyo">Tokyo</option>
-                    <option value="Asia/Kolkata">Kolkata</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date Format</label>
-                  <select
-                    value={generalSettings.dateFormat}
-                    onChange={(e) => setGeneralSettings(prev => ({ ...prev, dateFormat: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  >
-                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Site Description</label>
-                  <textarea
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Site Description</label>
+                    <span className="text-xs text-gray-400">{generalSettings.siteDescription?.length || 0}/60</span>
+                  </div>
+                  <input
+                    type="text"
                     value={generalSettings.siteDescription}
                     onChange={(e) => setGeneralSettings(prev => ({ ...prev, siteDescription: e.target.value }))}
-                    rows={2}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={generalSettings.maintenanceMode}
-                      onChange={(e) => setGeneralSettings(prev => ({ ...prev, maintenanceMode: e.target.checked }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626]"
-                    />
-                    <span className="text-sm text-gray-700">Enable Maintenance Mode</span>
-                  </label>
-                  <p className="mt-1 text-xs text-gray-500">When enabled, only administrators can access the system.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Feature Flags */}
-          {activeTab === 'features' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-gray-900">Feature Flags</h2>
-              <p className="text-sm text-gray-500">Enable or disable features across all organizations.</p>
-
-              <div className="space-y-4">
-                {Object.entries(featureSettings).map(([key, value]) => (
-                  <label key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100">
-                    <div>
-                      <span className="font-medium text-gray-900">
-                        {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                      </span>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {key === 'enableRegistration' && 'Allow new user registration'}
-                        {key === 'enableOrganizations' && 'Allow organization creation'}
-                        {key === 'enableProjects' && 'Enable project management'}
-                        {key === 'enableFeatures' && 'Enable feature configuration'}
-                        {key === 'enableAnalytics' && 'Enable analytics dashboard'}
-                        {key === 'enableBilling' && 'Enable billing and payments'}
-                        {key === 'enableApiKeys' && 'Enable API key management'}
-                        {key === 'enableWebhooks' && 'Enable webhook configuration'}
-                        {key === 'enableIntegrations' && 'Enable third-party integrations'}
-                        {key === 'enableReports' && 'Enable report generation'}
-                        {key === 'enableSimulations' && 'Enable cost simulations'}
-                        {key === 'enableTwoFactor' && 'Enable two-factor authentication'}
-                      </p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={value}
-                      onChange={(e) => setFeatureSettings(prev => ({ ...prev, [key]: e.target.checked }))}
-                      className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] w-5 h-5"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Rate Limits */}
-          {activeTab === 'limits' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-gray-900">Rate Limits & Quotas</h2>
-              <p className="text-sm text-gray-500">Configure default limits for organizations.</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Organizations per User</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxOrganizations}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxOrganizations: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Projects per Organization</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxProjectsPerOrganization}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxProjectsPerOrganization: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Features per Project</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxFeaturesPerProject}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxFeaturesPerProject: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max API Keys per Organization</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxApiKeysPerOrganization}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxApiKeysPerOrganization: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Webhooks per Organization</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxWebhooksPerOrganization}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxWebhooksPerOrganization: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Team Members per Organization</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxTeamMembersPerOrganization}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxTeamMembersPerOrganization: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Rate Limit (per minute)</label>
-                  <input
-                    type="number"
-                    value={limitSettings.apiRateLimitPerMinute}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, apiRateLimitPerMinute: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">API Rate Limit (per hour)</label>
-                  <input
-                    type="number"
-                    value={limitSettings.apiRateLimitPerHour}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, apiRateLimitPerHour: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Requests per Month</label>
-                  <input
-                    type="number"
-                    value={limitSettings.maxRequestsPerMonth}
-                    onChange={(e) => setLimitSettings(prev => ({ ...prev, maxRequestsPerMonth: parseInt(e.target.value) || 0 }))}
+                    maxLength={60}
+                    placeholder="Enter site description"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   />
                 </div>
@@ -446,66 +227,97 @@ function AdminSettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">SMTP Host</label>
+                    <span className="text-xs text-gray-400">{emailSettings.smtpHost?.length || 0}/100</span>
+                  </div>
                   <input
                     type="text"
                     value={emailSettings.smtpHost}
                     onChange={(e) => setEmailSettings(prev => ({ ...prev, smtpHost: e.target.value }))}
+                    maxLength={100}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="smtp.example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Port</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">SMTP Port</label>
+                    <span className="text-xs text-gray-400">{emailSettings.smtpPort?.toString().length || 0}/5</span>
+                  </div>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={emailSettings.smtpPort}
-                    onChange={(e) => setEmailSettings(prev => ({ ...prev, smtpPort: parseInt(e.target.value) || 587 }))}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
+                      setEmailSettings(prev => ({ ...prev, smtpPort: value === '' ? '' : value }));
+                    }}
+                    maxLength={5}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                    placeholder="587"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Username</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">SMTP Username</label>
+                    <span className="text-xs text-gray-400">{emailSettings.smtpUser?.length || 0}/100</span>
+                  </div>
                   <input
                     type="text"
                     value={emailSettings.smtpUser}
                     onChange={(e) => setEmailSettings(prev => ({ ...prev, smtpUser: e.target.value }))}
+                    maxLength={100}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="username"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">SMTP Password</label>
+                    <span className="text-xs text-gray-400">{emailSettings.smtpPassword?.length || 0}/100</span>
+                  </div>
                   <input
                     type="password"
                     value={emailSettings.smtpPassword}
                     onChange={(e) => setEmailSettings(prev => ({ ...prev, smtpPassword: e.target.value }))}
+                    maxLength={100}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="••••••••"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From Email</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">From Email</label>
+                    <span className="text-xs text-gray-400">{emailSettings.fromEmail?.length || 0}/100</span>
+                  </div>
                   <input
                     type="email"
                     value={emailSettings.fromEmail}
                     onChange={(e) => setEmailSettings(prev => ({ ...prev, fromEmail: e.target.value }))}
+                    maxLength={100}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                     placeholder="noreply@example.com"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From Name</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-gray-700">From Name</label>
+                    <span className="text-xs text-gray-400">{emailSettings.fromName?.length || 0}/50</span>
+                  </div>
                   <input
                     type="text"
                     value={emailSettings.fromName}
                     onChange={(e) => setEmailSettings(prev => ({ ...prev, fromName: e.target.value }))}
+                    maxLength={50}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                    placeholder="API Token Manager"
                   />
                 </div>
 
@@ -548,95 +360,63 @@ function AdminSettingsPage() {
               <h2 className="text-lg font-semibold text-gray-900">Security Settings</h2>
               <p className="text-sm text-gray-500">Configure security and authentication settings.</p>
 
-              <div className="space-y-4">
-                <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <span className="font-medium text-gray-900">Require Email Verification</span>
-                    <p className="text-xs text-gray-500 mt-1">Users must verify email before accessing the system</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={securitySettings.requireEmailVerification}
-                    onChange={(e) => setSecuritySettings(prev => ({ ...prev, requireEmailVerification: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] w-5 h-5"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <span className="font-medium text-gray-900">Require Two-Factor Authentication</span>
-                    <p className="text-xs text-gray-500 mt-1">Users must enable 2FA for their accounts</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={securitySettings.requireTwoFactor}
-                    onChange={(e) => setSecuritySettings(prev => ({ ...prev, requireTwoFactor: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] w-5 h-5"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <span className="font-medium text-gray-900">Enable Audit Logs</span>
-                    <p className="text-xs text-gray-500 mt-1">Track all system activities for security auditing</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={securitySettings.enableAuditLogs}
-                    onChange={(e) => setSecuritySettings(prev => ({ ...prev, enableAuditLogs: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] w-5 h-5"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <span className="font-medium text-gray-900">Enable IP Whitelist</span>
-                    <p className="text-xs text-gray-500 mt-1">Restrict admin access to specific IP addresses</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={securitySettings.enableIpWhitelist}
-                    onChange={(e) => setSecuritySettings(prev => ({ ...prev, enableIpWhitelist: e.target.checked }))}
-                    className="rounded border-gray-300 text-[#DC2626] focus:ring-[#DC2626] w-5 h-5"
-                  />
-                </label>
-              </div>
-
-              <div className="border-t border-gray-100 pt-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Password Requirements</h3>
+              <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Password Length</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={securitySettings.passwordMinLength}
-                      onChange={(e) => setSecuritySettings(prev => ({ ...prev, passwordMinLength: parseInt(e.target.value) || 8 }))}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                        setSecuritySettings(prev => ({ ...prev, passwordMinLength: value === '' ? '' : value }));
+                      }}
+                      maxLength={3}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
-                      min="6"
+                      placeholder="Enter password length"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Session Timeout (minutes)</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={securitySettings.sessionTimeout}
-                      onChange={(e) => setSecuritySettings(prev => ({ ...prev, sessionTimeout: parseInt(e.target.value) || 60 }))}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 5);
+                        setSecuritySettings(prev => ({ ...prev, sessionTimeout: value === '' ? '' : value }));
+                      }}
+                      maxLength={5}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                      placeholder="Enter session timeout"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Max Login Attempts</label>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={securitySettings.maxLoginAttempts}
-                      onChange={(e) => setSecuritySettings(prev => ({ ...prev, maxLoginAttempts: parseInt(e.target.value) || 5 }))}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                        setSecuritySettings(prev => ({ ...prev, maxLoginAttempts: value === '' ? '' : value }));
+                      }}
+                      maxLength={3}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
+                      placeholder="Enter max attempts"
                     />
                   </div>
+                </div>
 
-                  <div className="space-y-2">
+                <div className="border-t border-gray-100 pt-6">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">Password Requirements</h3>
+                  <div className="space-y-3">
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"

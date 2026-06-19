@@ -23,6 +23,16 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
 
+  // Show auth message if redirected from role/password change
+  useEffect(() => {
+    const authMessage = sessionStorage.getItem('auth_message');
+    if (authMessage) {
+      sessionStorage.removeItem('auth_message');
+      // Show toast with red theme matching the app
+      showToast.roleUpdated(authMessage);
+    }
+  }, []);
+
   // Redirect to dashboard when authenticated after login
   useEffect(() => {
     console.log('[LoginPage] Auth state check:', { loginSuccess, isAuthenticated, isLoading: authLoading });

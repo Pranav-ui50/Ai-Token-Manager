@@ -16,6 +16,7 @@ import analyticsJob from './analytics.job.js';
 import cleanupJob from './cleanup.job.js';
 import billingJob from './billing.job.js';
 import integrationJob from './integration.job.js';
+import subscriptionJob from './subscription.job.js';
 
 /**
  * Initialize all job processors
@@ -39,6 +40,9 @@ async function initializeJobs() {
     await cleanupJob.scheduleRecurringCleanups(queueService);
     await billingJob.scheduleRecurringJobs(queueService);
     await integrationJob.scheduleRecurringJobs(queueService);
+
+    // Start subscription cron jobs (uses node-cron directly)
+    subscriptionJob.start();
 
     logger.info('All job processors initialized successfully');
   } catch (error) {

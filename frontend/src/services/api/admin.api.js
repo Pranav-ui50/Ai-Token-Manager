@@ -246,6 +246,35 @@ const adminApi = {
   getDashboardStats: async () => {
     const response = await api.get('/admin/dashboard');
     return response.data.data;
+  },
+
+  /**
+   * Get system settings
+   * @returns {Promise} System settings
+   */
+  getSettings: async () => {
+    const response = await api.get('/admin/settings');
+    return response.data;
+  },
+
+  /**
+   * Update system settings
+   * @param {Object} data - Settings data
+   * @returns {Promise} Updated settings
+   */
+  updateSettings: async (data) => {
+    const response = await api.put('/admin/settings', data);
+    return response.data;
+  },
+
+  /**
+   * Get all plans
+   * @param {Object} params - Query parameters
+   * @returns {Promise} Plans list
+   */
+  getPlans: async (params = {}) => {
+    const response = await api.get('/admin/plans', { params });
+    return response.data.data;
   }
 };
 

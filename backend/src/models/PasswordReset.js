@@ -95,6 +95,11 @@ passwordResetSchema.statics.verifyToken = async function (token, email) {
   // Hash the provided token
   const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
+  console.log('[PasswordReset] Verifying token:');
+  console.log(`  - Token (first 20): ${token ? token.substring(0, 20) : 'undefined'}`);
+  console.log(`  - Hashed token (first 20): ${hashedToken.substring(0, 20)}`);
+  console.log(`  - Email: ${email}`);
+
   // Find the reset record
   const resetRecord = await this.findOne({
     token: hashedToken,
@@ -104,8 +109,23 @@ passwordResetSchema.statics.verifyToken = async function (token, email) {
   }).populate('user');
 
   if (!resetRecord) {
+    console.log('[PasswordReset] No matching token found');
+
+    // Debug: Check if token exists but is used or expired
+    const anyRecord = await this.findOne({
+      token: hashedToken,
+      email: email.toLowerCase()
+    });
+
+    if (anyRecord) {
+      console.log(`  - Found token but it's ${anyRecord.used ? 'USED' : 'unused'} and ${new Date() > anyRecord.expiresAt ? 'EXPIRED' : 'valid'}`);
+    }
+
     return null;
   }
+
+  console.log('[PasswordReset] Token verified successfully');
+  console.log(`  - User: ${resetRecord.user?.email || 'unknown'}`);
 
   return resetRecord;
 };

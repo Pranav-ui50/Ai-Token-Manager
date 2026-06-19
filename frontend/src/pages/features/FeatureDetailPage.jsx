@@ -7,12 +7,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
+import usePermissions from '../../hooks/usePermissions.js';
 import { useFeatureCurrency } from '../../hooks/useProjectCurrency.js';
 import { formatCurrencyWithSymbol, getCurrencySymbol } from '../../utils/currency.js';
 
 const FeatureDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { role } = usePermissions();
+  const isViewer = role === 'viewer';
   const [feature, setFeature] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,6 +25,7 @@ const FeatureDetailPage = () => {
     requests: 1000,
     users: 1
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Get currency from feature's project
   const { currency, currencySymbol } = useFeatureCurrency(feature);
@@ -112,18 +116,25 @@ const FeatureDetailPage = () => {
     }
   };
 
-  // Handle delete
-  const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this feature? This action cannot be undone.')) {
-      return;
-    }
+  // Handle delete click - open modal
+  const handleDeleteClick = () => {
+    setShowDeleteModal(true);
+  };
 
+  // Confirm delete
+  const confirmDelete = async () => {
     try {
       await featureApi.delete(id);
       navigate('/features');
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to delete feature');
+      setShowDeleteModal(false);
     }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
   };
 
   // Get status badge
@@ -311,6 +322,7 @@ const FeatureDetailPage = () => {
                 )}
               </div>
             </div>
+            {!isViewer && (
             <div className="flex items-center gap-3">
               <Link
                 to={`/features/${id}/edit`}
@@ -322,7 +334,7 @@ const FeatureDetailPage = () => {
                 Edit
               </Link>
               <button
-                onClick={handleDelete}
+                onClick={handleDeleteClick}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -331,6 +343,7 @@ const FeatureDetailPage = () => {
                 Delete
               </button>
             </div>
+            )}
           </div>
         </div>
       </header>
@@ -1316,6 +1329,42 @@ const FeatureDetailPage = () => {
           </div>
         )}
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={cancelDelete}></div>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 relative z-10">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-1.964-1.333-2.732 0L3.082 16.5c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Feature
+              </h3>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                Are you sure you want to delete <span className="font-medium text-gray-700">"{feature?.name}"</span>? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelDelete}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

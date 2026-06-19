@@ -12,6 +12,7 @@ import AIModel from '../models/AIModel.js';
 import Plan from '../models/Plan.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
+import auditService from './audit.service.js';
 
 class SimulationService {
   /**
@@ -36,6 +37,19 @@ class SimulationService {
       project: projectId || null,
       createdBy: userId,
       status: 'draft'
+    });
+
+    // Create audit log
+    await auditService.log({
+      organization: organizationId,
+      user: userId,
+      action: 'simulation_created',
+      resourceType: 'simulation',
+      resourceId: simulation._id.toString(),
+      resourceName: simulation.name,
+      description: `Created simulation "${simulation.name}" of type ${simulation.type || 'custom'}`,
+      severity: 'info',
+      status: 'success'
     });
 
     logger.info(`Simulation created: ${simulation._id} by user ${userId}`);
@@ -103,6 +117,19 @@ class SimulationService {
     simulation.lastModifiedBy = userId;
     await simulation.save();
 
+    // Create audit log
+    await auditService.log({
+      organization: simulation.organization,
+      user: userId,
+      action: 'update',
+      resourceType: 'simulation',
+      resourceId: simulationId.toString(),
+      resourceName: simulation.name,
+      description: `Updated simulation "${simulation.name}"`,
+      severity: 'info',
+      status: 'success'
+    });
+
     logger.info(`Simulation updated: ${simulationId} by user ${userId}`);
 
     return simulation;
@@ -119,6 +146,19 @@ class SimulationService {
     if (!simulation) {
       throw new AppError('Simulation not found', 404, 'NOT_FOUND');
     }
+
+    // Create audit log before deletion
+    await auditService.log({
+      organization: simulation.organization,
+      user: simulation.createdBy,
+      action: 'simulation_deleted',
+      resourceType: 'simulation',
+      resourceId: simulationId.toString(),
+      resourceName: simulation.name,
+      description: `Deleted simulation "${simulation.name}"`,
+      severity: 'warning',
+      status: 'success'
+    });
 
     await Simulation.findByIdAndDelete(simulationId);
 
@@ -177,11 +217,42 @@ class SimulationService {
       // Complete simulation
       await simulation.complete(results);
 
+      // Create audit log for successful run
+      await auditService.log({
+        organization: simulation.organization,
+        user: userId,
+        action: 'simulation_run',
+        resourceType: 'simulation',
+        resourceId: simulationId.toString(),
+        resourceName: simulation.name,
+        description: `Successfully ran simulation "${simulation.name}" of type ${simulation.type || 'custom'}`,
+        severity: 'info',
+        status: 'success'
+      });
+
       logger.info(`Simulation completed: ${simulationId}`);
 
       return simulation;
     } catch (error) {
       await simulation.fail(error);
+
+      // Create audit log for failed run
+      await auditService.log({
+        organization: simulation.organization,
+        user: userId,
+        action: 'simulation_run',
+        resourceType: 'simulation',
+        resourceId: simulationId.toString(),
+        resourceName: simulation.name,
+        description: `Failed to run simulation "${simulation.name}": ${error.message}`,
+        severity: 'error',
+        status: 'failure',
+        error: {
+          message: error.message,
+          code: error.code
+        }
+      });
+
       logger.error(`Simulation failed: ${simulationId}`, error);
       throw error;
     }

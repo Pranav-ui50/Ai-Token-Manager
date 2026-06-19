@@ -5,6 +5,6 @@
  */
 
 export { AuthProvider, useAuth } from './AuthContext.jsx';
-
-// Additional contexts will be added here
-// export { OrganizationProvider, useOrganization } from './OrganizationContext.jsx';
+export { SiteSettingsProvider, useSiteSettings } from './SiteSettingsContext.jsx';
+export { PlansProvider, usePlans, useRefreshPlans, PLANS_REFRESH_EVENT } from './PlansContext.jsx';
+export { OrganizationProvider, useOrganization } from './OrganizationContext.jsx';

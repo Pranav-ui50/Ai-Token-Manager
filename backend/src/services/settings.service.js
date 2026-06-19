@@ -11,7 +11,7 @@ import Organization from '../models/Organization.js';
 import AuditLog from '../models/AuditLog.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
-import { hashPassword, comparePassword } from '../utils/encryption.js';
+import { comparePassword } from '../utils/encryption.js';
 import { generateToken } from '../utils/jwt.js';
 
 // OTP library for 2FA (optional dependency)
@@ -150,12 +150,18 @@ class SettingsService {
       throw new AppError('User not found', 404, 'NOT_FOUND');
     }
 
-    // Update allowed fields
+    // Update allowed fields (skip empty strings for required fields)
     const allowedFields = ['firstName', 'lastName', 'phone', 'avatar'];
+    const requiredFields = ['firstName', 'lastName']; // Fields that cannot be empty
+
     allowedFields.forEach(field => {
-      if (data[field] !== undefined) {
+      if (data[field] !== undefined && data[field] !== '') {
         user[field] = data[field];
+      } else if (!requiredFields.includes(field) && data[field] === '') {
+        // For non-required fields, allow setting to empty/null
+        user[field] = null;
       }
+      // For required fields, don't update if empty (keep existing value)
     });
 
     await user.save();
@@ -194,16 +200,20 @@ class SettingsService {
       throw new AppError('User not found', 404, 'NOT_FOUND');
     }
 
-    // In production, upload to S3/Cloudinary
-    // For now, generate a placeholder URL
-    const avatarUrl = file?.location || file?.path || `/uploads/avatars/${userId}.jpg`;
+    if (!file) {
+      throw new AppError('No file uploaded', 400, 'NO_FILE');
+    }
+
+    // Generate URL for the uploaded file
+    // The file is saved in /uploads/avatars/ and served statically
+    const avatarUrl = `/uploads/avatars/${file.filename}`;
 
     user.avatar = avatarUrl;
     await user.save();
 
-    logger.info(`Avatar uploaded: ${userId}`);
+    logger.info(`Avatar uploaded: ${userId} - ${avatarUrl}`);
 
-    return { avatar: avatarUrl };
+    return { url: avatarUrl, avatar: avatarUrl };
   }
 
   // ==========================================
@@ -291,8 +301,8 @@ class SettingsService {
       throw new AppError('New password must be different from current password', 400, 'SAME_PASSWORD');
     }
 
-    // Hash and update password
-    user.password = await hashPassword(newPassword);
+    // Update password (will be hashed by pre-save hook)
+    user.password = newPassword;
 
     // Clear all refresh tokens (force re-login on all devices)
     user.refreshTokens = [];

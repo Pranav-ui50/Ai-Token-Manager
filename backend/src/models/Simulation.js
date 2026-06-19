@@ -35,6 +35,21 @@ const simulationSchema = new mongoose.Schema(
       default: 'draft'
     },
 
+    // For tracking disabled resources (plan limit management)
+    disabledAt: {
+      type: Date
+    },
+    disabledReason: {
+      type: String,
+      enum: ['plan_limit', 'manual', null],
+      default: null
+    },
+    previousStatus: {
+      type: String,
+      enum: SIMULATION_STATUS,
+      default: null
+    },
+
     // Organization & Project
     organization: {
       type: mongoose.Schema.Types.ObjectId,

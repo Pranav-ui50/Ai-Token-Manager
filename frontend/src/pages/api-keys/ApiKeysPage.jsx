@@ -42,6 +42,8 @@ function ApiKeysPage() {
   const { canManageApiKeys, canViewApiKeys } = usePermissions();
   const [apiKeys, setApiKeys] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);

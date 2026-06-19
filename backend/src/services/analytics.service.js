@@ -14,6 +14,7 @@ import ExcelJS from 'exceljs';
 import Feature from '../models/Feature.js';
 import Project from '../models/Project.js';
 import Organization from '../models/Organization.js';
+import Simulation from '../models/Simulation.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
@@ -591,71 +592,121 @@ class AnalyticsService {
    */
   async _getCostTrend(organizationId, days) {
     const features = await Feature.find({ organization: organizationId }).lean();
-    const trend = [];
 
     // Build date map for the requested period
     const dateMap = new Map();
-    const endDate = new Date();
-    endDate.setHours(23, 59, 59, 999);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
+      const date = new Date(today);
       date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
       const dateKey = date.toISOString().split('T')[0];
-      dateMap.set(dateKey, { cost: 0, tokens: 0, requests: 0 });
+      dateMap.set(dateKey, { cost: 0, tokens: 0, requests: 0, hasData: false, isSimulation: false });
     }
+
+    // Track if we have any actual usage data
+    let hasAnyUsageData = false;
 
     // Aggregate usage history from features
     for (const feature of features) {
       if (feature.usageHistory && Array.isArray(feature.usageHistory)) {
         for (const usage of feature.usageHistory) {
-          const dateKey = new Date(usage.date).toISOString().split('T')[0];
+          const usageDate = new Date(usage.date);
+          usageDate.setHours(0, 0, 0, 0);
+          const dateKey = usageDate.toISOString().split('T')[0];
           if (dateMap.has(dateKey)) {
             const existing = dateMap.get(dateKey);
             existing.cost += usage.cost || 0;
             existing.tokens += usage.tokens || 0;
             existing.requests += usage.requests || 0;
+            existing.hasData = true;
+            hasAnyUsageData = true;
           }
         }
       }
     }
 
-    // Convert map to array and fill gaps with estimated values
-    let lastKnownCost = 0;
-    let lastKnownTokens = 0;
-
-    // Get recent data to estimate missing values
-    const recentData = Array.from(dateMap.entries()).slice(-7);
-    const avgCost = recentData.reduce((sum, [_, d]) => sum + d.cost, 0) / Math.max(recentData.length, 1);
-    const avgTokens = recentData.reduce((sum, [_, d]) => sum + d.tokens, 0) / Math.max(recentData.length, 1);
-
-    for (const [dateKey, data] of dateMap.entries()) {
-      if (data.cost > 0) {
-        lastKnownCost = data.cost;
-        lastKnownTokens = data.tokens;
-      } else {
-        // Use exponential smoothing for missing values
-        data.cost = lastKnownCost > 0 ? lastKnownCost * 0.7 + avgCost * 0.3 : avgCost;
-        data.tokens = lastKnownTokens > 0 ? lastKnownTokens * 0.7 + avgTokens * 0.3 : avgTokens;
+    // If we have real usage data, return it
+    if (hasAnyUsageData) {
+      const trend = [];
+      for (const [dateKey, data] of dateMap.entries()) {
+        if (data.hasData || data.cost > 0) {
+          trend.push({
+            date: dateKey,
+            cost: parseFloat(data.cost.toFixed(6)),
+            tokens: Math.floor(data.tokens),
+            requests: data.requests
+          });
+        }
       }
-
-      trend.push({
-        date: dateKey,
-        cost: parseFloat(data.cost.toFixed(4)),
-        tokens: Math.floor(data.tokens),
-        requests: data.requests
-      });
+      return trend;
     }
 
-    // Add infrastructure cost to each day
-    const dailyInfraCost = features.reduce((sum, f) => {
-      return sum + (this._calculateInfrastructureCost(f) / days);
-    }, 0);
+    // No real usage data - check for simulation data
+    // Find completed simulations for this organization
+    const simulations = await Simulation.find({
+      organization: organizationId,
+      status: 'completed'
+    }).sort({ createdAt: -1 }).lean();
 
-    trend.forEach(t => {
-      t.cost = parseFloat((t.cost + dailyInfraCost).toFixed(4));
-    });
+    if (simulations.length === 0) {
+      return [];
+    }
+
+    // Use the most recent simulation's monthly projections
+    const latestSimulation = simulations[0];
+    const monthlyProjections = latestSimulation.results?.monthlyProjections;
+
+    if (!monthlyProjections || monthlyProjections.length === 0) {
+      return [];
+    }
+
+    // Map simulation projections to cost trend
+    // Simulation monthlyProjections structure:
+    // - costs.totalCost
+    // - tokens.total (input + output)
+    // - month/year (for date)
+    const trend = [];
+
+    // Get the last N months from projections, where N = days/30 (approximate)
+    const monthsToGet = Math.min(Math.ceil(days / 30), monthlyProjections.length);
+
+    // Take the most recent months from projections
+    for (let i = 0; i < monthsToGet; i++) {
+      const projection = monthlyProjections[i];
+      if (projection) {
+        const monthCost = projection.costs?.totalCost || 0;
+        const monthTokens = projection.tokens?.total || 0;
+
+        // Only include if there's actual data
+        if (monthCost > 0 || monthTokens > 0) {
+          // Use the projection's date if available, otherwise calculate
+          let monthDate;
+          if (projection.date) {
+            monthDate = new Date(projection.date);
+          } else if (projection.year && projection.month) {
+            monthDate = new Date(projection.year, projection.month - 1, 1);
+          } else {
+            // Use current month minus offset
+            monthDate = new Date(today);
+            monthDate.setMonth(monthDate.getMonth() - i);
+            monthDate.setDate(1);
+          }
+
+          const dateKey = monthDate.toISOString().split('T')[0];
+
+          trend.push({
+            date: dateKey,
+            cost: parseFloat(monthCost.toFixed(6)),
+            tokens: Math.floor(monthTokens),
+            requests: 0, // Projections don't have request count
+            isProjection: true,
+            month: projection.month || (i + 1)
+          });
+        }
+      }
+    }
 
     return trend;
   }

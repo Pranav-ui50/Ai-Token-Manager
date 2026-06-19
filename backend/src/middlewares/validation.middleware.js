@@ -60,6 +60,9 @@ function checkValidationResult(req, res, next) {
   }));
 
   console.log('[Validate] Validation failed, returning 400');
+  console.log('[Validate] Request body:', req.body);
+  console.log('[Validate] Errors:', formattedErrors);
+
   // Send validation error response
   return res.status(400).json({
     success: false,

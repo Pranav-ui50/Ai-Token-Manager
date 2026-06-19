@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
+import usePermissions from '../../hooks/usePermissions.js';
 import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import projectApi from '../../services/api/project.api.js';
@@ -15,12 +16,16 @@ import { showToast } from '../../utils/toasts.js';
 
 function ProjectsPage() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const { role } = usePermissions();
+  const isViewer = role === 'viewer';
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
 
@@ -121,18 +126,31 @@ function ProjectsPage() {
     }
   };
 
-  const handleDeleteProject = async (project) => {
-    if (!confirm(`Are you sure you want to delete "${project.name}"? This action cannot be undone.`)) {
-      return;
-    }
+  // Handle delete click - open modal
+  const handleDeleteClick = (project) => {
+    setProjectToDelete(project);
+    setShowDeleteModal(true);
+  };
+
+  // Confirm delete
+  const confirmDelete = async () => {
+    if (!projectToDelete) return;
 
     try {
-      await projectApi.delete(project._id);
-      setProjects(prev => prev.filter(p => p._id !== project._id));
+      await projectApi.delete(projectToDelete._id);
+      setProjects(prev => prev.filter(p => p._id !== projectToDelete._id));
+      setShowDeleteModal(false);
+      setProjectToDelete(null);
       showToast.projectDeleted();
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Failed to delete project');
     }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setProjectToDelete(null);
   };
 
   const handleToggleStatus = async (project) => {
@@ -244,6 +262,7 @@ function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500">Manage projects within {currentOrganization.name}</p>
         </div>
+        {!isViewer && (
         <button
           onClick={() => {
             resetForm();
@@ -256,6 +275,7 @@ function ProjectsPage() {
           </svg>
           <span>New Project</span>
         </button>
+        )}
       </div>
 
       {/* Search and Filter */}
@@ -407,9 +427,11 @@ function ProjectsPage() {
             <p className="text-gray-500 max-w-md mx-auto mb-4">
               {searchQuery || statusFilter !== 'active'
                 ? 'Try adjusting your search or filter criteria.'
-                : 'Create your first project to start organizing features and tracking costs.'}
+                : isViewer
+                  ? 'No projects have been created yet.'
+                  : 'Create your first project to start organizing features and tracking costs.'}
             </p>
-            {!searchQuery && statusFilter === 'active' && (
+            {!searchQuery && statusFilter === 'active' && !isViewer && (
               <button
                 onClick={() => {
                   resetForm();
@@ -469,11 +491,15 @@ function ProjectsPage() {
                       e.stopPropagation();
                       navigate(`/projects/${project._id}`);
                     }}
-                    className="text-[#DC2626] hover:text-[#B91C1C] p-2 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
+                    className="text-[#DC2626] hover:text-[#B91C1C] p-2 rounded-lg hover:bg-red-50 transition-colors"
                     title="View project"
                   >
-                    View
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
                   </button>
+                  {!isViewer && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={(e) => {
@@ -512,7 +538,7 @@ function ProjectsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteProject(project);
+                        handleDeleteClick(project);
                       }}
                       className="text-gray-500 hover:text-red-600 p-2 rounded-lg hover:bg-red-50 transition-colors"
                       title="Delete project"
@@ -522,6 +548,7 @@ function ProjectsPage() {
                       </svg>
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -800,6 +827,42 @@ function ProjectsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={cancelDelete}></div>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 relative z-10">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-1.964-1.333-2.732 0L3.082 16.5c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Project
+              </h3>
+              <p className="text-sm text-gray-500 text-center mb-6">
+                Are you sure you want to delete <span className="font-medium text-gray-700">"{projectToDelete?.name}"</span>? This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelDelete}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

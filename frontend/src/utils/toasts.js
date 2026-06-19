@@ -174,6 +174,15 @@ export const showToast = {
   validationError: (message) => toast.error(message || 'Please check your input and try again.'),
   sessionExpired: () => toast.error('Your session has expired. Please log in again.'),
 
+  // Plan Limits
+  limitExceeded: (message) => toast.error(message || 'You have reached your plan limit. Please upgrade your plan to continue.'),
+  projectLimitExceeded: (limit) => toast.error(`You have reached the maximum number of projects (${limit}) for your plan. Please upgrade to create more projects.`),
+  featureLimitExceeded: (limit) => toast.error(`You have reached the maximum number of features (${limit}) for your plan. Please upgrade to create more features.`),
+  simulationLimitExceeded: (limit) => toast.error(`You have reached the maximum number of simulations (${limit}) for your plan. Please upgrade to run more simulations.`),
+  teamMemberLimitExceeded: (limit) => toast.error(`You have reached the maximum number of team members (${limit}) for your plan. Please upgrade to add more members.`),
+  apiCallLimitExceeded: (limit) => toast.error(`You have reached your API call limit (${limit}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
+  tokenLimitExceeded: (limit) => toast.error(`You have reached your token limit (${limit.toLocaleString()}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
+
   // Warnings
   warning: (message) => toast(message, { icon: '⚠️', style: { background: '#f59e0b', color: '#fff' } }),
   confirmDelete: (item) => toast(`${item} will be permanently deleted.`, { icon: '⚠️', style: { background: '#f59e0b', color: '#fff' } }),
@@ -185,6 +194,17 @@ export const showToast = {
   loading: (message) => toast.loading(message || 'Loading...'),
   processing: (message) => toast.loading(message || 'Processing...'),
   syncing: (message) => toast.loading(message || 'Syncing...'),
+
+  // Role/Permission updates - matches red theme
+  roleUpdated: (message) => toast(message, {
+    icon: '🔐',
+    style: {
+      background: '#DC2626',
+      color: '#fff',
+      fontWeight: '500'
+    },
+    duration: 5000
+  }),
 
   // Promise-based toasts
   promise: (promise, messages) => {

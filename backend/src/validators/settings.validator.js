@@ -24,36 +24,54 @@ export const validateOrganizationSettings = validate([
     .isMongoId()
     .withMessage('Invalid organization ID'),
   body('name')
-    .optional()
+    .exists()
+    .withMessage('Organization name is required')
     .trim()
+    .notEmpty()
+    .withMessage('Organization name is required')
     .isLength({ min: 2, max: 100 })
     .withMessage('Organization name must be between 2 and 100 characters'),
   body('description')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
     .isLength({ max: 500 })
     .withMessage('Description cannot exceed 500 characters'),
   body('website')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
-    .isURL()
-    .withMessage('Invalid website URL'),
+    .custom((value) => {
+      // Skip validation for empty values
+      if (!value || value.trim() === '') return true;
+      // Simple URL validation - just check if it looks like a URL
+      try {
+        const url = new URL(value);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch {
+        throw new Error('Invalid website URL. Must be a valid URL with http:// or https://');
+      }
+    }),
   body('industry')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
-    .isIn(['technology', 'healthcare', 'finance', 'education', 'retail', 'other'])
-    .withMessage('Invalid industry'),
+    .custom((value) => {
+      if (!value || value.trim() === '') return true;
+      const validIndustries = ['technology', 'healthcare', 'finance', 'education', 'retail', 'other'];
+      if (!validIndustries.includes(value)) {
+        throw new Error('Invalid industry. Must be one of: technology, healthcare, finance, education, retail, other');
+      }
+      return true;
+    }),
   body('settings.currency')
-    .optional()
+    .optional({ values: 'falsy' })
     .isIn(['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD'])
     .withMessage('Invalid currency'),
   body('settings.timezone')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
     .isLength({ max: 100 })
     .withMessage('Invalid timezone'),
   body('settings.dateFormat')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
     .isIn(['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'])
     .withMessage('Invalid date format')
@@ -66,18 +84,23 @@ export const validateProfileSettings = validate([
   body('firstName')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 50 })
-    .withMessage('First name must be between 1 and 50 characters'),
+    .isString()
+    .isLength({ max: 50 })
+    .withMessage('First name cannot exceed 50 characters')
+    .escape(),
   body('lastName')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 50 })
-    .withMessage('Last name must be between 1 and 50 characters'),
+    .isString()
+    .isLength({ max: 50 })
+    .withMessage('Last name cannot exceed 50 characters')
+    .escape(),
   body('phone')
     .optional()
     .trim()
-    .matches(/^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/)
-    .withMessage('Invalid phone number'),
+    .isString()
+    .isLength({ max: 20 })
+    .withMessage('Phone number cannot exceed 20 characters'),
   body('avatar')
     .optional()
     .trim()
@@ -93,10 +116,10 @@ export const validatePasswordChange = validate([
     .notEmpty()
     .withMessage('Current password is required'),
   body('newPassword')
-    .isLength({ min: 8, max: 128 })
-    .withMessage('Password must be between 8 and 128 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
+    .isLength({ min: 8, max: 50 })
+    .withMessage('Password must be between 8 and 50 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
   body('confirmPassword')
     .custom((value, { req }) => {
       if (value !== req.body.newPassword) {
