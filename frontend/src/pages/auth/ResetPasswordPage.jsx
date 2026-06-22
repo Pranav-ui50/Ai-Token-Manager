@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();

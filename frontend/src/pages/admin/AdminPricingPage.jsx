@@ -7,7 +7,7 @@
 import { useState, useEffect, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import Loader from '../../components/common/Loader.jsx';
 
 function AdminPricingPage() {

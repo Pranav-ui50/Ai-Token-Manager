@@ -98,7 +98,22 @@ const ACTION_TYPES = [
   // System actions
   'system_error',
   'system_warning',
-  'system_info'
+  'system_info',
+
+  // Plan limit enforcement actions
+  'members_disabled_plan_limit',
+  'members_reenabled_plan_upgrade',
+  'projects_disabled_plan_limit',
+  'projects_reenabled_plan_upgrade',
+  'features_disabled_plan_limit',
+  'features_reenabled_plan_upgrade',
+  'simulations_disabled_plan_limit',
+  'simulations_reenabled_plan_upgrade',
+
+  // Plan change sync actions
+  'plan_upgrade_sync',
+  'plan_downgrade_sync',
+  'plan_change_sync'
 ];
 
 const RESOURCE_TYPES = [

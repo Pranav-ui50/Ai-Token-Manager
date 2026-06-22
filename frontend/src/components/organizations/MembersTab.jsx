@@ -12,7 +12,7 @@ import Select from '../common/Select.jsx';
 import Input from '../common/Input.jsx';
 import Avatar from '../common/Avatar.jsx';
 import roleApi from '../../services/api/role.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../utils/toasts.jsx';
 
 function MembersTab({ organization, organizationId }) {
   const { addMember, removeMember, updateMemberRole, leaveOrganization, getOrganization, clearError } = useOrganization();
@@ -256,6 +256,11 @@ function MembersTab({ organization, organizationId }) {
                     <div className="ml-3">
                       <div className="text-sm font-medium text-gray-900">
                         {member.user?.firstName} {member.user?.lastName}
+                        {member.status === 'disabled' && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            Disabled
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-gray-500">
                         {member.user?.email}
@@ -264,7 +269,11 @@ function MembersTab({ organization, organizationId }) {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    member.status === 'disabled'
+                      ? 'bg-gray-100 text-gray-500'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
                     {member.role?.displayName || member.role?.name}
                   </span>
                 </td>
@@ -290,8 +299,13 @@ function MembersTab({ organization, organizationId }) {
                             setSelectedMember(member);
                             setShowRoleModal(true);
                           }}
-                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Role"
+                          className={`p-2 rounded-lg transition-colors ${
+                            member.status === 'disabled'
+                              ? 'text-gray-300 cursor-not-allowed'
+                              : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
+                          }`}
+                          title={member.status === 'disabled' ? 'Member is disabled due to plan limit' : 'Edit Role'}
+                          disabled={member.status === 'disabled'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -299,8 +313,13 @@ function MembersTab({ organization, organizationId }) {
                         </button>
                         <button
                           onClick={() => handleRemoveMember(member.user._id || member.user)}
-                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Remove Member"
+                          className={`p-2 rounded-lg transition-colors ${
+                            member.status === 'disabled'
+                              ? 'text-gray-300 cursor-not-allowed'
+                              : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                          }`}
+                          title={member.status === 'disabled' ? 'Member is disabled due to plan limit' : 'Remove Member'}
+                          disabled={member.status === 'disabled'}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -331,10 +350,7 @@ function MembersTab({ organization, organizationId }) {
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">First Name<span className="text-red-500">*</span></label>
-                <span className="text-xs text-gray-400">{inviteForm.firstName.length}/50</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First Name<span className="text-red-500">*</span></label>
               <input
                 type="text"
                 name="firstName"
@@ -347,10 +363,7 @@ function MembersTab({ organization, organizationId }) {
               {inviteErrors.firstName && <p className="mt-1 text-xs text-red-500">{inviteErrors.firstName}</p>}
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">Last Name<span className="text-red-500">*</span></label>
-                <span className="text-xs text-gray-400">{inviteForm.lastName.length}/50</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name<span className="text-red-500">*</span></label>
               <input
                 type="text"
                 name="lastName"
@@ -365,10 +378,7 @@ function MembersTab({ organization, organizationId }) {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">Email ID<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{inviteForm.email.length}/255</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email ID<span className="text-red-500">*</span></label>
             <input
               type="email"
               name="email"
@@ -382,10 +392,7 @@ function MembersTab({ organization, organizationId }) {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">Password<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{inviteForm.password.length}/100</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password<span className="text-red-500">*</span></label>
             <input
               type="text"
               name="password"

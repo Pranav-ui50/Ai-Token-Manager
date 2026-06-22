@@ -9,13 +9,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import { useSubscription } from '../../context/SubscriptionContext.jsx';
-import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.js';
+import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import projectApi from '../../services/api/project.api.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Validation constants
 const VALIDATION_RULES = {
@@ -496,10 +496,8 @@ function FeatureCreatePage() {
       console.error('Feature creation error:', err.response?.data);
 
       if (isSubscriptionError(err)) {
-        const errorInfo = handleSubscriptionError(err);
-        if (errorInfo) {
-          showToast.error(errorInfo.message);
-        }
+        handleSubscriptionError(err);
+        setIsSubmitting(false);
         return;
       }
 

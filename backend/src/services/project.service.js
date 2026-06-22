@@ -114,7 +114,7 @@ class ProjectService {
       throw new AppError('Access denied. You are not a member of this organization', 403, 'FORBIDDEN');
     }
 
-    const query = { organization: organizationId, ...filters };
+    const query = { organization: organizationId, isActive: true, ...filters };
 
     const projects = await Project.find(query)
       .populate('createdBy', 'firstName lastName email')
@@ -205,17 +205,24 @@ class ProjectService {
       throw new AppError('Only the organization owner or project creator can delete this project', 403, 'FORBIDDEN');
     }
 
-    // Soft delete
+    // Soft delete project
     project.isActive = false;
+    project.status = 'inactive';
     await project.save();
 
-    // Also deactivate associated features
-    await Feature.updateMany(
-      { project: projectId },
-      { status: 'inactive' }
-    );
+    // Cascade: deactivate all associated features
+    const featuresToUpdate = await Feature.find({ project: projectId, status: { $ne: 'deprecated' } });
 
-    logger.info(`Project deleted: ${project._id}`);
+    for (const feature of featuresToUpdate) {
+      feature.previousStatus = feature.status || 'active';
+      feature.status = 'deprecated';
+      feature.disabledAt = new Date();
+      feature.disabledReason = 'manual';
+      feature.disabledNote = 'Feature deprecated because parent project was deleted';
+      await feature.save();
+    }
+
+    logger.info(`Project deleted: ${project._id}, ${featuresToUpdate.length} features cascade deprecated`);
 
     return { message: 'Project deleted successfully' };
   }

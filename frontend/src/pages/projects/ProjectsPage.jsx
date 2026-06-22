@@ -12,7 +12,7 @@ import usePermissions from '../../hooks/usePermissions.js';
 import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import projectApi from '../../services/api/project.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function ProjectsPage() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
@@ -86,7 +86,13 @@ function ProjectsPage() {
   // Filter projects by status and search query
   const filteredProjects = projects.filter(project => {
     // Get the effective status
-    const status = project.status || (project.isActive === false ? 'inactive' : 'active');
+    // status field takes precedence, then isActive
+    let status = 'active';
+    if (project.status) {
+      status = project.status;
+    } else if (project.isActive === false) {
+      status = 'inactive';
+    }
 
     // Status filter
     if (statusFilter === 'active' && status !== 'active') return false;
@@ -395,7 +401,7 @@ function ProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Active</p>
-              <p className="text-xl font-bold text-gray-900">{projects.filter(p => (p.status || (p.isActive === false ? 'inactive' : 'active')) === 'active').length}</p>
+              <p className="text-xl font-bold text-gray-900">{projects.filter(p => p.status === 'active' || (!p.status && p.isActive !== false)).length}</p>
             </div>
           </div>
         </div>
@@ -409,7 +415,7 @@ function ProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Inactive</p>
-              <p className="text-xl font-bold text-gray-900">{projects.filter(p => (p.status || (p.isActive === false ? 'inactive' : 'active')) === 'inactive').length}</p>
+              <p className="text-xl font-bold text-gray-900">{projects.filter(p => p.status === 'inactive' || p.isActive === false).length}</p>
             </div>
           </div>
         </div>
@@ -563,13 +569,26 @@ function ProjectsPage() {
                         handleToggleStatus(project);
                       }}
                       className={`p-2 rounded-lg transition-colors ${
-                        project.isActive === false
-                          ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
-                          : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                        project.status === 'disabled'
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : project.isActive === false
+                            ? 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                            : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
                       }`}
-                      title={project.isActive === false ? 'Activate project' : 'Deactivate project'}
+                      title={
+                        project.status === 'disabled'
+                          ? 'Project is disabled due to plan limit'
+                          : project.isActive === false
+                            ? 'Activate project'
+                            : 'Deactivate project'
+                      }
+                      disabled={project.status === 'disabled'}
                     >
-                      {project.isActive === false ? (
+                      {project.status === 'disabled' ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                      ) : project.isActive === false ? (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -584,8 +603,13 @@ function ProjectsPage() {
                         e.stopPropagation();
                         openEditModal(project);
                       }}
-                      className="text-gray-500 hover:text-[#DC2626] p-2 rounded-lg hover:bg-red-50 transition-colors"
-                      title="Edit project"
+                      className={`p-2 rounded-lg transition-colors ${
+                        project.status === 'disabled'
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-500 hover:text-[#DC2626] hover:bg-red-50'
+                      }`}
+                      title={project.status === 'disabled' ? 'Project is disabled due to plan limit' : 'Edit project'}
+                      disabled={project.status === 'disabled'}
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

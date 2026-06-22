@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import { usePlans } from '../../context/PlansContext.jsx';
 import billingApi from '../../services/api/billing.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import { getCurrencySymbol, formatIndianNumber } from '../../utils/currency.js';
 import Loader from '../../components/common/Loader.jsx';
 
@@ -454,8 +454,7 @@ function BillingPage() {
               <p className="text-gray-500">No plans available. Please contact support.</p>
             </div>
           ) : (
-            <div className="flex justify-center">
-              <div className="flex gap-6 overflow-x-auto pb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
               {/* Free Plan */}
               {freePlan && (() => {
                 const freePlanId = freePlan._id?.toString() || freePlan.id?.toString();
@@ -464,7 +463,7 @@ function BillingPage() {
                 const isFreePlanCurrent = effectivePlan?.tier === 'free' && freePlan.tier === 'free';
 
                 return (
-                <div key={freePlan.id} className="flex-shrink-0 w-[300px]">
+                <div key={freePlan.id} className="flex flex-col">
                   <div
                     className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all hover:shadow-xl h-full flex flex-col ${
                       isCurrentFreePlan || isFreePlanCurrent ? 'border-[#DC2626] ring-2 ring-[#DC2626] ring-opacity-50' : 'border-gray-200'
@@ -583,7 +582,7 @@ function BillingPage() {
                 const isCurrentPlan = planId && effectivePlanId && planId === effectivePlanId;
 
                 return (
-                  <div key={plan.id} className="flex-shrink-0 w-[300px]">
+                  <div key={plan.id} className="flex flex-col">
                     <div
                       className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all hover:shadow-xl h-full flex flex-col ${
                         isCurrentPlan ? 'border-[#DC2626] ring-2 ring-[#DC2626] ring-opacity-50' : isPopular ? 'border-[#DC2626] shadow-lg' : 'border-gray-200'
@@ -722,7 +721,6 @@ function BillingPage() {
                   </div>
                 );
               })}
-              </div>
             </div>
           )}
         </div>
@@ -743,6 +741,7 @@ function BillingPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-16">S.No</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
@@ -751,8 +750,11 @@ function BillingPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-100">
-                  {invoices.slice((invoicePage - 1) * invoicesPerPage, invoicePage * invoicesPerPage).map((invoice) => (
+                  {invoices.slice((invoicePage - 1) * invoicesPerPage, invoicePage * invoicesPerPage).map((invoice, index) => (
                     <tr key={invoice.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {((invoicePage - 1) * invoicesPerPage) + index + 1}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className="font-medium text-gray-900">{invoice.invoiceNumber || invoice.number}</span>
                       </td>

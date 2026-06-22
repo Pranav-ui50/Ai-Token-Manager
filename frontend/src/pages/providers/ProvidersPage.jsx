@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import Loader from '../../components/common/Loader.jsx';
 import providerApi from '../../services/api/provider.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const PROVIDER_COLORS = {
   openai: 'from-green-500 to-green-600',

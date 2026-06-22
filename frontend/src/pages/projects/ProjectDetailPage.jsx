@@ -17,7 +17,7 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import usePermissions from '../../hooks/usePermissions.js';
 import { useProjectCurrency } from '../../hooks/useProjectCurrency.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function ProjectDetailPage() {
   const { id } = useParams();
@@ -762,16 +762,26 @@ function ProjectDetailPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {features.map((feature, index) => (
-                  <tr key={feature._id} className="hover:bg-gray-50">
+                  <tr key={feature._id} className={`hover:bg-gray-50 ${feature.status === 'disabled' ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {index + 1}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{feature.name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {feature.name}
+                            {feature.status === 'disabled' && (
+                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                Disabled
+                              </span>
+                            )}
+                          </div>
                           {feature.description && (
                             <div className="text-sm text-gray-500 truncate max-w-xs">{feature.description}</div>
+                          )}
+                          {feature.disabledNote && feature.status === 'disabled' && (
+                            <div className="text-xs text-red-600 mt-1">{feature.disabledNote}</div>
                           )}
                         </div>
                       </div>
@@ -795,6 +805,7 @@ function ProjectDetailPage() {
                         feature.status === 'active' ? 'bg-green-100 text-green-800' :
                         feature.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
                         feature.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                        feature.status === 'disabled' ? 'bg-red-100 text-red-700' :
                         'bg-red-100 text-red-800'
                       }`}>
                         {feature.status}
@@ -806,8 +817,13 @@ function ProjectDetailPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <RouterLink
                         to={`/features/${feature._id}`}
-                        className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors inline-flex"
-                        title="View feature"
+                        className={`p-2 rounded-lg transition-colors inline-flex ${
+                          feature.status === 'disabled'
+                            ? 'text-gray-300 cursor-not-allowed'
+                            : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'
+                        }`}
+                        title={feature.status === 'disabled' ? 'Feature is disabled due to plan limit' : 'View feature'}
+                        onClick={(e) => feature.status === 'disabled' && e.preventDefault()}
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

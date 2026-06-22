@@ -15,6 +15,7 @@ import AuditLog from '../models/AuditLog.js';
 import Plan from '../models/Plan.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
+import limitEnforcementService from './limitEnforcement.service.js';
 
 // Payment provider instances (lazy loaded)
 let stripe = null;
@@ -407,6 +408,43 @@ class BillingService {
       await this.generateInvoice(organization, dbPlan, billingCycle, userId);
     }
 
+    // Enforce plan limits after subscription update
+    try {
+      logger.info(`[Billing] Enforcing plan limits for organization ${organizationId}`);
+      logger.info(`[Billing] Plan: ${dbPlan.tier}, limits: maxProjects=${dbPlan.limits?.maxProjects}, maxFeatures=${dbPlan.limits?.maxFeatures}, maxSimulations=${dbPlan.limits?.maxSimulations}, maxUsers=${dbPlan.limits?.maxUsers}`);
+
+      // Determine if this is a downgrade or upgrade
+      const oldPlanTier = oldPlan || 'starter';
+      const PLAN_HIERARCHY = { 'free': 0, 'test': 0, 'demo': 1, 'starter': 1, 'professional': 2, 'business': 3, 'enterprise': 4 };
+      const oldLevel = PLAN_HIERARCHY[oldPlanTier?.toLowerCase()] || 0;
+      const newLevel = PLAN_HIERARCHY[dbPlan.tier?.toLowerCase()] || 0;
+      const isDowngrade = newLevel < oldLevel;
+      const isUpgrade = newLevel > oldLevel;
+
+      if (isDowngrade) {
+        logger.info(`[Billing] Downgrade detected: ${oldPlanTier} -> ${dbPlan.tier}. Enforcing limits...`);
+        const enforcementResult = await limitEnforcementService.enforceAllLimits(
+          organizationId,
+          userId,
+          dbPlan
+        );
+        logger.info(`[Billing] Limit enforcement result:`, JSON.stringify(enforcementResult));
+      } else if (isUpgrade) {
+        logger.info(`[Billing] Upgrade detected: ${oldPlanTier} -> ${dbPlan.tier}. Re-enabling resources...`);
+        const reenableResult = await limitEnforcementService.reenableAllResources(
+          organizationId,
+          userId,
+          dbPlan
+        );
+        logger.info(`[Billing] Re-enable result:`, JSON.stringify(reenableResult));
+      } else {
+        logger.info(`[Billing] Same plan level change. No limit enforcement needed.`);
+      }
+    } catch (enforcementError) {
+      logger.error(`[Billing] Failed to enforce limits: ${enforcementError.message}`, { stack: enforcementError.stack });
+      // Don't fail the subscription update, just log the error
+    }
+
     // Log audit
     await AuditLog.log({
       organization: organizationId,
@@ -583,18 +621,32 @@ class BillingService {
     const periodStart = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const periodEnd = endDate ? new Date(endDate) : new Date();
 
-    // Get counts - only count active (non-disabled) resources
+    // Get active project IDs to filter features/simulations
+    const activeProjectIds = await Project.find({
+      organization: organizationId,
+      isActive: true
+    }).distinct('_id');
+
+    // Get counts - only count active (non-deleted, non-disabled) resources
     const [projectCount, featureCount, simulationCount] = await Promise.all([
       Project.countDocuments({
         organization: organizationId,
+        isActive: true,
         status: { $in: ['active', 'inactive'] }
       }),
       Feature.countDocuments({
         organization: organizationId,
+        project: { $in: activeProjectIds },
         status: { $in: ['active', 'inactive', 'maintenance'] }
       }),
+      // Simulations: standalone (no project) OR from active projects
       Simulation.countDocuments({
         organization: organizationId,
+        $or: [
+          { project: null },
+          { project: { $exists: false } },
+          { project: { $in: activeProjectIds } }
+        ],
         status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
       })
     ]);
@@ -604,11 +656,12 @@ class BillingService {
       m => m.status === 'active' || m.status === 'inactive'
     ).length || 0;
 
-    // Get feature usage stats
+    // Get feature usage stats (only from active projects)
     const featureUsage = await Feature.aggregate([
       {
         $match: {
-          organization: mongoose.Types.ObjectId.createFromHexString(organizationId)
+          organization: mongoose.Types.ObjectId.createFromHexString(organizationId),
+          project: { $in: activeProjectIds.map(id => mongoose.Types.ObjectId.createFromHexString(id.toString())) }
         }
       },
       {

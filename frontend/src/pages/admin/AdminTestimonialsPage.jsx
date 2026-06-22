@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import testimonialApi from '../../services/api/testimonial.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const AVATAR_COLORS = [
   { name: 'Red', value: 'bg-red-500' },

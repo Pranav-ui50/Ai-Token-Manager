@@ -12,13 +12,50 @@ import Plan from '../models/Plan.js';
 import Project from '../models/Project.js';
 import Feature from '../models/Feature.js';
 import Simulation from '../models/Simulation.js';
-import User from '../models/User.js';
 import AuditLog from '../models/AuditLog.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 
+// Plan tier hierarchy for determining upgrades vs downgrades
+const PLAN_HIERARCHY = {
+  'free': 0,
+  'test': 0,        // Test/free tier (same level as free)
+  'demo': 1,        // Demo tier (same level as starter)
+  'starter': 1,
+  'professional': 2,
+  'business': 3,
+  'enterprise': 4
+};
+
 // Default plan limits (fallback when plan not found)
 const DEFAULT_LIMITS = {
+  free: {
+    maxUsers: 1,
+    maxProjects: 1,
+    maxFeatures: 3,
+    maxSimulations: 5,
+    includedAiCredits: 1000,
+    maxApiCalls: 100,
+    maxTokens: 10000
+  },
+  test: {
+    maxUsers: 1,
+    maxProjects: 1,
+    maxFeatures: 1,
+    maxSimulations: 1,
+    includedAiCredits: 100,
+    maxApiCalls: 10,
+    maxTokens: 1000
+  },
+  demo: {
+    maxUsers: 2,
+    maxProjects: 2,
+    maxFeatures: 2,
+    maxSimulations: 2,
+    includedAiCredits: 500,
+    maxApiCalls: 100,
+    maxTokens: 5000
+  },
   starter: {
     maxUsers: 2,
     maxProjects: 4,
@@ -45,10 +82,102 @@ const DEFAULT_LIMITS = {
     includedAiCredits: 2000000,     // 2,000,000 tokens
     maxApiCalls: 250000,            // 250,000 API calls
     maxTokens: 10000000              // 10,000,000 tokens
+  },
+  enterprise: {
+    maxUsers: null,  // unlimited
+    maxProjects: null,
+    maxFeatures: null,
+    maxSimulations: null,
+    includedAiCredits: null,
+    maxApiCalls: null,
+    maxTokens: null
   }
 };
 
 class LimitEnforcementService {
+
+  /**
+   * Sync resources after plan change (upgrade or downgrade)
+   * This is the CENTRAL function that should be called after any plan change.
+   * It automatically determines if it's an upgrade or downgrade and acts accordingly.
+   *
+   * @param {string} organizationId - Organization ID
+   * @param {string} userId - User ID performing action (for audit)
+   * @param {Object} newPlan - The new plan object with tier and limits
+   * @param {string} previousPlanTier - The previous plan tier (optional, will be fetched if not provided)
+   * @returns {Object} Sync result with actions taken
+   */
+  async syncResourcesAfterPlanChange(organizationId, userId, newPlan, previousPlanTier = null) {
+    logger.info(`[LimitEnforcement] ====== SYNC RESOURCES AFTER PLAN CHANGE ======`);
+    logger.info(`[LimitEnforcement] Organization: ${organizationId}`);
+    logger.info(`[LimitEnforcement] New Plan: ${newPlan?.tier || 'unknown'}`);
+    logger.info(`[LimitEnforcement] Previous Plan: ${previousPlanTier || 'unknown'}`);
+
+    // Get previous plan tier from organization if not provided
+    if (!previousPlanTier) {
+      const organization = await Organization.findById(organizationId);
+      previousPlanTier = organization?.subscription?.previousPlan || organization?.subscription?.plan || 'starter';
+    }
+
+    const newPlanTier = newPlan?.tier || 'starter';
+    const previousLevel = PLAN_HIERARCHY[previousPlanTier?.toLowerCase()] || 0;
+    const newLevel = PLAN_HIERARCHY[newPlanTier?.toLowerCase()] || 0;
+
+    const isUpgrade = newLevel > previousLevel;
+    const isDowngrade = newLevel < previousLevel;
+
+    logger.info(`[LimitEnforcement] Previous level: ${previousLevel}, New level: ${newLevel}`);
+    logger.info(`[LimitEnforcement] Is upgrade: ${isUpgrade}, Is downgrade: ${isDowngrade}`);
+
+    const result = {
+      previousPlanTier,
+      newPlanTier,
+      isUpgrade,
+      isDowngrade,
+      actions: {}
+    };
+
+    if (isDowngrade) {
+      logger.info(`[LimitEnforcement] Plan DOWNGRADE detected - enforcing limits`);
+      result.actions = await this.enforceAllLimits(organizationId, userId, newPlan);
+      result.actionType = 'downgrade';
+    } else if (isUpgrade) {
+      logger.info(`[LimitEnforcement] Plan UPGRADE detected - re-enabling resources`);
+      result.actions = await this.reenableAllResources(organizationId, userId, newPlan);
+      result.actionType = 'upgrade';
+    } else {
+      logger.info(`[LimitEnforcement] Same plan level - no action needed`);
+      result.actionType = 'same_level';
+      result.actions = { message: 'No action required - same plan level' };
+    }
+
+    // Log the sync action
+    await AuditLog.log({
+      organization: organizationId,
+      user: userId,
+      action: isUpgrade ? 'plan_upgrade_sync' : isDowngrade ? 'plan_downgrade_sync' : 'plan_change_sync',
+      resourceType: 'organization',
+      description: `Plan sync completed: ${previousPlanTier} → ${newPlanTier} (${isUpgrade ? 'upgrade' : isDowngrade ? 'downgrade' : 'same level'})`,
+      afterState: {
+        previousPlanTier,
+        newPlanTier,
+        actionType: result.actionType,
+        actionsTaken: result.actions
+      }
+    });
+
+    logger.info(`[LimitEnforcement] ====== END SYNC RESOURCES ======`);
+    return result;
+  }
+
+  /**
+   * Get plan tier level for comparison
+   * @param {string} tier - Plan tier
+   * @returns {number} Tier level
+   */
+  getPlanLevel(tier) {
+    return PLAN_HIERARCHY[tier?.toLowerCase()] || 0;
+  }
   /**
    * Get plan limits for an organization
    * @param {string} organizationId - Organization ID
@@ -126,10 +255,13 @@ class LimitEnforcementService {
    * @returns {Object} Re-enable results
    */
   async reenableAllResources(organizationId, userId, targetPlan = null) {
-    logger.info(`[LimitEnforcement] Re-enabling all resources for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] ====== START RE-ENABLE ALL RESOURCES ======`);
+    logger.info(`[LimitEnforcement] Organization: ${organizationId}`);
+    logger.info(`[LimitEnforcement] User: ${userId}`);
+    logger.info(`[LimitEnforcement] Target Plan: ${targetPlan ? `${targetPlan.tier} (${targetPlan._id})` : 'null'}`);
 
     const limits = await this.getPlanLimits(organizationId, targetPlan);
-    logger.info(`[LimitEnforcement] New plan limits for ${organizationId}:`, JSON.stringify(limits));
+    logger.info(`[LimitEnforcement] New plan limits:`, JSON.stringify(limits));
 
     const results = {
       members: await this.reamedMembers(organizationId, limits, userId),
@@ -139,6 +271,7 @@ class LimitEnforcementService {
     };
 
     logger.info(`[LimitEnforcement] Re-enable completed for ${organizationId}:`, JSON.stringify(results));
+    logger.info(`[LimitEnforcement] ====== END RE-ENABLE ALL RESOURCES ======`);
 
     return results;
   }
@@ -203,12 +336,6 @@ class LimitEnforcementService {
       member.reenabledBy = userId;
 
       reenabledIds.push(member.user.toString());
-
-      // Update user status
-      await User.findByIdAndUpdate(member.user, {
-        'organization.status': 'active',
-        $unset: { disabledAt: 1, disabledReason: 1 }
-      });
     }
 
     await organization.save();
@@ -279,13 +406,6 @@ class LimitEnforcementService {
       member.disabledBy = userId;
 
       disabledIds.push(member.user.toString());
-
-      // Update user status
-      await User.findByIdAndUpdate(member.user, {
-        'organization.status': 'disabled',
-        disabledAt: new Date(),
-        disabledReason: 'plan_limit'
-      });
     }
 
     await organization.save();
@@ -325,6 +445,7 @@ class LimitEnforcementService {
     // Get all active projects (sorted by creation date - oldest first)
     const activeProjects = await Project.find({
       organization: organizationId,
+      isActive: true,
       status: { $in: ['active', 'inactive'] }
     }).sort({ createdAt: 1 });
 
@@ -341,6 +462,7 @@ class LimitEnforcementService {
     // Disable the newest projects first (last in the sorted list)
     const projectsToDisable = activeProjects.slice(-excess);
     const disabledIds = [];
+    let totalFeaturesDisabled = 0;
 
     for (const project of projectsToDisable) {
       logger.info(`[LimitEnforcement] Disabling project ${project._id} (${project.name})`);
@@ -353,6 +475,23 @@ class LimitEnforcementService {
 
       await project.save();
       disabledIds.push(project._id.toString());
+
+      // Cascade disable all features under this project
+      const featuresToDisable = await Feature.find({
+        project: project._id,
+        status: { $in: ['active', 'inactive', 'maintenance'] }
+      });
+
+      for (const feature of featuresToDisable) {
+        logger.info(`[LimitEnforcement] Cascading disable to feature ${feature._id} (${feature.name})`);
+        feature.previousStatus = feature.status || 'active';
+        feature.status = 'disabled';
+        feature.disabledAt = new Date();
+        feature.disabledReason = 'plan_limit';
+        feature.disabledNote = 'Feature disabled because parent project exceeded plan limit';
+        await feature.save();
+        totalFeaturesDisabled++;
+      }
     }
 
     // Log audit
@@ -362,12 +501,13 @@ class LimitEnforcementService {
       action: 'projects_disabled_plan_limit',
       resourceType: 'project',
       description: `${disabledIds.length} project(s) disabled due to plan limit`,
-      afterState: { disabledProjects: disabledIds, maxProjects }
+      afterState: { disabledProjects: disabledIds, disabledFeatures: totalFeaturesDisabled, maxProjects }
     });
 
     logger.info(`[LimitEnforcement] Enforced project limit: ${disabledIds.length} projects disabled for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Cascade disabled ${totalFeaturesDisabled} features`);
 
-    return { disabled: disabledIds.length, projects: disabledIds };
+    return { disabled: disabledIds.length, projects: disabledIds, featuresDisabled: totalFeaturesDisabled };
   }
 
   /**
@@ -386,13 +526,23 @@ class LimitEnforcementService {
       return { disabled: 0, message: 'Unlimited features allowed' };
     }
 
+    // Get IDs of disabled projects to exclude their features
+    const disabledProjectIds = await Project.find({
+      organization: organizationId,
+      status: 'disabled'
+    }).distinct('_id');
+
+    logger.info(`[LimitEnforcement] Found ${disabledProjectIds.length} disabled projects to exclude`);
+
     // Get all active features (sorted by creation date - oldest first)
+    // Exclude features from disabled projects and deprecated features (from deleted projects)
     const activeFeatures = await Feature.find({
       organization: organizationId,
-      status: { $in: ['active', 'inactive', 'maintenance'] }
+      status: { $in: ['active', 'inactive', 'maintenance'] },
+      project: { $nin: disabledProjectIds } // Exclude features from disabled projects
     }).sort({ createdAt: 1 });
 
-    logger.info(`[LimitEnforcement] Found ${activeFeatures.length} active features, limit is ${maxFeatures}`);
+    logger.info(`[LimitEnforcement] Found ${activeFeatures.length} active features (excluding disabled projects), limit is ${maxFeatures}`);
 
     if (activeFeatures.length <= maxFeatures) {
       logger.info(`[LimitEnforcement] Within limit (${activeFeatures.length}/${maxFeatures}), no action needed`);
@@ -507,13 +657,17 @@ class LimitEnforcementService {
    * @returns {Object} Result
    */
   async reamedProjects(organizationId, limits, userId) {
+    logger.info(`[LimitEnforcement] Checking projects for re-enable in org ${organizationId}`);
 
     // Find projects disabled due to plan limit (sorted by disabledAt to restore in order)
     const disabledProjects = await Project.find({
       organization: organizationId,
+      isActive: true,
       status: 'disabled',
       disabledReason: 'plan_limit'
     }).sort({ disabledAt: 1 });
+
+    logger.info(`[LimitEnforcement] Found ${disabledProjects.length} disabled projects with reason 'plan_limit'`);
 
     if (disabledProjects.length === 0) {
       return { reenabled: 0 };
@@ -522,19 +676,25 @@ class LimitEnforcementService {
     const maxProjects = limits.maxProjects === null ? 999 : limits.maxProjects;
     const activeProjects = await Project.countDocuments({
       organization: organizationId,
+      isActive: true,
       status: { $in: ['active', 'inactive'] }
     });
 
     const availableSlots = maxProjects - activeProjects;
 
+    logger.info(`[LimitEnforcement] maxProjects: ${maxProjects}, activeProjects: ${activeProjects}, availableSlots: ${availableSlots}`);
+
     if (availableSlots <= 0) {
+      logger.info(`[LimitEnforcement] No available slots to re-enable projects`);
       return { reenabled: 0, message: 'No available slots' };
     }
 
     const projectsToReenable = disabledProjects.slice(0, availableSlots);
     const reenabledIds = [];
+    let totalFeaturesReenabled = 0;
 
     for (const project of projectsToReenable) {
+      logger.info(`[LimitEnforcement] Re-enabling project ${project._id} (${project.name}) with previousStatus: ${project.previousStatus || 'active'}`);
       // Restore to previous status (was active or inactive)
       project.status = project.previousStatus || 'active';
       project.disabledAt = null;
@@ -544,6 +704,24 @@ class LimitEnforcementService {
 
       await project.save();
       reenabledIds.push(project._id.toString());
+
+      // Cascade re-enable all features under this project that were disabled due to plan limit
+      const featuresToReenable = await Feature.find({
+        project: project._id,
+        status: 'disabled',
+        disabledReason: 'plan_limit'
+      });
+
+      for (const feature of featuresToReenable) {
+        logger.info(`[LimitEnforcement] Cascading re-enable to feature ${feature._id} (${feature.name})`);
+        feature.status = feature.previousStatus || 'active';
+        feature.disabledAt = null;
+        feature.disabledReason = null;
+        feature.previousStatus = null;
+        feature.disabledNote = null;
+        await feature.save();
+        totalFeaturesReenabled++;
+      }
     }
 
     // Log audit
@@ -553,12 +731,13 @@ class LimitEnforcementService {
       action: 'projects_reenabled_plan_upgrade',
       resourceType: 'project',
       description: `${reenabledIds.length} project(s) re-enabled after plan upgrade`,
-      afterState: { reenabledProjects: reenabledIds }
+      afterState: { reenabledProjects: reenabledIds, reenabledFeatures: totalFeaturesReenabled }
     });
 
-    logger.info(`Projects re-enabled: ${reenabledIds.length} projects for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Projects re-enabled: ${reenabledIds.length} projects for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Cascade re-enabled ${totalFeaturesReenabled} features`);
 
-    return { reenabled: reenabledIds.length, projects: reenabledIds };
+    return { reenabled: reenabledIds.length, projects: reenabledIds, featuresReenabled: totalFeaturesReenabled };
   }
 
   /**
@@ -569,26 +748,48 @@ class LimitEnforcementService {
    * @returns {Object} Result
    */
   async reamedFeatures(organizationId, limits, userId) {
+    logger.info(`[LimitEnforcement] Checking features for re-enable in org ${organizationId}`);
+
+    // Get IDs of active projects (only features under active projects can be re-enabled)
+    const activeProjectIds = await Project.find({
+      organization: organizationId,
+      isActive: true,
+      status: { $in: ['active', 'inactive'] }
+    }).distinct('_id');
+
+    logger.info(`[LimitEnforcement] Found ${activeProjectIds.length} active projects`);
+
     // Find features disabled due to plan limit (sorted by disabledAt to restore in order)
+    // Only features under active projects can be re-enabled
+    // Exclude deprecated features (from deleted projects)
     const disabledFeatures = await Feature.find({
       organization: organizationId,
       status: 'disabled',
-      disabledReason: 'plan_limit'
+      disabledReason: 'plan_limit',
+      project: { $in: activeProjectIds } // Only features under active projects
     }).sort({ disabledAt: 1 });
+
+    logger.info(`[LimitEnforcement] Found ${disabledFeatures.length} disabled features with reason 'plan_limit' under active projects`);
 
     if (disabledFeatures.length === 0) {
       return { reenabled: 0 };
     }
 
     const maxFeatures = limits.maxFeatures === null ? 999 : limits.maxFeatures;
+
+    // Count active features (excluding those from disabled projects)
     const activeFeatures = await Feature.countDocuments({
       organization: organizationId,
-      status: { $in: ['active', 'inactive', 'maintenance'] }
+      status: { $in: ['active', 'inactive', 'maintenance'] },
+      project: { $in: activeProjectIds }
     });
 
     const availableSlots = maxFeatures - activeFeatures;
 
+    logger.info(`[LimitEnforcement] maxFeatures: ${maxFeatures}, activeFeatures: ${activeFeatures}, availableSlots: ${availableSlots}`);
+
     if (availableSlots <= 0) {
+      logger.info(`[LimitEnforcement] No available slots to re-enable features`);
       return { reenabled: 0, message: 'No available slots' };
     }
 
@@ -596,6 +797,7 @@ class LimitEnforcementService {
     const reenabledIds = [];
 
     for (const feature of featuresToReenable) {
+      logger.info(`[LimitEnforcement] Re-enabling feature ${feature._id} (${feature.name}) with previousStatus: ${feature.previousStatus || 'active'}`);
       // Restore to previous status (was active, inactive, or maintenance)
       feature.status = feature.previousStatus || 'active';
       feature.disabledAt = null;
@@ -617,7 +819,7 @@ class LimitEnforcementService {
       afterState: { reenabledFeatures: reenabledIds }
     });
 
-    logger.info(`Features re-enabled: ${reenabledIds.length} features for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Features re-enabled: ${reenabledIds.length} features for org ${organizationId}`);
 
     return { reenabled: reenabledIds.length, features: reenabledIds };
   }

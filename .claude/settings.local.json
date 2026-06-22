@@ -169,7 +169,11 @@
       "Bash(node -c src/controllers/audit.controller.js)",
       "Bash(node -c src/services/audit.service.js)",
       "Bash(node -c src/utils/constants.js)",
-      "Bash(node -e \"import\\('./src/hooks/usePermissions.js'\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
+      "Bash(node -e \"import\\('./src/hooks/usePermissions.js'\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node *)",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(timeout 8)",
+      "Bash(xargs grep -l \"from.*toasts\\\\.js\")"
     ]
   }
 }

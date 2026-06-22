@@ -413,10 +413,16 @@ function AdminOrganizationDetailPage() {
                       <span className={`px-2 py-1 text-xs rounded ${
                         project.status === 'active' ? 'bg-green-100 text-green-700' :
                         project.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
-                        'bg-yellow-100 text-yellow-700'
+                        project.status === 'disabled' ? 'bg-red-100 text-red-700' :
+                        'bg-green-100 text-green-700'
                       }`}>
                         {project.status || 'active'}
                       </span>
+                      {project.status === 'disabled' && project.disabledReason && (
+                        <span className="ml-2 text-xs text-red-600">
+                          ({project.disabledReason === 'plan_limit' ? 'Plan limit' : project.disabledReason})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(project.createdAt)}
@@ -464,10 +470,17 @@ function AdminOrganizationDetailPage() {
                       <span className={`px-2 py-1 text-xs rounded ${
                         feature.status === 'active' ? 'bg-green-100 text-green-700' :
                         feature.status === 'inactive' ? 'bg-gray-100 text-gray-700' :
-                        'bg-yellow-100 text-yellow-700'
+                        feature.status === 'maintenance' ? 'bg-yellow-100 text-yellow-700' :
+                        feature.status === 'disabled' ? 'bg-red-100 text-red-700' :
+                        'bg-green-100 text-green-700'
                       }`}>
                         {feature.status || 'active'}
                       </span>
+                      {feature.status === 'disabled' && feature.disabledReason && (
+                        <span className="ml-2 text-xs text-red-600">
+                          ({feature.disabledReason === 'plan_limit' ? 'Plan limit' : feature.disabledReason})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatNumber(feature.stats?.totalTokens || 0)}

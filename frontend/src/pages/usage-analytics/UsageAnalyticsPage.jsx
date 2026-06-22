@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import analyticsApi from '../../services/api/analytics.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function UsageAnalyticsPage() {
   const [features, setFeatures] = useState([]);

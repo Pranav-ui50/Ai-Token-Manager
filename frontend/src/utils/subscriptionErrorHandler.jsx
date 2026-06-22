@@ -5,7 +5,8 @@
  * and displaying appropriate user messages.
  */
 
-import { showToast } from './toasts.js';
+import toast from 'react-hot-toast';
+import { showToast } from './toasts.jsx';
 
 /**
  * Check if an error is a subscription/limit related error
@@ -164,16 +165,29 @@ export const handleSubscriptionError = (error, options = {}) => {
 
   const errorInfo = getSubscriptionErrorMessage(error);
 
-  // Show appropriate toast
+  // Show toast with upgrade action button
   if (errorInfo.showUpgrade) {
-    showToast.error(errorInfo.message, {
-      action: {
-        label: 'Upgrade',
-        onClick: () => {
-          window.location.href = '/subscription';
+    // Use custom toast with action button for upgrade prompts
+    toast.error(
+      <div className="flex flex-col gap-2">
+        <span>{errorInfo.message}</span>
+        <button
+          onClick={() => {
+            toast.dismiss();
+            window.location.href = '/billing';
+          }}
+          className="mt-2 px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
+        >
+          Upgrade Plan
+        </button>
+      </div>,
+      {
+        duration: 8000,
+        style: {
+          maxWidth: '500px'
         }
       }
-    });
+    );
   } else {
     showToast.error(errorInfo.message);
   }
@@ -189,14 +203,27 @@ export const showLimitWarning = (resourceType, current, limit) => {
   const percentage = Math.round((current / limit) * 100);
 
   if (percentage >= 100) {
-    showToast.error(`${resourceName} limit reached (${current}/${limit}). Upgrade to continue.`, {
-      action: {
-        label: 'Upgrade',
-        onClick: () => {
-          window.location.href = '/subscription';
+    // Use custom toast with action button for limit exceeded
+    toast.error(
+      <div className="flex flex-col gap-2">
+        <span>{resourceName} limit reached ({current}/{limit}). Upgrade to continue.</span>
+        <button
+          onClick={() => {
+            toast.dismiss();
+            window.location.href = '/billing';
+          }}
+          className="mt-2 px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
+        >
+          Upgrade Plan
+        </button>
+      </div>,
+      {
+        duration: 8000,
+        style: {
+          maxWidth: '500px'
         }
       }
-    });
+    );
   } else if (percentage >= 80) {
     showToast.warning(`${resourceName} usage at ${percentage}% (${current}/${limit}). Consider upgrading.`);
   }

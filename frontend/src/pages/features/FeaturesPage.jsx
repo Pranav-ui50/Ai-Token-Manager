@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
 import featureApi from '../../services/api/feature.api.js';
 import Button from '../../components/common/Button.jsx';
 import usePermissions from '../../hooks/usePermissions.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const FeaturesPage = () => {
   const { canManageFeatures, canManagePlans, canRunSimulations, canViewAnalytics, role } = usePermissions();

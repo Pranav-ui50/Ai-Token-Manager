@@ -12,7 +12,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import apiKeyApi from '../../services/api/apiKey.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const PERMISSION_OPTIONS = [
   { value: 'providers:read', label: 'View Providers' },

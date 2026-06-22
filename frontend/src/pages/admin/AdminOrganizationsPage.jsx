@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import adminApi from '../../services/api/admin.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Available plan tiers (excluding free and enterprise)
 const AVAILABLE_PLANS = [
@@ -50,6 +50,35 @@ function AdminOrganizationsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrg, setCreatedOrg] = useState(null); // Store created org data for password display
   const [showPassword, setShowPassword] = useState(false); // Toggle password visibility
+
+  // Reset form to default values
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      slug: '',
+      description: '',
+      plan: 'starter',
+      ownerEmail: '',
+      ownerFirstName: '',
+      ownerLastName: '',
+      ownerPassword: '',
+      sendInvitation: true
+    });
+    setFormErrors({});
+    setShowPassword(false);
+  };
+
+  // Open modal with reset form
+  const handleOpenModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  // Close modal
+  const handleCloseModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
 
   // Fetch organizations
   const fetchOrganizations = async () => {
@@ -107,16 +136,26 @@ function AdminOrganizationsPage() {
   // Handle form changes
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
 
-    // Auto-generate slug from name
-    if (name === 'name') {
+    // For name fields, only allow letters
+    if (name === 'name' || name === 'ownerFirstName' || name === 'ownerLastName') {
+      const filteredValue = value.replace(/[^a-zA-Z\s]/g, '');
       setFormData(prev => ({
         ...prev,
-        slug: generateSlug(value)
+        [name]: filteredValue
+      }));
+
+      // Auto-generate slug from name
+      if (name === 'name') {
+        setFormData(prev => ({
+          ...prev,
+          slug: generateSlug(filteredValue)
+        }));
+      }
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
       }));
     }
 
@@ -132,6 +171,8 @@ function AdminOrganizationsPage() {
 
     if (!formData.name.trim()) {
       errors.name = 'Organization name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) {
+      errors.name = 'Organization name can only contain letters (no numbers or symbols)';
     } else if (formData.name.length < 2) {
       errors.name = 'Organization name must be at least 2 characters';
     } else if (formData.name.length > 60) {
@@ -156,12 +197,16 @@ function AdminOrganizationsPage() {
 
     if (!formData.ownerFirstName.trim()) {
       errors.ownerFirstName = 'First name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.ownerFirstName.trim())) {
+      errors.ownerFirstName = 'First name can only contain letters (no numbers or symbols)';
     } else if (formData.ownerFirstName.length > 30) {
       errors.ownerFirstName = 'First name cannot exceed 30 characters';
     }
 
     if (!formData.ownerLastName.trim()) {
       errors.ownerLastName = 'Last name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.ownerLastName.trim())) {
+      errors.ownerLastName = 'Last name can only contain letters (no numbers or symbols)';
     } else if (formData.ownerLastName.length > 30) {
       errors.ownerLastName = 'Last name cannot exceed 30 characters';
     }
@@ -328,7 +373,7 @@ function AdminOrganizationsPage() {
           <p className="text-sm text-gray-500 mt-1">Manage all organizations and their subscriptions</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpenModal}
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -419,7 +464,7 @@ function AdminOrganizationsPage() {
           <h3 className="mt-2 text-sm font-medium text-gray-900">No organizations found</h3>
           <p className="mt-1 text-sm text-gray-500">Get started by creating a new organization.</p>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={handleOpenModal}
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -532,7 +577,7 @@ function AdminOrganizationsPage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold text-gray-900">Create Organization</h2>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -572,8 +617,10 @@ function AdminOrganizationsPage() {
                     maxLength={60}
                   />
                   <div className="flex justify-between mt-1">
-                    {formErrors.name && (
+                    {formErrors.name ? (
                       <p className="text-sm text-red-500">{formErrors.name}</p>
+                    ) : (
+                      <p className="text-xs text-gray-400">Letters only</p>
                     )}
                     <p className="text-xs text-gray-400 ml-auto">{formData.name.length}/60</p>
                   </div>
@@ -645,8 +692,10 @@ function AdminOrganizationsPage() {
                       placeholder="John"
                       maxLength={30}
                     />
-                    {formErrors.ownerFirstName && (
+                    {formErrors.ownerFirstName ? (
                       <p className="mt-1 text-sm text-red-500">{formErrors.ownerFirstName}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-400">Letters only</p>
                     )}
                   </div>
                   <div>
@@ -664,8 +713,10 @@ function AdminOrganizationsPage() {
                       placeholder="Doe"
                       maxLength={30}
                     />
-                    {formErrors.ownerLastName && (
+                    {formErrors.ownerLastName ? (
                       <p className="mt-1 text-sm text-red-500">{formErrors.ownerLastName}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-400">Letters only</p>
                     )}
                   </div>
                 </div>
@@ -751,7 +802,7 @@ function AdminOrganizationsPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-gray-700"
                 >
                   Cancel
@@ -854,6 +905,7 @@ function AdminOrganizationsPage() {
               <button
                 onClick={() => {
                   setCreatedOrg(null);
+                  resetForm();
                   setShowModal(false);
                 }}
                 className="w-full px-4 py-2 bg-[#DC2626] text-white rounded-lg hover:bg-[#B91C1C] transition-colors"

@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import organizationApi from '../../services/api/organization.api.js';
 import Button from '../../components/common/Button.jsx';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function AcceptInvitationPage() {
   const { token } = useParams();

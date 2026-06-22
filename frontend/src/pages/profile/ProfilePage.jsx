@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { apiClient } from '../../services/api';
 import { Input, Select, Textarea, Form, FormActions, FormError, FormSuccess, Toggle } from '../../components/forms';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const ProfilePage = () => {
   const navigate = useNavigate();

@@ -12,8 +12,8 @@ import Modal from '../../components/common/Modal.jsx';
 import simulationApi from '../../services/api/simulation.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
 import ForecastCharts from '../../components/simulations/ForecastCharts.jsx';
-import { showToast } from '../../utils/toasts.js';
-import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.js';
+import { showToast } from '../../utils/toasts.jsx';
+import { handleSubscriptionError, isSubscriptionError } from '../../utils/subscriptionErrorHandler.jsx';
 
 const SIMULATION_TYPES = [
   { value: 'growth', label: 'User Growth Scenario', description: 'Model user growth and token usage projections' },
@@ -757,13 +757,23 @@ function SimulationsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {paginatedSimulations.map((sim, index) => (
-                <tr key={sim._id} className="hover:bg-gray-50">
+                <tr key={sim._id} className={`hover:bg-gray-50 ${sim.disabledAt ? 'opacity-60' : ''}`}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {startIndex + index + 1}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{sim.name}</div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {sim.name}
+                      {sim.disabledAt && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                          Disabled
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-gray-500">{sim.description || 'No description'}</div>
+                    {sim.disabledNote && (
+                      <div className="text-xs text-red-600 mt-1">{sim.disabledNote}</div>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{getTypeLabel(sim.type)}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">
@@ -787,9 +797,15 @@ function SimulationsPage() {
                         <>
                           <button
                             onClick={() => handleRunSimulation(sim._id)}
-                            disabled={runningId === sim._id}
-                            className="p-2 text-[#DC2626] hover:text-[#B91C1C] hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                            title={runningId === sim._id ? 'Running...' : 'Run Simulation'}
+                            disabled={runningId === sim._id || sim.disabledAt}
+                            className={`p-2 rounded-lg transition-colors ${
+                              sim.disabledAt
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : runningId === sim._id
+                                  ? 'text-gray-400 cursor-not-allowed'
+                                  : 'text-[#DC2626] hover:text-[#B91C1C] hover:bg-red-50'
+                            }`}
+                            title={sim.disabledAt ? 'Simulation is disabled due to plan limit' : (runningId === sim._id ? 'Running...' : 'Run Simulation')}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -798,8 +814,13 @@ function SimulationsPage() {
                           </button>
                           <button
                             onClick={() => handleEditSimulation(sim)}
-                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit"
+                            disabled={sim.disabledAt}
+                            className={`p-2 rounded-lg transition-colors ${
+                              sim.disabledAt
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : 'text-blue-600 hover:text-blue-800 hover:bg-blue-50'
+                            }`}
+                            title={sim.disabledAt ? 'Simulation is disabled due to plan limit' : 'Edit'}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -826,8 +847,13 @@ function SimulationsPage() {
                         <>
                           <button
                             onClick={() => handleDuplicateSimulation(sim)}
-                            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                            title="Duplicate"
+                            disabled={sim.disabledAt}
+                            className={`p-2 rounded-lg transition-colors ${
+                              sim.disabledAt
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            }`}
+                            title={sim.disabledAt ? 'Simulation is disabled due to plan limit' : 'Duplicate'}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -835,8 +861,13 @@ function SimulationsPage() {
                           </button>
                           <button
                             onClick={() => handleDeleteSimulation(sim)}
-                            className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
+                            disabled={sim.disabledAt}
+                            className={`p-2 rounded-lg transition-colors ${
+                              sim.disabledAt
+                                ? 'text-gray-300 cursor-not-allowed'
+                                : 'text-red-500 hover:text-red-700 hover:bg-red-50'
+                            }`}
+                            title={sim.disabledAt ? 'Simulation is disabled due to plan limit' : 'Delete'}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Loader from '../../components/common/Loader.jsx';
 import api from '../../services/api/axios.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const AdminLandingPageContent = () => {
   const [activeSection, setActiveSection] = useState('hero');
@@ -20,11 +20,11 @@ const AdminLandingPageContent = () => {
   const lastAddTimeRef = useRef(0);
 
   const sections = [
-    { id: 'hero', label: 'Hero Section', icon: '🏠' },
-    { id: 'features', label: 'Features', icon: '⚡' },
-    { id: 'analytics', label: 'Analytics', icon: '📊' },
-    { id: 'faq', label: 'FAQ', icon: '❓' },
-    { id: 'footer', label: 'Footer', icon: '📋' }
+    { id: 'hero', label: 'Hero Section' },
+    { id: 'features', label: 'Features' },
+    { id: 'analytics', label: 'Analytics' },
+    { id: 'faq', label: 'FAQ' },
+    { id: 'footer', label: 'Footer' }
   ];
 
   useEffect(() => {
@@ -247,7 +247,6 @@ const AdminLandingPageContent = () => {
       <div className="flex gap-6">
         {/* Section Tabs */}
         <div className="w-64 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3">Sections</h2>
           <nav className="space-y-1">
             {sections.map((section) => (
               <button
@@ -259,7 +258,6 @@ const AdminLandingPageContent = () => {
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <span className="text-lg">{section.icon}</span>
                 <span>{section.label}</span>
               </button>
             ))}

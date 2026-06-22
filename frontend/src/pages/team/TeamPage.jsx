@@ -15,7 +15,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Button from '../../components/common/Button.jsx';
 import Avatar from '../../components/common/Avatar.jsx';
 import Loader from '../../components/common/Loader.jsx';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const ROLE_OPTIONS = [
   { value: 'org_owner', label: 'Organization Owner', description: 'Full access to all features including billing', permissions: ['All permissions'] },
@@ -657,10 +657,7 @@ function TeamPage() {
         <form onSubmit={handleInviteMember} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">First Name<span className="text-red-500">*</span></label>
-                <span className="text-xs text-gray-400">{inviteForm.firstName.length}/50</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First Name<span className="text-red-500">*</span></label>
               <input
                 type="text"
                 name="firstName"
@@ -673,10 +670,7 @@ function TeamPage() {
               {inviteErrors.firstName && <p className="mt-1 text-xs text-red-500">{inviteErrors.firstName}</p>}
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-medium text-gray-700">Last Name<span className="text-red-500">*</span></label>
-                <span className="text-xs text-gray-400">{inviteForm.lastName.length}/50</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Last Name<span className="text-red-500">*</span></label>
               <input
                 type="text"
                 name="lastName"
@@ -691,10 +685,7 @@ function TeamPage() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">Email ID<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{inviteForm.email.length}/255</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email ID<span className="text-red-500">*</span></label>
             <input
               type="email"
               name="email"
@@ -708,10 +699,7 @@ function TeamPage() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-gray-700">Password<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{inviteForm.password.length}/100</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password<span className="text-red-500">*</span></label>
             <input
               type="text"
               name="password"

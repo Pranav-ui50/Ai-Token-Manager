@@ -18,7 +18,7 @@ import { useAuth } from '../../hooks/useAuth.js';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import analyticsApi from '../../services/api/analytics.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import { formatCurrencyWithSymbol } from '../../utils/currency.js';
 
 // Tab configuration

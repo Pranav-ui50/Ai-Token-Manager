@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import Loader from '../../components/common/Loader.jsx';
 import platformStatApi from '../../services/api/platformStat.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Default stats that can be initialized
 const DEFAULT_STATS_CONFIG = [

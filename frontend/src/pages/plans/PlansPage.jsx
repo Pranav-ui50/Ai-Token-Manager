@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
 import planApi from '../../services/api/plan.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
 import { useOrganization } from '../../context/index.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Get status badge styles for subscription
 const getStatusBadge = (status) => {

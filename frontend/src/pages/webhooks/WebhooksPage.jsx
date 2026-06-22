@@ -11,7 +11,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import webhookApi from '../../services/api/webhook.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const WEBHOOK_EVENTS = [
   { value: 'provider.created', label: 'Provider Created', category: 'Providers' },

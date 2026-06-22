@@ -11,7 +11,7 @@ import { useOrganization } from '../../context/OrganizationContext.jsx';
 import settingsApi from '../../services/api/settings.api.js';
 import organizationApi from '../../services/api/organization.api.js';
 import Modal from '../../components/common/Modal.jsx';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Get the backend base URL for serving static files
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';

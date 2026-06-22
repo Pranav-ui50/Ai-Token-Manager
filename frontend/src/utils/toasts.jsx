@@ -8,6 +8,33 @@
 import toast from 'react-hot-toast';
 
 // ==========================================
+// Helper function for limit exceeded toasts with action button
+// ==========================================
+
+const showLimitExceededToast = (message) => {
+  toast.error(
+    <div className="flex flex-col gap-2">
+      <span>{message}</span>
+      <button
+        onClick={() => {
+          toast.dismiss();
+          window.location.href = '/billing';
+        }}
+        className="mt-2 px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-md transition-colors"
+      >
+        Upgrade Plan
+      </button>
+    </div>,
+    {
+      duration: 8000,
+      style: {
+        maxWidth: '500px'
+      }
+    }
+  );
+};
+
+// ==========================================
 // Success Toasts
 // ==========================================
 
@@ -48,7 +75,6 @@ export const showToast = {
   memberInvited: () => toast.success('Invitation sent successfully.'),
   memberAdded: () => toast.success('Team member added successfully.'),
   memberRemoved: () => toast.success('Team member removed successfully.'),
-  roleUpdated: () => toast.success('Role updated successfully.'),
   invitationCancelled: () => toast.success('Invitation cancelled successfully.'),
   invitationAccepted: () => toast.success('Invitation accepted successfully.'),
   ownershipTransferred: () => toast.success('Ownership transferred successfully.'),
@@ -174,14 +200,14 @@ export const showToast = {
   validationError: (message) => toast.error(message || 'Please check your input and try again.'),
   sessionExpired: () => toast.error('Your session has expired. Please log in again.'),
 
-  // Plan Limits
-  limitExceeded: (message) => toast.error(message || 'You have reached your plan limit. Please upgrade your plan to continue.'),
-  projectLimitExceeded: (limit) => toast.error(`You have reached the maximum number of projects (${limit}) for your plan. Please upgrade to create more projects.`),
-  featureLimitExceeded: (limit) => toast.error(`You have reached the maximum number of features (${limit}) for your plan. Please upgrade to create more features.`),
-  simulationLimitExceeded: (limit) => toast.error(`You have reached the maximum number of simulations (${limit}) for your plan. Please upgrade to run more simulations.`),
-  teamMemberLimitExceeded: (limit) => toast.error(`You have reached the maximum number of team members (${limit}) for your plan. Please upgrade to add more members.`),
-  apiCallLimitExceeded: (limit) => toast.error(`You have reached your API call limit (${limit}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
-  tokenLimitExceeded: (limit) => toast.error(`You have reached your token limit (${limit.toLocaleString()}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
+  // Plan Limits - use custom toast with Upgrade button
+  limitExceeded: (message) => showLimitExceededToast(message || 'You have reached your plan limit. Please upgrade your plan to continue.'),
+  projectLimitExceeded: (limit) => showLimitExceededToast(`You have reached the maximum number of projects (${limit}) for your plan. Please upgrade to create more projects.`),
+  featureLimitExceeded: (limit) => showLimitExceededToast(`You have reached the maximum number of features (${limit}) for your plan. Please upgrade to create more features.`),
+  simulationLimitExceeded: (limit) => showLimitExceededToast(`You have reached the maximum number of simulations (${limit}) for your plan. Please upgrade to run more simulations.`),
+  teamMemberLimitExceeded: (limit) => showLimitExceededToast(`You have reached the maximum number of team members (${limit}) for your plan. Please upgrade to add more members.`),
+  apiCallLimitExceeded: (limit) => showLimitExceededToast(`You have reached your API call limit (${limit}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
+  tokenLimitExceeded: (limit) => showLimitExceededToast(`You have reached your token limit (${limit.toLocaleString()}) for this billing period. Please upgrade your plan or wait for the next billing cycle.`),
 
   // Warnings
   warning: (message) => toast(message, { icon: '⚠️', style: { background: '#f59e0b', color: '#fff' } }),

@@ -559,7 +559,13 @@ class BillingController {
       // Get current plan
       const plan = await Plan.findById(organization.subscription?.planId);
 
-      // Get current counts
+      // Get active project IDs to filter features/simulations
+      const activeProjectIds = await Project.find({
+        organization: organizationId,
+        isActive: true
+      }).distinct('_id');
+
+      // Get current counts - only count active (non-deleted) resources
       const [
         projectCount,
         activeProjects,
@@ -574,15 +580,41 @@ class BillingController {
         activeMembers,
         disabledMembers
       ] = await Promise.all([
-        Project.countDocuments({ organization: organizationId }),
-        Project.countDocuments({ organization: organizationId, status: { $in: ['active', 'inactive'] } }),
-        Project.countDocuments({ organization: organizationId, status: 'disabled' }),
-        Feature.countDocuments({ organization: organizationId }),
-        Feature.countDocuments({ organization: organizationId, status: { $in: ['active', 'inactive', 'maintenance'] } }),
-        Feature.countDocuments({ organization: organizationId, status: 'disabled' }),
-        Simulation.countDocuments({ organization: organizationId }),
-        Simulation.countDocuments({ organization: organizationId, status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] } }),
-        Simulation.countDocuments({ organization: organizationId, status: 'disabled' }),
+        // Projects: only count non-deleted (isActive: true)
+        Project.countDocuments({ organization: organizationId, isActive: true }),
+        Project.countDocuments({ organization: organizationId, isActive: true, status: { $in: ['active', 'inactive'] } }),
+        Project.countDocuments({ organization: organizationId, isActive: true, status: 'disabled' }),
+        // Features: only from active projects
+        Feature.countDocuments({ organization: organizationId, project: { $in: activeProjectIds } }),
+        Feature.countDocuments({ organization: organizationId, project: { $in: activeProjectIds }, status: { $in: ['active', 'inactive', 'maintenance'] } }),
+        Feature.countDocuments({ organization: organizationId, project: { $in: activeProjectIds }, status: 'disabled' }),
+        // Simulations: standalone (no project) OR from active projects
+        Simulation.countDocuments({
+          organization: organizationId,
+          $or: [
+            { project: null },
+            { project: { $exists: false } },
+            { project: { $in: activeProjectIds } }
+          ]
+        }),
+        Simulation.countDocuments({
+          organization: organizationId,
+          $or: [
+            { project: null },
+            { project: { $exists: false } },
+            { project: { $in: activeProjectIds } }
+          ],
+          status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
+        }),
+        Simulation.countDocuments({
+          organization: organizationId,
+          $or: [
+            { project: null },
+            { project: { $exists: false } },
+            { project: { $in: activeProjectIds } }
+          ],
+          status: 'disabled'
+        }),
         organization.members?.length || 0,
         organization.members?.filter(m => m.status === 'active' || m.status === 'inactive').length || 0,
         organization.members?.filter(m => m.status === 'disabled').length || 0

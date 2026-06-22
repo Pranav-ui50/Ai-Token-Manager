@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import usePermissions from '../../hooks/usePermissions.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import Loader from '../../components/common/Loader.jsx';
 
 const ProfitAnalysisPage = () => {

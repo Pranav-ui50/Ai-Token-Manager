@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import modelApi from '../../services/api/model.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function ModelMappingPage() {
   const [features, setFeatures] = useState([]);

@@ -118,13 +118,13 @@ const DashboardPage = () => {
           console.error('[Dashboard] Projects fetch error:', err);
           return [];
         }),
-        // Features - get all features (filtered by organization via auth)
-        featureApi.getAll({ limit: 100 }).catch(err => {
+        // Features - filter by organization
+        featureApi.getAll({ limit: 100, organization: organizationId }).catch(err => {
           console.error('[Dashboard] Features fetch error:', err);
           return { data: { features: [], pagination: { total: 0 } } };
         }),
-        // Plans - get all plans (filtered by organization via auth)
-        planApi.getAll({ limit: 100 }).catch(err => {
+        // Plans - get public plans (available to all organizations)
+        planApi.getPublic().catch(err => {
           console.error('[Dashboard] Plans fetch error:', err);
           return { data: { plans: [], pagination: { total: 0 } } };
         }),
@@ -164,16 +164,33 @@ const DashboardPage = () => {
         console.error('[Dashboard] Features failed:', featuresRes.reason);
       }
 
-      // Process plans - API returns axios response, response.data = { success: true, data: { plans: [], pagination: {} } }
+      // Process plans - API returns axios response from getPublic()
       if (plansRes.status === 'fulfilled') {
         const plansResponse = plansRes.value;
-        // Axios response: response.data = { success: true, data: { plans: [...], pagination: {...} } }
-        const apiData = plansResponse?.data; // { success: true, data: {...} }
-        const innerData = apiData?.data || apiData || {}; // { plans: [...], pagination: {...} }
-        const plansList = innerData.plans || [];
-        const pagination = innerData.pagination || {};
-        const count = pagination.total || innerData.total || plansList.length || 0;
-        console.log('[Dashboard] Plans count:', count, 'innerData:', innerData);
+        // getPublic() returns { success: true, data: { plans: [...] } } or { plans: [...] }
+        const apiData = plansResponse?.data; // { success: true, data: {...} } or { plans: [...] }
+        let plansList = [];
+        let count = 0;
+
+        if (apiData?.success && apiData?.data?.plans) {
+          // Format: { success: true, data: { plans: [...] } }
+          plansList = apiData.data.plans;
+          count = plansList.length;
+        } else if (apiData?.plans) {
+          // Format: { plans: [...] }
+          plansList = apiData.plans;
+          count = plansList.length;
+        } else if (Array.isArray(apiData)) {
+          // Format: [...]
+          plansList = apiData;
+          count = plansList.length;
+        } else if (Array.isArray(plansResponse)) {
+          // Direct array response
+          plansList = plansResponse;
+          count = plansList.length;
+        }
+
+        console.log('[Dashboard] Plans count:', count);
         setStats(prev => ({ ...prev, plans: count }));
       } else {
         console.error('[Dashboard] Plans failed:', plansRes.reason);

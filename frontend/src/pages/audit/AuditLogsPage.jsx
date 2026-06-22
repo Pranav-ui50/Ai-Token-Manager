@@ -641,19 +641,20 @@ function AuditLogsPage() {
             </table>
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/* Pagination Footer */}
+          {total > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-6 py-4 mt-6">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                {/* Records per page selector */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-700">Rows per page:</span>
+                  <span className="text-sm text-gray-600">Rows per page:</span>
                   <select
                     value={limit}
                     onChange={(e) => {
                       setLimit(parseInt(e.target.value, 10));
                       setPage(1);
                     }}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -661,14 +662,18 @@ function AuditLogsPage() {
                     <option value={100}>100</option>
                   </select>
                 </div>
-                <div className="text-sm text-gray-700">
-                  Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} results
+
+                {/* Showing range */}
+                <div className="text-sm text-gray-600">
+                  Showing {((page - 1) * limit) + 1} - {Math.min(page * limit, total)} of {total} logs
                 </div>
-                <div className="flex items-center gap-1">
+
+                {/* Page navigation */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage(1)}
                     disabled={page === 1}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-1.5 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                     title="First page"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -678,86 +683,48 @@ function AuditLogsPage() {
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
                   >
                     Previous
                   </button>
-                  {/* Page Numbers */}
                   <div className="flex items-center gap-1">
-                    {(() => {
-                      const pages = [];
-                      const maxVisiblePages = 5;
-                      let startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
-                      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-                      if (endPage - startPage + 1 < maxVisiblePages) {
-                        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (page <= 3) {
+                        pageNum = i + 1;
+                      } else if (page >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = page - 2 + i;
                       }
-
-                      if (startPage > 1) {
-                        pages.push(
-                          <button
-                            key={1}
-                            onClick={() => setPage(1)}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
-                          >
-                            1
-                          </button>
-                        );
-                        if (startPage > 2) {
-                          pages.push(
-                            <span key="ellipsis-start" className="px-1 text-gray-400">...</span>
-                          );
-                        }
-                      }
-
-                      for (let i = startPage; i <= endPage; i++) {
-                        pages.push(
-                          <button
-                            key={i}
-                            onClick={() => setPage(i)}
-                            className={`px-3 py-1 text-sm border rounded ${
-                              i === page
-                                ? 'bg-[#DC2626] text-white border-[#DC2626]'
-                                : 'border-gray-300 hover:bg-gray-100'
-                            }`}
-                          >
-                            {i}
-                          </button>
-                        );
-                      }
-
-                      if (endPage < totalPages) {
-                        if (endPage < totalPages - 1) {
-                          pages.push(
-                            <span key="ellipsis-end" className="px-1 text-gray-400">...</span>
-                          );
-                        }
-                        pages.push(
-                          <button
-                            key={totalPages}
-                            onClick={() => setPage(totalPages)}
-                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
-                          >
-                            {totalPages}
-                          </button>
-                        );
-                      }
-
-                      return pages;
-                    })()}
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                            page === pageNum
+                              ? 'bg-[#DC2626] text-white'
+                              : 'hover:bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
                   </div>
                   <button
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 text-sm"
                   >
                     Next
                   </button>
                   <button
                     onClick={() => setPage(totalPages)}
                     disabled={page === totalPages}
-                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-1.5 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
                     title="Last page"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

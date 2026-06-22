@@ -144,7 +144,8 @@ const FeatureDetailPage = () => {
       active: 'bg-green-100 text-green-800',
       inactive: 'bg-gray-100 text-gray-800',
       maintenance: 'bg-yellow-100 text-yellow-800',
-      deprecated: 'bg-red-100 text-red-800'
+      deprecated: 'bg-red-100 text-red-800',
+      disabled: 'bg-red-100 text-red-700'
     };
     return styles[status] || styles.inactive;
   };
@@ -302,7 +303,14 @@ const FeatureDetailPage = () => {
               </Link>
               <div>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-gray-900">{feature.name}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {feature.name}
+                    {feature.status === 'disabled' && (
+                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                        Disabled
+                      </span>
+                    )}
+                  </h1>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(feature.status)}`}>
                     {feature.status}
                   </span>
@@ -313,13 +321,22 @@ const FeatureDetailPage = () => {
                 {feature.description && (
                   <p className="text-sm text-gray-500 mt-1">{feature.description}</p>
                 )}
+                {feature.disabledNote && feature.status === 'disabled' && (
+                  <p className="text-sm text-red-600 mt-1">{feature.disabledNote}</p>
+                )}
               </div>
             </div>
             {!isViewer && (
             <div className="flex items-center gap-3">
               <Link
                 to={`/features/${id}/edit`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${
+                  feature.status === 'disabled'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                }`}
+                onClick={(e) => feature.status === 'disabled' && e.preventDefault()}
+                title={feature.status === 'disabled' ? 'Feature is disabled due to plan limit' : 'Edit feature'}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -327,8 +344,14 @@ const FeatureDetailPage = () => {
                 Edit
               </Link>
               <button
-                onClick={handleDeleteClick}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+                onClick={feature.status === 'disabled' ? undefined : handleDeleteClick}
+                disabled={feature.status === 'disabled'}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${
+                  feature.status === 'disabled'
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-red-50 text-red-600 hover:bg-red-100'
+                }`}
+                title={feature.status === 'disabled' ? 'Feature is disabled due to plan limit' : 'Delete feature'}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

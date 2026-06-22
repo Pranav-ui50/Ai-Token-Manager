@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Loader from '../../components/common/Loader.jsx';
 import featureApi from '../../services/api/feature.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 function TokenEstimatesPage() {
   const [features, setFeatures] = useState([]);

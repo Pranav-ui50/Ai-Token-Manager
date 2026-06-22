@@ -12,7 +12,7 @@ import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import { useFeatureCurrency } from '../../hooks/useProjectCurrency.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 // Validation constants
 const VALIDATION_RULES = {

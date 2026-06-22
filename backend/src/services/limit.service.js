@@ -135,19 +135,36 @@ class LimitService {
   async getCurrentUsage(organizationId) {
     const organization = await Organization.findById(organizationId);
 
-    // Count only active (non-disabled) resources
-    // Projects: status in ['active', 'inactive'] (not 'disabled')
+    // Get all active project IDs for this organization
+    // This ensures we only count projects that are not soft-deleted
+    const activeProjectIds = await Project.find({
+      organization: organizationId,
+      isActive: true,
+      status: { $in: ['active', 'inactive'] }
+    }).distinct('_id');
+
+    // Count only active (non-disabled, non-deleted) resources
     const [projectCount, featureCount, simulationCount] = await Promise.all([
+      // Projects: count active/inactive status AND not soft-deleted
       Project.countDocuments({
         organization: organizationId,
+        isActive: true,
         status: { $in: ['active', 'inactive'] }
       }),
+      // Features: count features from active projects only
       Feature.countDocuments({
         organization: organizationId,
+        project: { $in: activeProjectIds },
         status: { $in: ['active', 'inactive', 'maintenance'] }
       }),
+      // Simulations: count standalone simulations (no project) OR simulations from active projects
       Simulation.countDocuments({
         organization: organizationId,
+        $or: [
+          { project: null },
+          { project: { $exists: false } },
+          { project: { $in: activeProjectIds } }
+        ],
         status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
       })
     ]);
@@ -157,11 +174,12 @@ class LimitService {
       m => m.status === 'active' || m.status === 'inactive'
     ).length || 0;
 
-    // Get API calls and tokens from feature stats
+    // Get API calls and tokens from feature stats (only from active projects)
     const featureUsage = await Feature.aggregate([
       {
         $match: {
           organization: organizationId,
+          project: { $in: activeProjectIds },
           status: { $ne: 'disabled' }  // Exclude disabled features
         }
       },

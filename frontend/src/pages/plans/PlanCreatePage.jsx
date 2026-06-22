@@ -11,7 +11,7 @@ import featureApi from '../../services/api/feature.api.js';
 import Button from '../../components/common/Button.jsx';
 import Input from '../../components/common/Input.jsx';
 import Select from '../../components/common/Select.jsx';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const PlanCreatePage = () => {
   const navigate = useNavigate();

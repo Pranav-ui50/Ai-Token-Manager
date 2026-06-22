@@ -11,7 +11,7 @@ import Modal from '../../components/common/Modal.jsx';
 import Loader from '../../components/common/Loader.jsx';
 import integrationApi from '../../services/api/integration.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const INTEGRATION_TYPES = [
   { value: 'openai', label: 'OpenAI' },

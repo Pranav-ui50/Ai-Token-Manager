@@ -21,7 +21,7 @@ import { storage } from '../../utils/helpers.js';
 import { AUTH_KEYS } from '../../utils/constants.js';
 import publicApi from '../../services/api/public.api.js';
 import registrationPaymentApi from '../../services/api/registrationPayment.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 
 const RegisterPage = () => {
   const navigate = useNavigate();

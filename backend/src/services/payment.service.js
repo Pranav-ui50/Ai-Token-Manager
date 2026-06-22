@@ -607,10 +607,34 @@ class PaymentService {
     const planId = session.metadata?.planId;
     const billingCycle = session.metadata?.billingCycle || 'monthly';
 
+    // Get plan details to determine tier
+    let planTier = 'starter';
+    let targetPlan = null;
+
+    // Try to find the plan to get its tier
+    if (planId && /^[a-fA-F0-9]{24}$/.test(planId)) {
+      targetPlan = await Plan.findById(planId).catch(() => null);
+      if (targetPlan) {
+        planTier = targetPlan.tier;
+      }
+    } else if (planId) {
+      targetPlan = await Plan.findOne({ tier: planId.toLowerCase(), status: 'active' }).catch(() => null);
+      if (targetPlan) {
+        planTier = targetPlan.tier;
+      }
+    }
+
+    // Store previous plan for sync logic
+    const previousPlanTier = organization.subscription?.plan || 'starter';
+
+    logger.info(`[Stripe] Plan tier: ${planTier}, Previous plan tier: ${previousPlanTier}`);
+
     // Update subscription status
     organization.subscription = {
       ...organization.subscription?.toObject(),
-      plan: planId || 'starter',
+      planId: planId || null,
+      plan: planTier, // Store tier string, not ObjectId
+      previousPlan: previousPlanTier, // Store previous plan for sync
       status: 'active',
       billingCycle,
       stripeCustomerId: session.customer,
@@ -630,35 +654,53 @@ class PaymentService {
       resourceType: 'subscription',
       resourceId: session.id,
       resourceName: 'Stripe Checkout',
-      description: `Checkout session completed for plan ${planId}`,
+      description: `Checkout session completed for plan ${planTier}`,
       metadata: {
         provider: 'stripe',
         sessionId: session.id,
         planId,
-        billingCycle
+        planTier,
+        billingCycle,
+        previousPlanTier
       }
     });
 
-    // Enforce plan limits after checkout success
+    // Sync resources based on plan change (upgrade/downgrade)
     try {
-      logger.info(`[Stripe] Enforcing plan limits for organization ${organizationId}`);
+      logger.info(`[Stripe] Syncing resources for organization ${organizationId}`);
 
-      const targetPlan = await Plan.findById(planId).catch(() => null) || await Plan.findOne({ tier: planId?.toLowerCase() });
+      // IMPORTANT: Use the planTier we already verified, not planId lookup
+      // The planId might point to a different plan in the database, but planTier is what the user purchased
+      logger.info(`[Stripe] Using verified plan tier: ${planTier} for sync (from planId: ${planId})`);
+      logger.info(`[Stripe] Previous plan: ${previousPlanTier}`);
+
+      // Get the plan limits using the verified tier
+      if (!targetPlan) {
+        targetPlan = await Plan.findOne({ tier: planTier.toLowerCase(), status: 'active' }).catch(() => null);
+      }
 
       if (targetPlan) {
-        logger.info(`[Stripe] Plan found: ${targetPlan.tier}, limits:`, targetPlan.limits);
-        const enforcementResult = await limitEnforcementService.enforceAllLimits(
-          organizationId,
-          organization.owner?._id,
-          targetPlan
-        );
-        logger.info(`[Stripe] Limit enforcement result:`, JSON.stringify(enforcementResult));
+        logger.info(`[Stripe] Found plan by verified tier: ${targetPlan.tier}, limits: maxProjects=${targetPlan.limits?.maxProjects}, maxFeatures=${targetPlan.limits?.maxFeatures}, maxSimulations=${targetPlan.limits?.maxSimulations}, maxUsers=${targetPlan.limits?.maxUsers}`);
       } else {
-        logger.warn(`[Stripe] Plan not found for limit enforcement: ${planId}`);
+        // Last resort: create a minimal plan object with the verified tier
+        logger.warn(`[Stripe] No plan document found, using minimal plan object with tier: ${planTier}`);
+        targetPlan = {
+          tier: planTier,
+          limits: {}
+        };
       }
-    } catch (enforcementError) {
+
+      // Use the centralized sync function that handles both upgrade and downgrade
+      const syncResult = await limitEnforcementService.syncResourcesAfterPlanChange(
+        organizationId,
+        organization.owner?._id,
+        targetPlan,
+        previousPlanTier
+      );
+      logger.info(`[Stripe] Resource sync result:`, JSON.stringify(syncResult));
+    } catch (syncError) {
       // Log but don't fail the payment
-      logger.error(`[Stripe] Failed to enforce limits: ${enforcementError.message}`);
+      logger.error(`[Stripe] Failed to sync resources: ${syncError.message}`, { stack: syncError.stack });
     }
   }
 
@@ -1304,21 +1346,29 @@ class PaymentService {
     let planDisplayName = 'Subscription';
     let planName = 'Unknown';
     let planSlug = null;
+    let planTier = 'starter';
     try {
       const planDetails = await this.getPlan(planId);
       planDisplayName = planDetails?.displayName || 'Subscription';
       planName = planDetails?.name || 'Unknown';
       planSlug = planDetails?.slug || null;
+      planTier = planDetails?.tier || planDetails?.slug || 'starter';
     } catch (e) {
       // Use default name if plan not found
     }
+
+    // Store previous plan for sync logic
+    const previousPlanTier = organization.subscription?.plan || 'starter';
+
+    logger.info(`[Razorpay] Plan tier: ${planTier}, Previous plan tier: ${previousPlanTier}`);
 
     // Update organization subscription
     organization.subscription = {
       ...(organization.subscription?.toObject?.() || organization.subscription || {}),
       status: 'active',
       planId: planId,
-      plan: planSlug, // Store the plan slug for backward compatibility
+      plan: planTier, // Store the tier string for plan comparison
+      previousPlan: previousPlanTier, // Store previous plan for sync
       planName: planName,
       billingCycle: billingCycle,
       razorpayOrderId: orderId,
@@ -1329,7 +1379,7 @@ class PaymentService {
     };
     await organization.save();
 
-    logger.info(`[Razorpay] Organization subscription updated: ${organization._id}, plan: ${planId}, status: active`);
+    logger.info(`[Razorpay] Organization subscription updated: ${organization._id}, plan: ${planTier}, status: active`);
 
     // Create invoice (use upsert to handle any race conditions)
     const invoiceNumber = await Invoice.generateInvoiceNumber(organization._id);
@@ -1445,28 +1495,44 @@ class PaymentService {
       }
     });
 
-    // Enforce plan limits after payment success
+    // Sync resources based on plan change (upgrade/downgrade)
     try {
-      logger.info(`[Razorpay] Enforcing plan limits for organization ${organizationId}`);
+      logger.info(`[Razorpay] Syncing resources for organization ${organizationId}`);
 
-      // Get the plan details
-      const planDetails = await this.getPlan(planId);
-      const targetPlan = await Plan.findById(planId).catch(() => null) || await Plan.findOne({ tier: planId.toLowerCase() });
+      // IMPORTANT: Use the planTier we already verified from getPlan(), not planId lookup
+      // The planId might point to a different plan in the database, but planTier is what the user purchased
+      logger.info(`[Razorpay] Using verified plan tier: ${planTier} for sync (from planId: ${planId})`);
+      logger.info(`[Razorpay] Previous plan: ${previousPlanTier}`);
+
+      // Get the plan limits using the verified tier
+      let targetPlan = null;
+
+      // First try to find by the verified tier
+      targetPlan = await Plan.findOne({ tier: planTier.toLowerCase(), status: 'active' }).catch(() => null);
 
       if (targetPlan) {
-        logger.info(`[Razorpay] Plan found: ${targetPlan.tier}, limits:`, targetPlan.limits);
-        const enforcementResult = await limitEnforcementService.enforceAllLimits(
-          organizationId,
-          organization.owner?._id,
-          targetPlan
-        );
-        logger.info(`[Razorpay] Limit enforcement result:`, JSON.stringify(enforcementResult));
+        logger.info(`[Razorpay] Found plan by verified tier: ${targetPlan.tier}, limits: maxProjects=${targetPlan.limits?.maxProjects}, maxFeatures=${targetPlan.limits?.maxFeatures}, maxSimulations=${targetPlan.limits?.maxSimulations}, maxUsers=${targetPlan.limits?.maxUsers}`);
       } else {
-        logger.warn(`[Razorpay] Plan not found for limit enforcement: ${planId}`);
+        // Last resort: create a minimal plan object with the verified tier
+        // The limits will be fetched from DEFAULT_LIMITS in limitEnforcement.service.js
+        logger.warn(`[Razorpay] No plan document found for tier: ${planTier}, using minimal plan object`);
+        targetPlan = {
+          tier: planTier,
+          limits: {}
+        };
       }
-    } catch (enforcementError) {
+
+      // Use the centralized sync function that handles both upgrade and downgrade
+      const syncResult = await limitEnforcementService.syncResourcesAfterPlanChange(
+        organizationId,
+        organization.owner?._id,
+        targetPlan,
+        previousPlanTier
+      );
+      logger.info(`[Razorpay] Resource sync result:`, JSON.stringify(syncResult));
+    } catch (syncError) {
       // Log but don't fail the payment
-      logger.error(`[Razorpay] Failed to enforce limits: ${enforcementError.message}`);
+      logger.error(`[Razorpay] Failed to sync resources: ${syncError.message}`, { stack: syncError.stack });
     }
 
     return {

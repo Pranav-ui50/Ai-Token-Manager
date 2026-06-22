@@ -11,7 +11,7 @@ import Loader from '../../components/common/Loader.jsx';
 import { useOrganization } from '../../context/OrganizationContext.jsx';
 import usePermissions from '../../hooks/usePermissions.js';
 import analyticsApi from '../../services/api/analytics.api.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import jsPDF from 'jspdf';
 
 // Report Content Component - displays formatted report data

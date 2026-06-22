@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../../services/api/axios.js';
-import { showToast } from '../../utils/toasts.js';
+import { showToast } from '../../utils/toasts.jsx';
 import { PLANS_REFRESH_EVENT } from '../../context/PlansContext.jsx';
 import Loader from '../../components/common/Loader.jsx';
 
@@ -266,9 +266,11 @@ const AdminPlansPage = () => {
   const validateForm = () => {
     const errors = {};
 
-    // Name validation
+    // Name validation - only letters allowed
     if (!formData.name.trim()) {
       errors.name = 'Plan name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) {
+      errors.name = 'Plan name can only contain letters (no numbers or symbols)';
     } else if (formData.name.length > 60) {
       errors.name = 'Plan name cannot exceed 60 characters';
     }
@@ -523,6 +525,12 @@ const AdminPlansPage = () => {
     }).format(price);
   };
 
+  // Format number in Indian style (e.g., 5,00,000 instead of 500,000)
+  const formatIndianNumber = (num) => {
+    if (num === null || num === undefined) return '';
+    return new Intl.NumberFormat('en-IN').format(num);
+  };
+
   if (loading && plans.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -591,40 +599,28 @@ const AdminPlansPage = () => {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                    <div className="space-y-1 min-w-[140px]">
                       {plan.limits?.maxProjects !== null && plan.limits?.maxProjects !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                          {plan.limits.maxProjects} Projects
-                        </span>
+                        <div className="text-xs text-gray-700">Projects: <span className="font-medium">{plan.limits.maxProjects}</span></div>
                       )}
                       {plan.limits?.maxFeatures !== null && plan.limits?.maxFeatures !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                          {plan.limits.maxFeatures} Features
-                        </span>
+                        <div className="text-xs text-gray-700">Features: <span className="font-medium">{plan.limits.maxFeatures}</span></div>
                       )}
                       {plan.limits?.maxSimulations !== null && plan.limits?.maxSimulations !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                          {plan.limits.maxSimulations} Sims
-                        </span>
+                        <div className="text-xs text-gray-700">Simulations: <span className="font-medium">{plan.limits.maxSimulations}</span></div>
                       )}
                       {plan.limits?.maxUsers !== null && plan.limits?.maxUsers !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                          {plan.limits.maxUsers} Users
-                        </span>
+                        <div className="text-xs text-gray-700">Users: <span className="font-medium">{plan.limits.maxUsers}</span></div>
                       )}
                       {plan.limits?.maxApiCalls !== null && plan.limits?.maxApiCalls !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                          {plan.limits.maxApiCalls?.toLocaleString()} API
-                        </span>
+                        <div className="text-xs text-gray-700">API Calls: <span className="font-medium">{formatIndianNumber(plan.limits.maxApiCalls)}</span></div>
                       )}
                       {plan.limits?.maxTokens !== null && plan.limits?.maxTokens !== undefined && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800">
-                          {plan.limits.maxTokens?.toLocaleString()} Tokens
-                        </span>
+                        <div className="text-xs text-gray-700">Tokens: <span className="font-medium">{formatIndianNumber(plan.limits.maxTokens)}</span></div>
                       )}
                       {!plan.limits?.maxProjects && !plan.limits?.maxFeatures && !plan.limits?.maxSimulations &&
                        !plan.limits?.maxUsers && !plan.limits?.maxApiCalls && !plan.limits?.maxTokens && (
-                        <span className="text-xs text-gray-400">No limits set</span>
+                        <span className="text-xs text-gray-400 italic">Unlimited</span>
                       )}
                     </div>
                   </td>
@@ -727,7 +723,9 @@ const AdminPlansPage = () => {
                       name="name"
                       value={formData.name}
                       onChange={(e) => {
-                        handleChange(e);
+                        // Only allow letters and spaces
+                        const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                        setFormData(prev => ({ ...prev, name: value }));
                         if (formErrors.name) setFormErrors(prev => ({ ...prev, name: '' }));
                       }}
                       maxLength={60}
@@ -738,7 +736,7 @@ const AdminPlansPage = () => {
                       {formErrors.name ? (
                         <span className="text-xs text-red-500">{formErrors.name}</span>
                       ) : (
-                        <span></span>
+                        <span className="text-xs text-gray-400">Letters only</span>
                       )}
                       <span className="text-xs text-gray-400">{formData.name.length}/60</span>
                     </div>
