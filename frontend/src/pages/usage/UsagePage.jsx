@@ -7,7 +7,9 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
+import { useSiteSettings } from '../../context/SiteSettingsContext.jsx';
 import analyticsApi from '../../services/api/analytics.api.js';
 import webhookApi from '../../services/api/webhook.api.js';
 import integrationApi from '../../services/api/integration.api.js';
@@ -24,6 +26,7 @@ const extractNumber = (value) => {
 
 function UsagePage() {
   const { user } = useAuth();
+  const { settings: siteSettings } = useSiteSettings();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [usageData, setUsageData] = useState({
@@ -189,17 +192,7 @@ function UsagePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="mt-4 text-gray-500">Loading usage data...</p>
-        </div>
-      </div>
-    );
+    return <Loader fullPage text="Loading usage data..." />;
   }
 
   if (error) {
@@ -218,8 +211,8 @@ function UsagePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Usage & Analytics</h1>
-          <p className="text-sm text-gray-500">API usage, token consumption, and performance metrics</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{siteSettings?.siteName || 'Usage & Analytics'}</h1>
+          <p className="text-sm text-gray-500">{siteSettings?.siteDescription || 'API usage, token consumption, and performance metrics'}</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -594,20 +587,7 @@ function UsagePage() {
       {/* Quick Actions - Developer Only */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            to="/api-keys"
-            className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"
-          >
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm mb-3">
-              <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-              </svg>
-            </div>
-            <p className="font-medium text-gray-900">API Keys</p>
-            <p className="text-xs text-gray-500 mt-1">Manage your API keys</p>
-          </Link>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
             to="/integrations"
             className="p-4 bg-gray-50 rounded-xl hover:bg-red-50 hover:border-red-200 border border-gray-100 transition-all text-left"

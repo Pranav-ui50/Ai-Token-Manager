@@ -7,6 +7,7 @@
 import billingService from '../services/billing.service.js';
 import subscriptionService from '../services/subscription.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
+import logger from '../config/logger.js';
 
 class BillingController {
   /**
@@ -470,6 +471,161 @@ class BillingController {
         success: true,
         data: result,
         message: `Processed ${result.processed} expired subscriptions`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Manually enforce plan limits (admin only)
+   * POST /api/billing/:organizationId/enforce-limits
+   */
+  async enforceLimits(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+      const { planId } = req.body;
+      const userId = req.user.id;
+
+      // Get the organization
+      const organization = await (await import('../models/Organization.js')).default.findById(organizationId);
+      if (!organization) {
+        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+      }
+
+      // Get the target plan
+      let targetPlan = null;
+      if (planId) {
+        targetPlan = await (await import('../models/Plan.js')).default.findById(planId);
+      } else {
+        // Use current plan
+        targetPlan = await (await import('../models/Plan.js')).default.findById(organization.subscription?.planId);
+      }
+
+      logger.info(`[ManualEnforce] Manually enforcing limits for org ${organizationId}`, {
+        currentPlan: organization.subscription?.plan,
+        currentPlanId: organization.subscription?.planId,
+        targetPlanId: targetPlan?._id,
+        targetPlanTier: targetPlan?.tier,
+        targetPlanLimits: targetPlan?.limits
+      });
+
+      // Import limit enforcement service
+      const limitEnforcementService = (await import('../services/limitEnforcement.service.js')).default;
+
+      // Enforce limits
+      const results = await limitEnforcementService.enforceAllLimits(organizationId, userId, targetPlan);
+
+      logger.info(`[ManualEnforce] Enforcement results for ${organizationId}:`, JSON.stringify(results));
+
+      res.json({
+        success: true,
+        data: {
+          organizationId,
+          plan: targetPlan ? {
+            id: targetPlan._id,
+            tier: targetPlan.tier,
+            limits: targetPlan.limits
+          } : null,
+          results
+        },
+        message: 'Limits enforced successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Debug plan limits (admin only)
+   * GET /api/billing/:organizationId/debug-limits
+   */
+  async debugLimits(req, res, next) {
+    try {
+      const { organizationId } = req.params;
+
+      // Get the organization
+      const Organization = (await import('../models/Organization.js')).default;
+      const Project = (await import('../models/Project.js')).default;
+      const Feature = (await import('../models/Feature.js')).default;
+      const Simulation = (await import('../models/Simulation.js')).default;
+      const Plan = (await import('../models/Plan.js')).default;
+
+      const organization = await Organization.findById(organizationId);
+      if (!organization) {
+        throw new AppError('Organization not found', 404, 'NOT_FOUND');
+      }
+
+      // Get current plan
+      const plan = await Plan.findById(organization.subscription?.planId);
+
+      // Get current counts
+      const [
+        projectCount,
+        activeProjects,
+        disabledProjects,
+        featureCount,
+        activeFeatures,
+        disabledFeatures,
+        simulationCount,
+        activeSimulations,
+        disabledSimulations,
+        memberCount,
+        activeMembers,
+        disabledMembers
+      ] = await Promise.all([
+        Project.countDocuments({ organization: organizationId }),
+        Project.countDocuments({ organization: organizationId, status: { $in: ['active', 'inactive'] } }),
+        Project.countDocuments({ organization: organizationId, status: 'disabled' }),
+        Feature.countDocuments({ organization: organizationId }),
+        Feature.countDocuments({ organization: organizationId, status: { $in: ['active', 'inactive', 'maintenance'] } }),
+        Feature.countDocuments({ organization: organizationId, status: 'disabled' }),
+        Simulation.countDocuments({ organization: organizationId }),
+        Simulation.countDocuments({ organization: organizationId, status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] } }),
+        Simulation.countDocuments({ organization: organizationId, status: 'disabled' }),
+        organization.members?.length || 0,
+        organization.members?.filter(m => m.status === 'active' || m.status === 'inactive').length || 0,
+        organization.members?.filter(m => m.status === 'disabled').length || 0
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          organization: {
+            id: organization._id,
+            name: organization.name,
+            plan: organization.subscription?.plan,
+            planId: organization.subscription?.planId
+          },
+          plan: plan ? {
+            id: plan._id,
+            tier: plan.tier,
+            name: plan.name,
+            limits: plan.limits
+          } : null,
+          counts: {
+            projects: {
+              total: projectCount,
+              active: activeProjects,
+              disabled: disabledProjects
+            },
+            features: {
+              total: featureCount,
+              active: activeFeatures,
+              disabled: disabledFeatures
+            },
+            simulations: {
+              total: simulationCount,
+              active: activeSimulations,
+              disabled: disabledSimulations
+            },
+            members: {
+              total: memberCount,
+              active: activeMembers,
+              disabled: disabledMembers
+            }
+          }
+        }
       });
     } catch (error) {
       next(error);

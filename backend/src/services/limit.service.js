@@ -26,27 +26,68 @@ class LimitService {
     }
 
     // Get plan from subscription
-    const planId = organization.subscription?.planId || organization.subscription?.plan;
+    const planId = organization.subscription?.planId;
+    const planTier = organization.subscription?.plan;
 
-    // Try to find plan by ID first, then by tier
+    logger.info(`[LimitService] Looking for plan: planId=${planId}, tier=${planTier}, orgId=${organizationId}`);
+
     let plan = null;
-    if (planId) {
+
+    // Try to find plan by ID first (if planId is a valid ObjectId)
+    if (planId && /^[0-9a-fA-F]{24}$/.test(planId)) {
       plan = await Plan.findById(planId);
-      if (!plan) {
-        // Try finding by tier
-        plan = await Plan.findOne({
-          tier: planId,
-          status: 'active'
-        });
+      if (plan) {
+        logger.info(`[LimitService] Found plan by ID: ${plan._id}, tier: ${plan.tier}, limits:`, plan.limits);
       }
     }
 
-    // If no plan found, try to get default plan
+    // If not found by ID, try finding by tier
+    if (!plan && planTier) {
+      // First try organization-specific plan
+      plan = await Plan.findOne({
+        tier: planTier.toLowerCase(),
+        organization: organizationId,
+        status: 'active'
+      });
+
+      if (plan) {
+        logger.info(`[LimitService] Found org-specific plan by tier: ${plan._id}, tier: ${plan.tier}, limits:`, plan.limits);
+      } else {
+        // Try public plans
+        plan = await Plan.findOne({
+          tier: planTier.toLowerCase(),
+          'settings.isPublic': true,
+          status: 'active'
+        });
+
+        if (plan) {
+          logger.info(`[LimitService] Found public plan by tier: ${plan._id}, tier: ${plan.tier}, limits:`, plan.limits);
+        } else {
+          // Last resort: any plan with this tier
+          plan = await Plan.findOne({
+            tier: planTier.toLowerCase(),
+            status: 'active'
+          });
+          if (plan) {
+            logger.info(`[LimitService] Found any plan by tier: ${plan._id}, tier: ${plan.tier}, limits:`, plan.limits);
+          }
+        }
+      }
+    }
+
+    // If still not found, try to get default plan
     if (!plan) {
       plan = await Plan.findOne({
         'settings.isDefault': true,
         status: 'active'
       });
+      if (plan) {
+        logger.info(`[LimitService] Found default plan: ${plan._id}, tier: ${plan.tier}, limits:`, plan.limits);
+      }
+    }
+
+    if (!plan) {
+      logger.warn(`[LimitService] No plan found for organization ${organizationId}, tier=${planTier}`);
     }
 
     return plan;
@@ -60,20 +101,22 @@ class LimitService {
   async getPlanLimits(organizationId) {
     const plan = await this.getOrganizationPlan(organizationId);
 
-    // Default limits (unlimited)
-    const defaultLimits = {
-      maxProjects: null,
-      maxFeatures: null,
-      maxSimulations: null,
-      maxUsers: null,
-      maxApiCalls: null,
-      maxTokens: null
-    };
-
     if (!plan) {
-      return defaultLimits;
+      logger.warn(`[LimitService] No plan found for organization ${organizationId}, using default limits`);
+      // Default fallback limits for free/trial users
+      return {
+        maxProjects: 1,
+        maxFeatures: 5,
+        maxSimulations: 10,
+        maxUsers: 1,
+        maxApiCalls: 1000,
+        maxTokens: 10000
+      };
     }
 
+    logger.info(`[LimitService] Extracting limits from plan ${plan._id} (${plan.tier}):`, plan.limits);
+
+    // Extract limits from plan, null means unlimited
     return {
       maxProjects: plan.limits?.maxProjects ?? null,
       maxFeatures: plan.limits?.maxFeatures ?? null,
@@ -92,17 +135,34 @@ class LimitService {
   async getCurrentUsage(organizationId) {
     const organization = await Organization.findById(organizationId);
 
+    // Count only active (non-disabled) resources
+    // Projects: status in ['active', 'inactive'] (not 'disabled')
     const [projectCount, featureCount, simulationCount] = await Promise.all([
-      Project.countDocuments({ organization: organizationId, isActive: true }),
-      Feature.countDocuments({ organization: organizationId, isActive: true }),
-      Simulation.countDocuments({ organization: organizationId })
+      Project.countDocuments({
+        organization: organizationId,
+        status: { $in: ['active', 'inactive'] }
+      }),
+      Feature.countDocuments({
+        organization: organizationId,
+        status: { $in: ['active', 'inactive', 'maintenance'] }
+      }),
+      Simulation.countDocuments({
+        organization: organizationId,
+        status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
+      })
     ]);
+
+    // Count active team members (excluding disabled)
+    const activeTeamMembers = organization?.members?.filter(
+      m => m.status === 'active' || m.status === 'inactive'
+    ).length || 0;
 
     // Get API calls and tokens from feature stats
     const featureUsage = await Feature.aggregate([
       {
         $match: {
-          organization: organizationId
+          organization: organizationId,
+          status: { $ne: 'disabled' }  // Exclude disabled features
         }
       },
       {
@@ -120,7 +180,7 @@ class LimitService {
       projects: projectCount,
       features: featureCount,
       simulations: simulationCount,
-      teamMembers: organization?.members?.length || 0,
+      teamMembers: activeTeamMembers,
       apiCalls: usage.totalRequests,
       tokens: usage.totalTokens
     };

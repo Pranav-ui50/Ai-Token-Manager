@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import publicApi from '../../../services/api/public.api.js';
+import Loader from '../../../components/common/Loader.jsx';
 
 const ProvidersSection = () => {
   const [providers, setProviders] = useState([]);
@@ -133,8 +134,7 @@ const ProvidersSection = () => {
         {/* Providers Grid */}
         {loading ? (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading providers...</p>
+            <Loader text="Loading providers..." />
           </div>
         ) : error ? (
           <div className="text-center py-12">

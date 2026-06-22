@@ -32,7 +32,7 @@ const ORG_WEBSITE_MAX_LENGTH = 300;
 // Character limits for profile form
 const FIRST_NAME_MAX_LENGTH = 30;
 const LAST_NAME_MAX_LENGTH = 30;
-const PHONE_MAX_LENGTH = 15;
+const PHONE_MAX_LENGTH = 10;
 
 // Password validation helper
 const validatePassword = (password) => {
@@ -831,7 +831,7 @@ function SettingsPage() {
               type="text"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               placeholder="Enter organization name"
             />
           </div>

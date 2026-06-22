@@ -73,6 +73,10 @@ const projectSchema = new mongoose.Schema(
       enum: ['active', 'inactive', null],
       default: null
     },
+    disabledNote: {
+      type: String,
+      default: null
+    },
     isActive: {
       type: Boolean,
       default: true

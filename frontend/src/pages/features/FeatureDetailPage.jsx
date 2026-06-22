@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import featureApi from '../../services/api/feature.api.js';
 import usePermissions from '../../hooks/usePermissions.js';
 import { useFeatureCurrency } from '../../hooks/useProjectCurrency.js';
@@ -215,14 +216,13 @@ const FeatureDetailPage = () => {
       margin = revenue > 0 ? ((profit / revenue) * 100) : (hasPricingData ? -100 : 0);
       profitPerRequest = profit;
     } else if (billingModel === 'per_user') {
-      // Per-user billing (fixed requests per user)
-      const revenuePerUser = sellingPricePerRequest * requestsPerUser;
-      const costPerUser = totalCostPerRequest * requestsPerUser;
-      revenue = revenuePerUser;
-      cost = costPerUser;
-      profit = revenuePerUser - costPerUser;
+      // Per-user billing: sellingPricePerRequest is actually the price per user (not per request)
+      // Revenue is the total price the user pays
+      revenue = sellingPricePerRequest;
+      cost = totalCostPerRequest * requestsPerUser;
+      profit = revenue - cost;
       margin = revenue > 0 ? ((profit / revenue) * 100) : (hasPricingData ? -100 : 0);
-      profitPerRequest = profit / requestsPerUser;
+      profitPerRequest = requestsPerUser > 0 ? profit / requestsPerUser : 0;
     } else {
       // Monthly subscription
       const totalRequests = usersCount * requestsPerUser;
@@ -241,6 +241,8 @@ const FeatureDetailPage = () => {
     return {
       costPerRequest: totalCostPerRequest,
       tokenCostPerRequest,
+      inputTokenCost,
+      outputTokenCost,
       infrastructureCostPerRequest,
       revenue,
       cost,
@@ -252,22 +254,13 @@ const FeatureDetailPage = () => {
       markup: cost > 0 ? ((revenue - cost) / cost * 100) : 0,
       roi: cost > 0 ? (profit / cost * 100) : 0,
       isProfitable: profit > 0,
-      profitPerRequest
+      profitPerRequest,
+      hasPricingData
     };
   }, [feature, profitParams]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <div className="text-center">
-          <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="mt-4 text-gray-500">Loading feature details...</p>
-        </div>
-      </div>
-    );
+    return <Loader fullPage text="Loading feature details..." />;
   }
 
   if (error && !feature) {
@@ -858,7 +851,8 @@ const FeatureDetailPage = () => {
                         {profitAnalysis?.costPerRequest > 0 ? (
                           <>
                             Cost per request: {formatCurrency(profitAnalysis?.costPerRequest)} •
-                            Suggested: {formatCurrency(profitAnalysis?.costPerRequest * 1.5)} (50% margin)
+                            Break-even: {formatCurrency(profitAnalysis?.costPerRequest)} (0% margin) •
+                            Suggested: {formatCurrency(profitAnalysis?.costPerRequest * 2)} (50% margin)
                           </>
                         ) : (
                           'Enter token estimates and model pricing for accurate cost calculation'
@@ -872,15 +866,24 @@ const FeatureDetailPage = () => {
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Price per Request ({currencySymbol})
+                          Price per User ({currencySymbol})
                         </label>
                         <input
                           type="number"
-                          step="0.0001"
+                          step="0.01"
                           value={profitParams.sellingPricePerRequest}
                           onChange={(e) => setProfitParams({ ...profitParams, sellingPricePerRequest: parseFloat(e.target.value) || 0 })}
                           className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                         />
+                        <p className="text-xs text-gray-400 mt-1">
+                          {profitAnalysis?.costPerRequest > 0 ? (
+                            <>
+                              Total cost per user: {formatCurrency(profitAnalysis?.costPerRequest * profitParams.requestsPerUser)} for {profitParams.requestsPerUser} requests
+                            </>
+                          ) : (
+                            'Enter token estimates and model pricing for accurate cost calculation'
+                          )}
+                        </p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -889,9 +892,10 @@ const FeatureDetailPage = () => {
                         <input
                           type="number"
                           value={profitParams.requestsPerUser}
-                          onChange={(e) => setProfitParams({ ...profitParams, requestsPerUser: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => setProfitParams({ ...profitParams, requestsPerUser: parseInt(e.target.value) || 1 })}
                           className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                         />
+                        <p className="text-xs text-gray-400 mt-1">How many requests each user can make</p>
                       </div>
                     </>
                   )}
@@ -950,17 +954,21 @@ const FeatureDetailPage = () => {
 
                 {/* Quick Pricing Suggestions */}
                 <div className="mt-4 md:mt-6 p-3 md:p-4 bg-gray-50 rounded-lg">
-                  <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-2 md:mb-3">Quick Pricing Suggestions</h4>
+                  <h4 className="text-xs md:text-sm font-semibold text-gray-700 mb-1">Quick Pricing Suggestions</h4>
+                  <p className="text-xs text-gray-500 mb-2 md:mb-3">Set price to achieve target profit margin (Price = Cost ÷ (1 - Margin))</p>
                   <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => {
                         const basePrice = profitAnalysis?.costPerRequest || 0;
-                        const multiplier = 1.25;
+                        // For 25% margin: Price = Cost / (1 - 0.25) = Cost / 0.75
+                        const multiplier = 1 / (1 - 0.25);
                         if (profitParams.billingModel === 'monthly_subscription') {
-                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * profitParams.usersCount * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
                           setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
                         } else if (profitParams.billingModel === 'per_user') {
-                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                          // For per_user: Price = (cost per request × requests per user) × multiplier
+                          const userPrice = basePrice * profitParams.requestsPerUser * multiplier;
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: Math.max(userPrice, 0.01) });
                         } else {
                           setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
                         }
@@ -972,12 +980,15 @@ const FeatureDetailPage = () => {
                     <button
                       onClick={() => {
                         const basePrice = profitAnalysis?.costPerRequest || 0;
-                        const multiplier = 1.5;
+                        // For 50% margin: Price = Cost / (1 - 0.50) = Cost / 0.50 = Cost × 2
+                        const multiplier = 1 / (1 - 0.50);
                         if (profitParams.billingModel === 'monthly_subscription') {
-                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * profitParams.usersCount * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
                           setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
                         } else if (profitParams.billingModel === 'per_user') {
-                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                          // For per_user: Price = (cost per request × requests per user) × multiplier
+                          const userPrice = basePrice * profitParams.requestsPerUser * multiplier;
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: Math.max(userPrice, 0.01) });
                         } else {
                           setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
                         }
@@ -989,19 +1000,22 @@ const FeatureDetailPage = () => {
                     <button
                       onClick={() => {
                         const basePrice = profitAnalysis?.costPerRequest || 0;
-                        const multiplier = 2;
+                        // For 75% margin: Price = Cost / (1 - 0.75) = Cost / 0.25 = Cost × 4
+                        const multiplier = 1 / (1 - 0.75);
                         if (profitParams.billingModel === 'monthly_subscription') {
-                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
+                          const monthlyPrice = (basePrice * profitParams.requestsPerUser * profitParams.usersCount * multiplier) + (feature?.infrastructureCost?.monthlyFixedCost || 0);
                           setProfitParams({ ...profitParams, monthlySubscriptionPrice: Math.max(monthlyPrice, 9.99) });
                         } else if (profitParams.billingModel === 'per_user') {
-                          setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
+                          // For per_user: Price = (cost per request × requests per user) × multiplier
+                          const userPrice = basePrice * profitParams.requestsPerUser * multiplier;
+                          setProfitParams({ ...profitParams, sellingPricePerRequest: Math.max(userPrice, 0.01) });
                         } else {
                           setProfitParams({ ...profitParams, sellingPricePerRequest: basePrice * multiplier });
                         }
                       }}
                       className="px-2 md:px-3 py-2 text-xs bg-white border border-gray-200 rounded hover:bg-gray-50"
                     >
-                      100% Margin
+                      75% Margin
                     </button>
                   </div>
                 </div>
@@ -1015,16 +1029,22 @@ const FeatureDetailPage = () => {
                   <div className="space-y-4">
                     {/* Cost Breakdown Bar */}
                     <div className="relative h-6 md:h-8 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="absolute h-full bg-blue-500"
-                        style={{ width: `${(profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100}%` }}
-                        title="Token Cost"
-                      />
-                      <div
-                        className="absolute h-full bg-orange-500"
-                        style={{ left: `${(profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100}%`, width: `${(profitAnalysis.infrastructureCostPerRequest / profitAnalysis.costPerRequest) * 100}%` }}
-                        title="Infrastructure"
-                      />
+                      {profitAnalysis.costPerRequest > 0 ? (
+                        <>
+                          <div
+                            className="absolute h-full bg-blue-500"
+                            style={{ width: `${Math.min(100, (profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100)}%` }}
+                            title="Token Cost"
+                          />
+                          <div
+                            className="absolute h-full bg-orange-500"
+                            style={{ left: `${Math.min(100, (profitAnalysis.tokenCostPerRequest / profitAnalysis.costPerRequest) * 100)}%`, width: `${Math.min(100, (profitAnalysis.infrastructureCostPerRequest / profitAnalysis.costPerRequest) * 100)}%` }}
+                            title="Infrastructure"
+                          />
+                        </>
+                      ) : (
+                        <div className="absolute h-full bg-gray-300 w-full" title="No cost data" />
+                      )}
                     </div>
                     <div className="flex gap-4 text-xs">
                       <div className="flex items-center gap-1">
@@ -1039,27 +1059,64 @@ const FeatureDetailPage = () => {
 
                     {/* Detailed Costs */}
                     <div className="border-t border-gray-100 pt-4 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Token Cost</span>
-                        <span className="font-medium">{formatCurrency(profitAnalysis.tokenCostPerRequest)}</span>
+                      {/* Token Cost Breakdown */}
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium text-blue-900">Token Cost</span>
+                          <span className="font-bold text-blue-700">{formatCurrency(profitAnalysis.tokenCostPerRequest)}</span>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-blue-700">• Input Tokens ({formatNumber(feature.tokenEstimates?.inputTokensPerRequest || 0)} tokens)</span>
+                            <span className="text-blue-800">{formatCurrency(profitAnalysis.inputTokenCost)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-blue-700">• Output Tokens ({formatNumber(feature.tokenEstimates?.outputTokensPerRequest || 0)} tokens)</span>
+                            <span className="text-blue-800">{formatCurrency(profitAnalysis.outputTokenCost)}</span>
+                          </div>
+                          {feature.model?.pricing && (
+                            <div className="text-xs text-blue-600 mt-1 pt-1 border-t border-blue-200">
+                              Model pricing: {formatCurrency(feature.model.pricing.inputPrice || 0)}/1M input, {formatCurrency(feature.model.pricing.outputPrice || 0)}/1M output
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Infrastructure Cost */}
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Infrastructure Cost</span>
+                        <span className="text-gray-500">Infrastructure Cost (fixed)</span>
                         <span className="font-medium">{formatCurrency(profitAnalysis.infrastructureCostPerRequest)}</span>
                       </div>
                       {feature.infrastructureCost?.overheadPercentage > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-gray-500">Overhead ({feature.infrastructureCost.overheadPercentage}%)</span>
                           <span className="font-medium">
-                            {formatCurrency(profitAnalysis.costPerRequest * feature.infrastructureCost.overheadPercentage / 100)}
+                            {formatCurrency(profitAnalysis.costPerRequest * feature.infrastructureCost.overheadPercentage / (100 + feature.infrastructureCost.overheadPercentage))}
                           </span>
                         </div>
                       )}
                       <div className="border-t border-gray-100 pt-2 flex justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Total Cost</span>
+                        <span className="text-sm font-semibold text-gray-700">Total Cost per Request</span>
                         <span className="text-sm font-bold text-red-600">{formatCurrency(profitAnalysis.costPerRequest)}</span>
                       </div>
                     </div>
+
+                    {/* No Pricing Data Warning */}
+                    {!profitAnalysis.hasPricingData && (
+                      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">No Pricing Data Available</p>
+                            <p className="text-xs text-amber-700 mt-1">
+                              Token costs cannot be calculated without model pricing. Please assign a model with pricing information to this feature.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

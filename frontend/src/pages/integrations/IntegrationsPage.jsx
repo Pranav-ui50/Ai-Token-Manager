@@ -14,14 +14,14 @@ import usePermissions from '../../hooks/usePermissions.js';
 import { showToast } from '../../utils/toasts.js';
 
 const INTEGRATION_TYPES = [
-  { value: 'openai', label: 'OpenAI', icon: '🤖' },
-  { value: 'anthropic', label: 'Anthropic', icon: '🧠' },
-  { value: 'stripe', label: 'Stripe', icon: '💳' },
-  { value: 'razorpay', label: 'Razorpay', icon: '💰' },
-  { value: 'slack', label: 'Slack', icon: '💬' },
-  { value: 'discord', label: 'Discord', icon: '🎮' },
-  { value: 'webhook', label: 'Custom Webhook', icon: '🔗' },
-  { value: 'custom', label: 'Custom Integration', icon: '⚙️' }
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'stripe', label: 'Stripe' },
+  { value: 'razorpay', label: 'Razorpay' },
+  { value: 'slack', label: 'Slack' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'webhook', label: 'Custom Webhook' },
+  { value: 'custom', label: 'Custom Integration' }
 ];
 
 const STATUS_COLORS = {
@@ -200,6 +200,10 @@ function IntegrationsPage() {
   const [filters, setFilters] = useState({ status: '', type: '' });
   const [showApiKey, setShowApiKey] = useState(false);
   const [showEditApiKey, setShowEditApiKey] = useState(false);
+  const [showSyncHistoryModal, setShowSyncHistoryModal] = useState(false);
+  const [syncHistory, setSyncHistory] = useState([]);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [isLoadingSync, setIsLoadingSync] = useState(false);
   const { errors, validateField, validateForm, clearErrors, clearFieldError } = useFormErrors();
 
   const [formData, setFormData] = useState({
@@ -324,36 +328,35 @@ function IntegrationsPage() {
   };
 
   const handleTest = async (integration) => {
-    // Validate API key for non-webhook integrations
-    if (integration.type !== 'webhook' && integration.type !== 'custom') {
-      if (!integration.credentials || !integration.credentials.apiKey) {
-        showToast.error('API Key is required. Please edit the integration to add an API key.');
-        return;
-      }
-    }
-
-    // Validate webhook URL for webhook/custom integrations
-    if (integration.type === 'webhook' || integration.type === 'custom') {
-      if (!integration.config || !integration.config.endpoint) {
-        showToast.error('Webhook URL is required. Please edit the integration to add a webhook URL.');
-        return;
-      }
-    }
-
     setSelectedIntegration(integration);
     setTestResult(null);
     setShowTestModal(true);
 
     try {
       const response = await integrationApi.testConnection(integration._id);
-      setTestResult(response.data);
-      showToast.success('Connection test successful');
+      const result = response.data || response;
+
+      // Check if the response indicates failure
+      if (result.success === false) {
+        setTestResult({
+          success: false,
+          message: result.message || result.error?.message || 'Connection test failed'
+        });
+        showToast.error(result.message || result.error?.message || 'Connection test failed');
+      } else {
+        setTestResult({
+          success: true,
+          message: result.message || 'Connection test successful',
+          latency: result.latency
+        });
+        showToast.success('Connection test successful');
+      }
     } catch (err) {
       setTestResult({
         success: false,
-        message: err.response?.data?.error?.message || 'Connection test failed'
+        message: err.response?.data?.error?.message || err.response?.data?.message || 'Connection test failed'
       });
-      showToast.error(err.response?.data?.error?.message || 'Connection test failed');
+      showToast.error(err.response?.data?.error?.message || err.response?.data?.message || 'Connection test failed');
     }
   };
 
@@ -377,6 +380,56 @@ function IntegrationsPage() {
     } catch (err) {
       showToast.error(err.response?.data?.error?.message || 'Failed to sync integration');
     }
+  };
+
+  const openSyncHistory = async (integration) => {
+    setSelectedIntegration(integration);
+    setShowSyncHistoryModal(true);
+    setIsLoadingSync(true);
+    setSyncHistory([]);
+    setSyncStatus(null);
+
+    try {
+      // Fetch both sync status and history in parallel
+      const [statusRes, historyRes] = await Promise.all([
+        integrationApi.getSyncStatus(integration._id),
+        integrationApi.getSyncHistory(integration._id, { limit: 20 })
+      ]);
+
+      setSyncStatus(statusRes.data);
+      setSyncHistory(historyRes.data || []);
+    } catch (err) {
+      console.error('Failed to fetch sync history:', err);
+      showToast.error(err.response?.data?.error?.message || 'Failed to load sync history');
+    } finally {
+      setIsLoadingSync(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Never';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
+
+  const formatDuration = (ms) => {
+    if (!ms) return '-';
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}m`;
+  };
+
+  const getStatusBadge = (status) => {
+    const statusStyles = {
+      completed: 'bg-green-100 text-green-700',
+      success: 'bg-green-100 text-green-700',
+      failed: 'bg-red-100 text-red-700',
+      error: 'bg-red-100 text-red-700',
+      pending: 'bg-yellow-100 text-yellow-700',
+      running: 'bg-blue-100 text-blue-700',
+      cancelled: 'bg-gray-100 text-gray-700'
+    };
+    return statusStyles[status] || 'bg-gray-100 text-gray-700';
   };
 
   const resetForm = () => {
@@ -432,7 +485,7 @@ function IntegrationsPage() {
   };
 
   const getTypeInfo = (type) => {
-    return INTEGRATION_TYPES.find(t => t.value === type) || { label: type, icon: '🔗' };
+    return INTEGRATION_TYPES.find(t => t.value === type) || { label: type };
   };
 
   if (orgLoading) {
@@ -509,7 +562,7 @@ function IntegrationsPage() {
       {/* Integrations List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader size="sm" />
+          <Loader />
         </div>
       ) : integrations.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
@@ -545,7 +598,11 @@ function IntegrationsPage() {
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">{typeInfo.icon}</span>
+                      <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                      </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">{integration.name}</h3>
                         <p className="text-sm text-gray-500">{typeInfo.label}</p>
@@ -581,15 +638,26 @@ function IntegrationsPage() {
                         </svg>
                       </button>
                       {integration.sync?.enabled && (
-                        <button
-                          onClick={() => handleSync(integration)}
-                          className="text-gray-500 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
-                          title="Sync now"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleSync(integration)}
+                            className="text-gray-500 hover:text-blue-600 p-2 rounded-lg hover:bg-blue-50"
+                            title="Sync now"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => openSyncHistory(integration)}
+                            className="text-gray-500 hover:text-purple-600 p-2 rounded-lg hover:bg-purple-50"
+                            title="View sync history"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => handleToggleStatus(integration)}
@@ -635,13 +703,16 @@ function IntegrationsPage() {
       )}
 
       {/* Create Modal */}
-      <Modal isOpen={showCreateModal} onClose={() => { setShowCreateModal(false); clearErrors(); }} title="Add Integration" size="lg">
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => { setShowCreateModal(false); resetForm(); }}
+        title="Add Integration"
+        size="lg"
+        closeOnBackdropClick={false}
+      >
         <form onSubmit={handleCreate} className="space-y-4" noValidate>
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">Name<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
             <input
               type="text"
               value={formData.name}
@@ -654,7 +725,7 @@ function IntegrationsPage() {
                 }
               }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
-                errors.name ? 'border-red-500' : formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                errors.name ? 'border-red-500' : 'border-gray-200'
               }`}
               placeholder="My Integration"
               maxLength={NAME_MAX_LENGTH}
@@ -662,9 +733,6 @@ function IntegrationsPage() {
             />
             {errors.name && (
               <p className="text-xs text-red-500 mt-1">{errors.name}</p>
-            )}
-            {!errors.name && formData.name.length === NAME_MAX_LENGTH && (
-              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
             )}
           </div>
 
@@ -682,7 +750,7 @@ function IntegrationsPage() {
             >
               <option value="" disabled>Select integration type...</option>
               {INTEGRATION_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.icon} {type.label}</option>
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
             {errors.type && (
@@ -691,10 +759,7 @@ function IntegrationsPage() {
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => {
@@ -702,16 +767,11 @@ function IntegrationsPage() {
                   setFormData({ ...formData, description: e.target.value });
                 }
               }}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none ${
-                formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
-              }`}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none"
               placeholder="Integration description..."
               maxLength={DESCRIPTION_MAX_LENGTH}
               rows={3}
             />
-            {formData.description.length === DESCRIPTION_MAX_LENGTH && (
-              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
-            )}
           </div>
 
           {/* Webhook Configuration - Show for webhook and custom types */}
@@ -720,10 +780,7 @@ function IntegrationsPage() {
               <h4 className="text-sm font-semibold text-gray-700">Webhook Configuration</h4>
 
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Webhook URL<span className="text-red-500">*</span></label>
-                  <span className="text-xs text-gray-400">{formData.config.endpoint.length}/{WEBHOOK_URL_MAX_LENGTH}</span>
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Webhook Url<span className="text-red-500">*</span></label>
                 <input
                   type="url"
                   value={formData.config.endpoint}
@@ -818,10 +875,7 @@ function IntegrationsPage() {
           {/* API Key - Show for non-webhook types */}
           {formData.type !== 'webhook' && formData.type !== 'custom' && (
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-gray-700">API Key<span className="text-red-500">*</span></label>
-                <span className="text-xs text-gray-400">{formData.credentials.apiKey.length}/{API_KEY_MAX_LENGTH}</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API Key<span className="text-red-500">*</span></label>
               <div className="relative">
                 <input
                   type={showApiKey ? 'text' : 'password'}
@@ -833,7 +887,7 @@ function IntegrationsPage() {
                     }
                   }}
                   className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
-                    errors.apiKey ? 'border-red-500' : formData.credentials.apiKey.length === API_KEY_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                    errors.apiKey ? 'border-red-500' : 'border-gray-200'
                   }`}
                   placeholder="Enter API key"
                   maxLength={API_KEY_MAX_LENGTH}
@@ -858,9 +912,6 @@ function IntegrationsPage() {
               {errors.apiKey && (
                 <p className="text-xs text-red-500 mt-1">{errors.apiKey}</p>
               )}
-              {!errors.apiKey && formData.credentials.apiKey.length === API_KEY_MAX_LENGTH && (
-                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
-              )}
             </div>
           )}
 
@@ -878,7 +929,7 @@ function IntegrationsPage() {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => { setShowCreateModal(false); clearErrors(); }}
+              onClick={() => { setShowCreateModal(false); resetForm(); }}
               className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
             >
               Cancel
@@ -894,13 +945,16 @@ function IntegrationsPage() {
       </Modal>
 
       {/* Edit Modal */}
-      <Modal isOpen={showEditModal} onClose={() => { setShowEditModal(false); clearErrors(); }} title="Edit Integration" size="lg">
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); setSelectedIntegration(null); resetForm(); }}
+        title="Edit Integration"
+        size="lg"
+        closeOnBackdropClick={false}
+      >
         <form onSubmit={handleUpdate} className="space-y-4" noValidate>
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">Name<span className="text-red-500">*</span></label>
-              <span className="text-xs text-gray-400">{formData.name.length}/{NAME_MAX_LENGTH}</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name<span className="text-red-500">*</span></label>
             <input
               type="text"
               value={formData.name}
@@ -913,16 +967,13 @@ function IntegrationsPage() {
                 }
               }}
               className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
-                errors.name ? 'border-red-500' : formData.name.length === NAME_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                errors.name ? 'border-red-500' : 'border-gray-200'
               }`}
               maxLength={NAME_MAX_LENGTH}
               autoComplete="name"
             />
             {errors.name && (
               <p className="text-xs text-red-500 mt-1">{errors.name}</p>
-            )}
-            {!errors.name && formData.name.length === NAME_MAX_LENGTH && (
-              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
             )}
           </div>
 
@@ -934,17 +985,14 @@ function IntegrationsPage() {
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] bg-gray-50 cursor-not-allowed"
             >
               {INTEGRATION_TYPES.map(type => (
-                <option key={type.value} value={type.value}>{type.icon} {type.label}</option>
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1">Integration type cannot be changed after creation</p>
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <span className="text-xs text-gray-400">{formData.description.length}/{DESCRIPTION_MAX_LENGTH}</span>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => {
@@ -952,15 +1000,10 @@ function IntegrationsPage() {
                   setFormData({ ...formData, description: e.target.value });
                 }
               }}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none ${
-                formData.description.length === DESCRIPTION_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
-              }`}
+              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] resize-none"
               maxLength={DESCRIPTION_MAX_LENGTH}
               rows={3}
             />
-            {formData.description.length === DESCRIPTION_MAX_LENGTH && (
-              <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
-            )}
           </div>
 
           {/* Webhook Configuration - Show for webhook and custom types */}
@@ -969,10 +1012,7 @@ function IntegrationsPage() {
               <h4 className="text-sm font-semibold text-gray-700">Webhook Configuration</h4>
 
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-sm font-medium text-gray-700">Webhook URL<span className="text-red-500">*</span></label>
-                  <span className="text-xs text-gray-400">{formData.config.endpoint.length}/{WEBHOOK_URL_MAX_LENGTH}</span>
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Webhook Url<span className="text-red-500">*</span></label>
                 <input
                   type="url"
                   value={formData.config.endpoint}
@@ -1067,10 +1107,7 @@ function IntegrationsPage() {
           {/* API Key - Show for non-webhook types */}
           {formData.type !== 'webhook' && formData.type !== 'custom' && (
             <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-gray-700">New API Key <span className="text-xs text-gray-400">(leave empty to keep current)</span></label>
-                <span className="text-xs text-gray-400">{formData.credentials.apiKey.length}/{API_KEY_MAX_LENGTH}</span>
-              </div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">New API Key <span className="text-xs text-gray-400">(leave empty to keep current)</span></label>
               <div className="relative">
                 <input
                   type={showEditApiKey ? 'text' : 'password'}
@@ -1082,7 +1119,7 @@ function IntegrationsPage() {
                     }
                   }}
                   className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#DC2626] ${
-                    errors.apiKey ? 'border-red-500' : formData.credentials.apiKey.length === API_KEY_MAX_LENGTH ? 'border-red-300' : 'border-gray-200'
+                    errors.apiKey ? 'border-red-500' : 'border-gray-200'
                   }`}
                   placeholder="Enter new API key to update"
                   maxLength={API_KEY_MAX_LENGTH}
@@ -1107,9 +1144,6 @@ function IntegrationsPage() {
               {errors.apiKey && (
                 <p className="text-xs text-red-500 mt-1">{errors.apiKey}</p>
               )}
-              {!errors.apiKey && formData.credentials.apiKey.length === API_KEY_MAX_LENGTH && (
-                <p className="text-xs text-red-500 mt-1">Maximum character limit reached</p>
-              )}
             </div>
           )}
 
@@ -1127,7 +1161,7 @@ function IntegrationsPage() {
           <div className="flex gap-3 pt-4">
             <button
               type="button"
-              onClick={() => { setShowEditModal(false); clearErrors(); }}
+              onClick={() => { setShowEditModal(false); setSelectedIntegration(null); resetForm(); }}
               className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
             >
               Cancel
@@ -1147,7 +1181,7 @@ function IntegrationsPage() {
         <div className="space-y-4">
           {testResult === null ? (
             <div className="flex items-center justify-center py-8">
-              <Loader size="sm" />
+              <Loader />
             </div>
           ) : (
             <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50' : 'bg-red-50'}`}>
@@ -1213,6 +1247,108 @@ function IntegrationsPage() {
               className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
               Delete Integration
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Sync History Modal */}
+      <Modal isOpen={showSyncHistoryModal} onClose={() => { setShowSyncHistoryModal(false); setSelectedIntegration(null); setSyncHistory([]); setSyncStatus(null); }} title={`Sync History - ${selectedIntegration?.name || ''}`} size="lg">
+        <div className="space-y-4">
+          {/* Last Sync Status */}
+          {syncStatus?.lastSync && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Last Sync Status</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500">Status</p>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(syncStatus.lastSync.status)}`}>
+                    {syncStatus.lastSync.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Completed</p>
+                  <p className="text-sm font-medium">{formatDate(syncStatus.lastSync.completedAt)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Duration</p>
+                  <p className="text-sm font-medium">{formatDuration(syncStatus.lastSync.duration)}</p>
+                </div>
+                {syncStatus.lastSync.usageSummary && (
+                  <div>
+                    <p className="text-xs text-gray-500">Records Synced</p>
+                    <p className="text-sm font-medium">{syncStatus.lastSync.usageSummary.recordsProcessed || 0}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sync History Table */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">History</h4>
+            {isLoadingSync ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader />
+              </div>
+            ) : syncHistory.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg p-8 text-center">
+                <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-gray-500">No sync history yet</p>
+                <p className="text-xs text-gray-400 mt-1">Sync history will appear here after the first sync</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Records</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Error</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {syncHistory.map((sync, index) => (
+                      <tr key={sync._id || index} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(sync.status)}`}>
+                            {sync.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(sync.startedAt)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(sync.completedAt)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {formatDuration(sync.duration)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {sync.stats?.recordsProcessed || sync.usageSummary?.recordsProcessed || 0}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-red-500 max-w-xs truncate">
+                          {sync.error || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              onClick={() => { setShowSyncHistoryModal(false); setSelectedIntegration(null); setSyncHistory([]); setSyncStatus(null); }}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+            >
+              Close
             </button>
           </div>
         </div>

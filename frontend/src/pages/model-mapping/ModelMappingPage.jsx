@@ -91,6 +91,11 @@ function ModelMappingPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Calculate filtered stats
+  const filteredTotal = filteredFeatures.length;
+  const filteredMapped = filteredFeatures.filter(f => f.model && f.model._id).length;
+  const filteredUnmapped = filteredFeatures.filter(f => !f.model || !f.model._id).length;
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-700';
@@ -113,15 +118,6 @@ function ModelMappingPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Model Mapping</h1>
           <p className="text-sm text-gray-500">Assign AI models to your features</p>
         </div>
-        <Link
-          to="/features/new"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Feature
-        </Link>
       </div>
 
       {/* Stats */}
@@ -135,7 +131,7 @@ function ModelMappingPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-500 truncate">Total Features</p>
-              <p className="text-lg sm:text-xl font-bold text-gray-900">{features.length}</p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">{filteredTotal}</p>
             </div>
           </div>
         </div>
@@ -149,9 +145,7 @@ function ModelMappingPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-500 truncate">Mapped</p>
-              <p className="text-lg sm:text-xl font-bold text-gray-900">
-                {features.filter(f => f.model && f.model._id).length}
-              </p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">{filteredMapped}</p>
             </div>
           </div>
         </div>
@@ -165,9 +159,7 @@ function ModelMappingPage() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-gray-500 truncate">Unmapped</p>
-              <p className="text-lg sm:text-xl font-bold text-gray-900">
-                {features.filter(f => !f.model || !f.model._id).length}
-              </p>
+              <p className="text-lg sm:text-xl font-bold text-gray-900">{filteredUnmapped}</p>
             </div>
           </div>
         </div>
@@ -219,6 +211,21 @@ function ModelMappingPage() {
               <option value="maintenance">Maintenance</option>
             </select>
           </div>
+          {(searchTerm || filterStatus) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setFilterStatus('');
+              }}
+              className="px-4 py-2 sm:py-2.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+              title="Clear all filters"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -230,20 +237,9 @@ function ModelMappingPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
             <h3 className="text-sm font-medium text-gray-900 mb-2">No features found</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500">
               {searchTerm || filterStatus ? 'Try adjusting your filters' : 'Create your first feature to get started'}
             </p>
-            {!searchTerm && !filterStatus && (
-              <Link
-                to="/features/new"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Feature
-              </Link>
-            )}
           </div>
         ) : (
           <>
@@ -252,6 +248,9 @@ function ModelMappingPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      S.No
+                    </th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Feature
                     </th>
@@ -273,8 +272,11 @@ function ModelMappingPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredFeatures.map((feature) => (
+                  {filteredFeatures.map((feature, index) => (
                     <tr key={feature._id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {index + 1}
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <div>
                           <p className="font-medium text-gray-900">{feature.name}</p>
@@ -382,14 +384,17 @@ function ModelMappingPage() {
 
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
-              {filteredFeatures.map((feature) => (
+              {filteredFeatures.map((feature, index) => (
                 <div key={feature._id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <Link to={`/features/${feature._id}`} className="font-medium text-gray-900 hover:text-[#DC2626]">
-                        {feature.name}
-                      </Link>
-                      <p className="text-xs text-gray-500 capitalize">{feature.category || 'other'}</p>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-sm text-gray-500 flex-shrink-0">{index + 1}.</span>
+                      <div className="flex-1 min-w-0">
+                        <Link to={`/features/${feature._id}`} className="font-medium text-gray-900 hover:text-[#DC2626]">
+                          {feature.name}
+                        </Link>
+                        <p className="text-xs text-gray-500 capitalize">{feature.category || 'other'}</p>
+                      </div>
                     </div>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${getStatusColor(feature.status)}`}>
                       {feature.status || 'active'}

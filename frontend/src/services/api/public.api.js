@@ -98,6 +98,16 @@ const publicApi = {
   getPlatformStats: async () => {
     const response = await api.get('/platform-stats');
     return response.data;
+  },
+
+  /**
+   * Get public site settings (site name, description)
+   * No authentication required
+   * @returns {Promise} Site settings
+   */
+  getSiteSettings: async () => {
+    const response = await api.get('/public/site-settings');
+    return response.data;
   }
 };
 

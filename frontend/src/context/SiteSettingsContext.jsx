@@ -2,11 +2,13 @@
  * Site Settings Context
  *
  * Global context for site-wide settings like Site Name and Description.
- * Used to display dynamic branding in sidebar and other components.
- * Uses localStorage for persistence until backend is deployed.
+ * Used to display dynamic branding in sidebar, headers, and other components.
+ * Fetches settings from backend API and caches in localStorage for performance.
  */
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import publicApi from '../services/api/public.api.js';
+import adminApi from '../services/api/admin.api.js';
 
 const SiteSettingsContext = createContext(null);
 
@@ -15,7 +17,7 @@ const DEFAULT_SETTINGS = {
   siteDescription: 'AI API Token Cost Management Platform'
 };
 
-// Local storage key for persistence
+// Local storage key for persistence/caching
 const SETTINGS_STORAGE_KEY = 'siteSettings';
 
 export function SiteSettingsProvider({ children }) {
@@ -35,48 +37,95 @@ export function SiteSettingsProvider({ children }) {
     }
     return DEFAULT_SETTINGS;
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Load settings from localStorage on mount
+  // Load settings from backend on mount
   useEffect(() => {
-    // Settings are already loaded from localStorage in useState initializer
-    // No need to fetch from backend since the endpoint may not exist yet
+    const loadSettings = async () => {
+      try {
+        setIsLoading(true);
+        const response = await publicApi.getSiteSettings();
+        if (response.success && response.data) {
+          const newSettings = {
+            siteName: response.data.siteName || DEFAULT_SETTINGS.siteName,
+            siteDescription: response.data.siteDescription || DEFAULT_SETTINGS.siteDescription
+          };
+          setSettings(newSettings);
+          // Cache to localStorage
+          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+        }
+      } catch (err) {
+        console.error('Failed to load site settings from backend:', err);
+        // Keep using localStorage cached values on error
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSettings();
   }, []);
 
-  const updateSettings = async (newSettings) => {
-    // Update local state and persist to localStorage
-    setSettings(prev => {
-      const updated = {
-        ...prev,
-        ...newSettings
-      };
-      // Persist to localStorage
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
-      return updated;
-    });
+  // Update settings (admin only - uses admin API)
+  const updateSettings = useCallback(async (newSettings) => {
+    try {
+      // Update via admin API
+      const response = await adminApi.updateSettings({
+        siteName: newSettings.siteName,
+        siteDescription: newSettings.siteDescription
+      });
 
-    return true;
-  };
+      if (response.success) {
+        const updatedSettings = {
+          siteName: response.siteName || newSettings.siteName,
+          siteDescription: response.siteDescription || newSettings.siteDescription
+        };
+
+        // Update local state
+        setSettings(updatedSettings);
+
+        // Update localStorage cache
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
+
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      console.error('Failed to update site settings:', err);
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
+  // Refresh settings from backend
+  const refreshSettings = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await publicApi.getSiteSettings();
+      if (response.success && response.data) {
+        const newSettings = {
+          siteName: response.data.siteName || DEFAULT_SETTINGS.siteName,
+          siteDescription: response.data.siteDescription || DEFAULT_SETTINGS.siteDescription
+        };
+        setSettings(newSettings);
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+      }
+    } catch (err) {
+      console.error('Failed to refresh site settings:', err);
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const value = {
     settings,
     isLoading,
+    error,
     updateSettings,
-    refreshSettings: () => {
-      // Reload from localStorage
-      try {
-        const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setSettings({
-            siteName: parsed.siteName || DEFAULT_SETTINGS.siteName,
-            siteDescription: parsed.siteDescription || DEFAULT_SETTINGS.siteDescription
-          });
-        }
-      } catch (e) {
-        console.error('Failed to reload settings:', e);
-      }
-    }
+    refreshSettings
   };
 
   return (

@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import simulationApi from '../../services/api/simulation.api.js';
 import { useAuth } from '../../hooks/useAuth.js';
+import Loader from '../../components/common/Loader.jsx';
 
 const ScenarioComparisonPage = () => {
   const navigate = useNavigate();
@@ -139,10 +140,7 @@ const ScenarioComparisonPage = () => {
   if (loading && !comparisonData) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading simulations...</p>
-        </div>
+        <Loader text="Loading simulations..." />
       </div>
     );
   }

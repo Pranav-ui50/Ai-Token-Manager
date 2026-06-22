@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import auditApi from '../../services/api/audit.api.js';
+import Loader from '../../components/common/Loader.jsx';
 
 const SEVERITY_COLORS = {
   info: 'bg-blue-100 text-blue-800',
@@ -145,9 +146,9 @@ function AuditLogsPage() {
 
   // Pagination
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const limit = 20;
 
   // Export state
   const [exporting, setExporting] = useState(false);
@@ -162,7 +163,7 @@ function AuditLogsPage() {
   useEffect(() => {
     loadLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, page]);
+  }, [filters, page, limit]);
 
   // Handle filter change - updates filter and resets page to 1
   const handleFilterChange = (key, value) => {
@@ -530,8 +531,7 @@ function AuditLogsPage() {
               type="date"
               value={filters.endDate}
               onChange={(e) => handleFilterChange('endDate', e.target.value)}
-              min="2020-01-01"
-              max={new Date().toISOString().split('T')[0]}
+              min={filters.startDate || '2020-01-01'}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#DC2626] focus:border-transparent text-gray-900"
             />
           </div>
@@ -559,7 +559,7 @@ function AuditLogsPage() {
       {/* Logs Table */}
       {loading ? (
         <div className="flex items-center justify-center min-h-64">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626]"></div>
+          <Loader />
         </div>
       ) : logs.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
@@ -575,6 +575,7 @@ function AuditLogsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
@@ -587,6 +588,9 @@ function AuditLogsPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {logs.map((log, index) => (
                   <tr key={log._id || `log-${index}`} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {((page - 1) * limit) + index + 1}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(log.createdAt)}
                     </td>
@@ -640,24 +644,125 @@ function AuditLogsPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-600">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">Rows per page:</span>
+                  <select
+                    value={limit}
+                    onChange={(e) => {
+                      setLimit(parseInt(e.target.value, 10));
+                      setPage(1);
+                    }}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="text-sm text-gray-700">
                   Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, total)} of {total} results
-                </p>
-                <div className="flex gap-2">
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(1)}
+                    disabled={page === 1}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const pages = [];
+                      const maxVisiblePages = 5;
+                      let startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
+                      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+                      if (endPage - startPage + 1 < maxVisiblePages) {
+                        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                      }
+
+                      if (startPage > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => setPage(1)}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                          >
+                            1
+                          </button>
+                        );
+                        if (startPage > 2) {
+                          pages.push(
+                            <span key="ellipsis-start" className="px-1 text-gray-400">...</span>
+                          );
+                        }
+                      }
+
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => setPage(i)}
+                            className={`px-3 py-1 text-sm border rounded ${
+                              i === page
+                                ? 'bg-[#DC2626] text-white border-[#DC2626]'
+                                : 'border-gray-300 hover:bg-gray-100'
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+
+                      if (endPage < totalPages) {
+                        if (endPage < totalPages - 1) {
+                          pages.push(
+                            <span key="ellipsis-end" className="px-1 text-gray-400">...</span>
+                          );
+                        }
+                        pages.push(
+                          <button
+                            key={totalPages}
+                            onClick={() => setPage(totalPages)}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                          >
+                            {totalPages}
+                          </button>
+                        );
+                      }
+
+                      return pages;
+                    })()}
+                  </div>
                   <button
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
+                  </button>
+                  <button
+                    onClick={() => setPage(totalPages)}
+                    disabled={page === totalPages}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
                   </button>
                 </div>
               </div>

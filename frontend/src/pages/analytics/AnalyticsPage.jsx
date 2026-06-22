@@ -192,7 +192,27 @@ function AnalyticsPage() {
   };
 
   const formatNumber = (num) => {
-    return new Intl.NumberFormat('en-US').format(num || 0);
+    if (num === null || num === undefined || isNaN(num)) return '0';
+    if (!isFinite(num)) return num > 0 ? '∞' : '-∞';
+
+    const absNum = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+
+    // For large numbers, use abbreviations with proper comma formatting
+    if (absNum >= 1e12) {
+      return `${sign}${(absNum / 1e12).toFixed(1).replace(/\.0$/, '')}T`;
+    }
+    if (absNum >= 1e9) {
+      return `${sign}${(absNum / 1e9).toFixed(1).replace(/\.0$/, '')}B`;
+    }
+    if (absNum >= 1e6) {
+      return `${sign}${(absNum / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+    }
+    if (absNum >= 1e3) {
+      return `${sign}${(absNum / 1e3).toFixed(1).replace(/\.0$/, '')}K`;
+    }
+    // For smaller numbers, use comma separators
+    return `${sign}${absNum.toLocaleString('en-US')}`;
   };
 
   const formatPercent = (value) => {
@@ -412,40 +432,50 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Trend (Last 7 Days)</h3>
           {costTrend && costTrend.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={costTrend} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+              <LineChart data={costTrend} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
                   tickFormatter={(value) => {
                     if (!value) return '';
                     const date = new Date(value);
                     return `${date.getMonth() + 1}/${date.getDate()}`;
                   }}
                   axisLine={{ stroke: '#d1d5db' }}
+                  tickLine={{ stroke: '#d1d5db' }}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: '#6b7280' }}
-                  tickFormatter={(value) => `$${value.toFixed(2)}`}
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000) {
+                      return `$${(value / 1000).toFixed(1)}k`;
+                    }
+                    return `$${value.toFixed(0)}`;
+                  }}
                   axisLine={{ stroke: '#d1d5db' }}
-                  domain={['auto', 'auto']}
-                  allowDataOverflow={false}
+                  tickLine={{ stroke: '#d1d5db' }}
+                  domain={[0, 'auto']}
                 />
                 <Tooltip
-                  formatter={(value) => formatCurrency(value)}
+                  formatter={(value) => [formatCurrency(value), 'Cost']}
                   labelFormatter={(label) => {
                     if (!label) return '';
                     const date = new Date(label);
-                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                   }}
                   contentStyle={{
                     backgroundColor: '#fff',
                     border: '1px solid #e5e7eb',
                     borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                    padding: '12px'
+                  }}
+                  labelStyle={{
+                    fontWeight: 600,
+                    marginBottom: '8px'
                   }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '10px' }} />
                 <Line
                   type="monotone"
                   dataKey="cost"
@@ -454,7 +484,7 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
                   name="Cost"
                   dot={{ fill: CHART_COLORS.primary, strokeWidth: 2, r: 4 }}
                   activeDot={{ r: 6, stroke: CHART_COLORS.primary, strokeWidth: 2, fill: '#fff' }}
-                  connectNulls={false}
+                  connectNulls={true}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -470,13 +500,40 @@ function OverviewTab({ data, costsData, formatCurrency, formatNumber }) {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Category</h3>
           {costByCategory && costByCategory.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={costByCategory}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="category" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
+              <BarChart data={costByCategory} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="category"
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  axisLine={{ stroke: '#d1d5db' }}
+                  tickLine={{ stroke: '#d1d5db' }}
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#6b7280' }}
+                  axisLine={{ stroke: '#d1d5db' }}
+                  tickLine={{ stroke: '#d1d5db' }}
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+                    return `$${value.toLocaleString('en-US')}`;
+                  }}
+                />
+                <Tooltip
+                  formatter={(value) => [formatCurrency(value), 'Cost']}
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                    padding: '12px'
+                  }}
+                />
+                <Bar
+                  dataKey="cost"
+                  fill={CHART_COLORS.primary}
+                  name="Cost"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -561,12 +618,38 @@ function CostsTab({ data, formatCurrency, formatNumber }) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost by Model</h3>
         {costsByModel && costsByModel.length > 0 ? (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={costsByModel} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tick={{ fontSize: 12 }} />
-              <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost ($)" />
+            <BarChart data={costsByModel} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 12, fill: '#6b7280' }}
+                axisLine={{ stroke: '#d1d5db' }}
+                tickLine={{ stroke: '#d1d5db' }}
+                tickFormatter={(value) => {
+                  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
+                  if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+                  return `$${value.toLocaleString('en-US')}`;
+                }}
+              />
+              <YAxis
+                dataKey="name"
+                type="category"
+                width={100}
+                tick={{ fontSize: 12, fill: '#6b7280' }}
+                axisLine={{ stroke: '#d1d5db' }}
+                tickLine={{ stroke: '#d1d5db' }}
+              />
+              <Tooltip
+                formatter={(value) => [formatCurrency(value), 'Cost']}
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                  padding: '12px'
+                }}
+              />
+              <Bar dataKey="cost" fill={CHART_COLORS.primary} name="Cost" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -729,27 +812,27 @@ function ProfitabilityTab({ data, formatCurrency, formatPercent }) {
         {features && features.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead>
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">Feature</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Category</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Revenue</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Costs</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Profit</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">Margin</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {features.map((feature, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 capitalize">{feature.category}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs?.totalCost || feature.costs || 0)}</td>
-                    <td className={`px-4 py-3 text-sm text-right ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{feature.featureName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{feature.category}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(feature.revenue)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(feature.costs?.totalCost || feature.costs || 0)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(feature.profit || 0)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-right">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                         parseFloat(feature.margin || 0) >= 0
                           ? 'bg-green-100 text-green-700'
@@ -830,21 +913,23 @@ function MarginsTab({ data, formatCurrency, formatPercent }) {
         {features && features.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead>
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feature</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Margin</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Profit</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Costs</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]">S.No</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">Feature</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">Margin</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Profit</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Revenue</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Costs</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">Status</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {features.map((feature, index) => (
                   <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{feature.featureName}</td>
-                    <td className="px-4 py-3 text-sm text-right">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{index + 1}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{feature.featureName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                         parseFloat(feature.grossMargin || 0) >= 50
                           ? 'bg-green-100 text-green-700'
@@ -855,12 +940,12 @@ function MarginsTab({ data, formatCurrency, formatPercent }) {
                         {feature.grossMargin || 0}%
                       </span>
                     </td>
-                    <td className={`px-4 py-3 text-sm text-right ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${(feature.profit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(feature.profit || 0)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.revenue || 0)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900 text-right">{formatCurrency(feature.costs || 0)}</td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(feature.revenue || 0)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">{formatCurrency(feature.costs || 0)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                         feature.status === 'active'
                           ? 'bg-green-100 text-green-700'

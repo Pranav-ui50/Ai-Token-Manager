@@ -186,7 +186,8 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.MANAGE_WEBHOOKS,
     PERMISSIONS.VIEW_WEBHOOKS,
     PERMISSIONS.VIEW_ANALYTICS,
-    PERMISSIONS.VIEW_DASHBOARD
+    PERMISSIONS.VIEW_DASHBOARD,
+    PERMISSIONS.VIEW_AUDIT_LOGS
   ],
 
   // Viewer - Read-only analytics access
@@ -290,6 +291,32 @@ export const PROVIDER_CATEGORIES = {
   EMBEDDING: 'embedding'
 };
 
+// Role-based Audit Log Resource Access
+// Defines which resource types each role can view in audit logs
+export const ROLE_AUDIT_RESOURCES = {
+  [ROLES.SUPER_ADMIN]: null, // Can see all resources
+  [ROLES.ORG_OWNER]: null,   // Can see all resources
+  [ROLES.FINANCE_ADMIN]: ['provider', 'model', 'plan', 'feature', 'pricing_history', 'payment', 'invoice', 'subscription', 'report'],
+  [ROLES.PRODUCT_MANAGER]: ['provider', 'model', 'plan', 'feature', 'simulation', 'report', 'project'],
+  [ROLES.DEVELOPER]: ['integration', 'webhook', 'api_key', 'auth'],  // Only see their own activities
+  [ROLES.VIEWER]: ['report']  // Only view reports
+};
+
+// Role-based Audit Log Actions
+// Defines which actions each role can see in audit logs (in addition to resources)
+export const ROLE_AUDIT_ACTIONS = {
+  [ROLES.SUPER_ADMIN]: null, // Can see all actions
+  [ROLES.ORG_OWNER]: null,   // Can see all actions
+  [ROLES.FINANCE_ADMIN]: null,
+  [ROLES.PRODUCT_MANAGER]: null,
+  [ROLES.DEVELOPER]: ['login', 'logout', 'login_failed', 'password_reset', 'password_changed', 'email_verified', // Auth actions
+                      'create', 'read', 'update', 'delete', // CRUD on their resources
+                      'integration_created', 'integration_updated', 'integration_tested',
+                      'api_key_created', 'api_key_revoked',
+                      'webhook_created', 'webhook_updated', 'webhook_deleted'],
+  [ROLES.VIEWER]: ['read', 'export', 'report_generated', 'report_exported']
+};
+
 export default {
   ROLES,
   ROLE_HIERARCHY,
@@ -302,5 +329,7 @@ export default {
   REPORT_TYPES,
   NOTIFICATION_TYPES,
   MODEL_TYPES,
-  PROVIDER_CATEGORIES
+  PROVIDER_CATEGORIES,
+  ROLE_AUDIT_RESOURCES,
+  ROLE_AUDIT_ACTIONS
 };

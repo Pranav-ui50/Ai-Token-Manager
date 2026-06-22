@@ -5,7 +5,7 @@
  */
 
 import Loader from '../../components/common/Loader.jsx';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth.js';
 import { useSubscription } from '../../context/SubscriptionContext.jsx';
 import Modal from '../../components/common/Modal.jsx';
@@ -31,6 +31,10 @@ function SimulationsPage() {
   const [simulations, setSimulations] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Get organization ID from user
   const orgId = user?.organization?._id || user?.organization;
@@ -82,6 +86,18 @@ function SimulationsPage() {
 
   // Form errors state
   const [formErrors, setFormErrors] = useState({});
+
+  // Pagination calculations
+  const totalRecords = simulations.length;
+  const totalPages = Math.ceil(totalRecords / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedSimulations = simulations.slice(startIndex, endIndex);
+
+  // Reset to first page when simulations change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [simulations.length]);
 
   // Get min date for date inputs (today for start date)
   const getTodayDate = () => new Date().toISOString().split('T')[0];
@@ -585,10 +601,7 @@ function SimulationsPage() {
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading simulations...</p>
-        </div>
+        <Loader text="Loading simulations..." />
       </div>
     );
   }
@@ -622,59 +635,59 @@ function SimulationsPage() {
 
       {/* Statistics */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0 overflow-hidden">
                 <p className="text-xs text-gray-500">Total Simulations</p>
-                <p className="text-xl font-bold text-gray-900">{statistics.total || 0}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{statistics.total || 0}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0 overflow-hidden">
                 <p className="text-xs text-gray-500">Completed</p>
-                <p className="text-xl font-bold text-gray-900">{statistics.completed || 0}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{statistics.completed || 0}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0 overflow-hidden">
                 <p className="text-xs text-gray-500">Avg Profit Margin</p>
-                <p className="text-xl font-bold text-gray-900">{(statistics.avgProfitMargin || 0).toFixed(1)}%</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{(statistics.avgProfitMargin || 0).toFixed(1)}%</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-yellow-50 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div>
+              <div className="min-w-0 overflow-hidden">
                 <p className="text-xs text-gray-500">Projected Profit</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(statistics.totalProjectedProfit || 0)}</p>
+                <p className="text-lg sm:text-xl font-bold text-gray-900 truncate">{formatCurrency(statistics.totalProjectedProfit || 0)}</p>
               </div>
             </div>
           </div>
@@ -684,7 +697,7 @@ function SimulationsPage() {
       {/* Simulations List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
+          <Loader />
         </div>
       ) : showNoOrgState ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12">
@@ -733,6 +746,7 @@ function SimulationsPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
@@ -742,8 +756,11 @@ function SimulationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {simulations.map((sim) => (
+              {paginatedSimulations.map((sim, index) => (
                 <tr key={sim._id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {startIndex + index + 1}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="text-sm font-medium text-gray-900">{sim.name}</div>
                     <div className="text-sm text-gray-500">{sim.description || 'No description'}</div>
@@ -833,15 +850,144 @@ function SimulationsPage() {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(parseInt(e.target.value, 10));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="text-sm text-gray-700">
+                  Showing {startIndex + 1} to {Math.min(endIndex, totalRecords)} of {totalRecords} entries
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  {/* Page Numbers */}
+                  <div className="flex items-center gap-1">
+                    {(() => {
+                      const pages = [];
+                      const maxVisiblePages = 5;
+                      let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+                      if (endPage - startPage + 1 < maxVisiblePages) {
+                        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                      }
+
+                      if (startPage > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => setCurrentPage(1)}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                          >
+                            1
+                          </button>
+                        );
+                        if (startPage > 2) {
+                          pages.push(
+                            <span key="ellipsis-start" className="px-1 text-gray-400">...</span>
+                          );
+                        }
+                      }
+
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => setCurrentPage(i)}
+                            className={`px-3 py-1 text-sm border rounded ${
+                              i === currentPage
+                                ? 'bg-[#DC2626] text-white border-[#DC2626]'
+                                : 'border-gray-300 hover:bg-gray-100'
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+
+                      if (endPage < totalPages) {
+                        if (endPage < totalPages - 1) {
+                          pages.push(
+                            <span key="ellipsis-end" className="px-1 text-gray-400">...</span>
+                          );
+                        }
+                        pages.push(
+                          <button
+                            key={totalPages}
+                            onClick={() => setCurrentPage(totalPages)}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                          >
+                            {totalPages}
+                          </button>
+                        );
+                      }
+
+                      return pages;
+                    })()}
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Create Simulation Modal */}
       <Modal
         isOpen={showCreateModal}
-        onClose={() => { setShowCreateModal(false); setFormErrors({}); }}
+        onClose={() => { setShowCreateModal(false); resetForm(); }}
         title="Create New Simulation"
         size="3xl"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleCreateSimulation} className="space-y-5">
           {/* Basic Information Section */}
@@ -1294,7 +1440,7 @@ function SimulationsPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); resetForm(); }}
                 className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm order-2 sm:order-1"
               >
                 Cancel
@@ -1320,6 +1466,7 @@ function SimulationsPage() {
         }}
         title="Edit Simulation"
         size="3xl"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleUpdateSimulation} className="space-y-5">
           {/* Basic Information Section */}

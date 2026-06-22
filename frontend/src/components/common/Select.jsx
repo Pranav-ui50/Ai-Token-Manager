@@ -32,13 +32,13 @@ function Select({
         disabled={disabled}
         required={required}
         className={`
-          block w-full px-3 py-2 rounded-md shadow-sm border text-sm
+          block w-full px-3 py-2 rounded-lg shadow-sm border text-sm
           ${error
-            ? 'border-red-300 focus:border-red-500'
-            : 'border-gray-300 focus:border-gray-500'
+            ? 'border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+            : 'border-gray-300 focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20'
           }
-          ${disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}
-          focus:outline-none transition-colors
+          ${disabled ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white text-gray-900'}
+          focus:outline-none transition-all duration-200
         `}
       >
         <option value="">{placeholder}</option>

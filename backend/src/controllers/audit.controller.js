@@ -1,5 +1,6 @@
 import auditService from '../services/audit.service.js';
 import { ACTION_TYPES, RESOURCE_TYPES, SEVERITY_LEVELS } from '../models/AuditLog.js';
+import { ROLES, ROLE_AUDIT_RESOURCES, ROLE_AUDIT_ACTIONS } from '../utils/constants.js';
 
 class AuditController {
   /**
@@ -11,8 +12,9 @@ class AuditController {
       // Get organization from user, or use userId if no organization
       const organization = req.user.organization?._id || req.user.organization;
       const userId = req.user.id || req.user.userId;
+      const userRole = req.user.role?.name || 'viewer';
 
-      console.log('[Audit] getLogs called - organization:', organization, 'userId:', userId);
+      console.log('[Audit] getLogs called - organization:', organization, 'userId:', userId, 'role:', userRole);
 
       const {
         action,
@@ -28,6 +30,20 @@ class AuditController {
         sort = '-createdAt'
       } = req.query;
 
+      // Apply role-based filtering for Developer role
+      // Developers can only see logs related to their resources
+      let allowedResources = null;
+      let allowedActions = null;
+
+      // Get the role-based restrictions
+      if (ROLE_AUDIT_RESOURCES[userRole]) {
+        allowedResources = ROLE_AUDIT_RESOURCES[userRole];
+      }
+
+      if (ROLE_AUDIT_ACTIONS[userRole]) {
+        allowedActions = ROLE_AUDIT_ACTIONS[userRole];
+      }
+
       // If user has no organization, filter by user ID instead
       const options = {
         action,
@@ -40,12 +56,15 @@ class AuditController {
         search,
         page: parseInt(page),
         limit: parseInt(limit),
-        sort
+        sort,
+        allowedResources,
+        allowedActions,
+        filterByUserId: userRole === ROLES.DEVELOPER ? userId : null // For Developer role, filter auth logs by user
       };
 
       let result;
       if (organization) {
-        console.log('[Audit] Fetching logs for organization:', organization);
+        console.log('[Audit] Fetching logs for organization:', organization, 'with role restrictions:', { allowedResources, allowedActions });
         result = await auditService.getLogs(organization, options);
       } else {
         console.log('[Audit] Fetching logs for user:', userId);

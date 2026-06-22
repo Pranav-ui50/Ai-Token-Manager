@@ -88,6 +88,80 @@ const integrationApi = {
   toggleStatus: async (id, status) => {
     const response = await apiClient.put(`/integrations/${id}/status`, { status });
     return response.data;
+  },
+
+  /**
+   * Start a manual sync
+   * @param {string} id - Integration ID
+   * @returns {Promise<Object>} Sync record
+   */
+  startSync: async (id) => {
+    const response = await apiClient.post(`/integrations/${id}/sync/start`);
+    return response.data;
+  },
+
+  /**
+   * Get sync status
+   * @param {string} id - Integration ID
+   * @returns {Promise<Object>} Last sync status
+   */
+  getSyncStatus: async (id) => {
+    const response = await apiClient.get(`/integrations/${id}/sync/status`);
+    return response.data;
+  },
+
+  /**
+   * Get sync history
+   * @param {string} id - Integration ID
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} Sync history with pagination
+   */
+  getSyncHistory: async (id, params = {}) => {
+    const response = await apiClient.get(`/integrations/${id}/sync/history`, { params });
+    return response.data;
+  },
+
+  /**
+   * Update sync settings
+   * @param {string} id - Integration ID
+   * @param {Object} settings - Sync settings
+   * @returns {Promise<Object>} Updated integration
+   */
+  updateSyncSettings: async (id, settings) => {
+    const response = await apiClient.put(`/integrations/${id}/sync/settings`, settings);
+    return response.data;
+  },
+
+  /**
+   * Cancel a running sync
+   * @param {string} id - Integration ID
+   * @param {string} syncId - Sync ID
+   * @returns {Promise<Object>} Success message
+   */
+  cancelSync: async (id, syncId) => {
+    const response = await apiClient.post(`/integrations/${id}/sync/${syncId}/cancel`);
+    return response.data;
+  },
+
+  /**
+   * Retry a failed sync
+   * @param {string} id - Integration ID
+   * @param {string} syncId - Sync ID
+   * @returns {Promise<Object>} Sync record
+   */
+  retrySync: async (id, syncId) => {
+    const response = await apiClient.post(`/integrations/${id}/sync/${syncId}/retry`);
+    return response.data;
+  },
+
+  /**
+   * Get sync statistics
+   * @param {Object} params - Query parameters (startDate, endDate)
+   * @returns {Promise<Object>} Sync statistics
+   */
+  getSyncStats: async (params = {}) => {
+    const response = await apiClient.get('/integrations/sync/stats', { params });
+    return response.data;
   }
 };
 

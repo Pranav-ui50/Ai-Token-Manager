@@ -90,10 +90,7 @@ function ProvidersPage() {
       {/* Loading State */}
       {isLoading ? (
         <div className="flex items-center justify-center min-h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading providers...</p>
-          </div>
+          <Loader text="Loading providers..." />
         </div>
       ) : providers.length === 0 ? (
         /* Empty State */

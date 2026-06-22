@@ -17,6 +17,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth.js';
 import featureApi from '../../services/api/feature.api.js';
 import analyticsApi from '../../services/api/analytics.api.js';
+import Loader from '../../components/common/Loader.jsx';
 
 // Helper to extract numeric value from potentially nested object
 const extractNumber = (value) => {
@@ -146,13 +147,7 @@ function ProductManagerDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="mt-4 text-gray-500">Loading dashboard...</p>
-        </div>
+        <Loader text="Loading dashboard..." />
       </div>
     );
   }
@@ -175,7 +170,7 @@ function ProductManagerDashboard() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Product Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500">Manage features and token estimates</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-2">
@@ -201,21 +196,7 @@ function ProductManagerDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Link to="/features" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500 truncate">Total Features</p>
-              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{stats.totalFeatures}</p>
-            </div>
-          </div>
-        </Link>
-
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <Link to="/features?status=active" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -244,66 +225,16 @@ function ProductManagerDashboard() {
           </div>
         </Link>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 h-full">
+        <Link to="/feature-cost" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-5 hover:shadow-md transition-shadow h-full">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-red-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-[#DC2626]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-              </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500 truncate">Monthly Tokens</p>
-              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">{formatNumber(stats.monthlyTokenConsumption)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Avg Tokens/Request</p>
-              <p className="text-base sm:text-lg font-bold text-gray-900">{formatNumber(stats.avgTokensPerRequest)}</p>
-            </div>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Unmapped Features</p>
-              <p className="text-base sm:text-lg font-bold text-gray-900">{stats.unmappedFeatures}</p>
-              {stats.unmappedFeatures > 0 && (
-                <Link to="/model-mapping" className="text-xs text-[#DC2626] hover:underline mt-1 inline-block">
-                  Map now →
-                </Link>
-              )}
-            </div>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-yellow-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <Link to="/feature-cost" className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-gray-500">Feature Cost Overview</p>
-              <p className="text-base sm:text-lg font-bold text-gray-900 hover:text-[#DC2626]">View Costs →</p>
-            </div>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Feature Cost Overview</p>
+              <p className="text-base sm:text-lg font-bold text-gray-900 truncate">View Costs →</p>
             </div>
           </div>
         </Link>

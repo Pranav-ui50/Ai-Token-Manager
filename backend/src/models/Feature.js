@@ -194,7 +194,7 @@ const featureSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['active', 'inactive', 'maintenance', 'deprecated'],
+    enum: ['active', 'inactive', 'maintenance', 'deprecated', 'disabled'],
     default: 'active'
   },
 
@@ -210,6 +210,10 @@ const featureSchema = new mongoose.Schema({
   previousStatus: {
     type: String,
     enum: ['active', 'inactive', 'maintenance', null],
+    default: null
+  },
+  disabledNote: {
+    type: String,
     default: null
   },
 

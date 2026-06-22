@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
+import Loader from '../../components/common/Loader.jsx';
 
 function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
@@ -61,10 +62,7 @@ function AdminDashboardPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading dashboard...</p>
-        </div>
+        <Loader text="Loading dashboard..." />
       </div>
     );
   }

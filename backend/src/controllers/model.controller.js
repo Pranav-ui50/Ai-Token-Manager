@@ -6,6 +6,7 @@
 
 import modelService from '../services/model.service.js';
 import auditService from '../services/audit.service.js';
+import eventService from '../services/event.service.js';
 
 class ModelController {
   /**
@@ -30,6 +31,18 @@ class ModelController {
           requestMethod: req.method,
           requestPath: req.path
         }
+      });
+
+      // Emit event for webhook triggers
+      await eventService.emit(req.user.organization, 'model.created', {
+        model: {
+          id: model._id,
+          name: model.name,
+          displayName: model.displayName,
+          provider: model.provider,
+          pricing: model.pricing
+        },
+        timestamp: new Date().toISOString()
       });
 
       res.status(201).json({
@@ -107,6 +120,9 @@ class ModelController {
    */
   async update(req, res, next) {
     try {
+      // Get previous state for comparison
+      const previousModel = await modelService.getById(req.params.id);
+
       const model = await modelService.update(
         req.params.id,
         req.body,
@@ -134,6 +150,38 @@ class ModelController {
           requestMethod: req.method,
           requestPath: req.path
         }
+      });
+
+      // Emit pricing change event if pricing was updated
+      if (pricingUpdated && previousModel) {
+        const oldPricing = previousModel.pricing || { inputPrice: 0, outputPrice: 0 };
+        const newPricing = req.body.pricing;
+
+        // Check if prices actually changed
+        const inputChanged = oldPricing.inputPrice !== newPricing.inputPrice;
+        const outputChanged = oldPricing.outputPrice !== newPricing.outputPrice;
+
+        if (inputChanged || outputChanged) {
+          await eventService.emitModelPricingChanged(
+            req.user.organization,
+            model,
+            oldPricing,
+            newPricing
+          );
+        }
+      }
+
+      // Emit general model update event
+      await eventService.emit(req.user.organization, 'model.updated', {
+        model: {
+          id: model._id,
+          name: model.name,
+          displayName: model.displayName,
+          provider: model.provider
+        },
+        changes: req.body,
+        pricingUpdated,
+        timestamp: new Date().toISOString()
       });
 
       res.json({
@@ -222,6 +270,17 @@ class ModelController {
           requestPath: req.path
         },
         metadata: { updateCount: updates.length }
+      });
+
+      // Emit pricing change event for bulk updates
+      await eventService.emit(req.user.organization, 'model.pricing.bulk_updated', {
+        updateCount: updates.length,
+        updates: updates.map(u => ({
+          modelId: u.modelId,
+          oldPricing: u.oldPricing,
+          newPricing: u.newPricing
+        })),
+        timestamp: new Date().toISOString()
       });
 
       res.json({

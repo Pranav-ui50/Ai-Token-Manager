@@ -6,12 +6,20 @@
 
 import { useEffect, useRef } from 'react';
 
-function Modal({ isOpen, onClose, title, children, size = 'md' }) {
+function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  closeOnBackdropClick = true, // Allow preventing close on backdrop click
+  closeOnEscape = true // Allow preventing close on escape key
+}) {
   const modalRef = useRef(null);
 
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && closeOnEscape) {
         onClose();
       }
     };
@@ -25,7 +33,7 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }) {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeOnEscape]);
 
   if (!isOpen) return null;
 
@@ -40,12 +48,19 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }) {
     full: 'max-w-[95vw]'
   };
 
+  const handleBackdropClick = (e) => {
+    // Only close if click is directly on the backdrop (not on modal content)
+    if (closeOnBackdropClick && e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 transition-opacity"
-        onClick={onClose}
+        onClick={handleBackdropClick}
       />
 
       {/* Modal Container */}

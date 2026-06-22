@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import adminApi from '../../services/api/admin.api.js';
 import { getCurrencySymbol } from '../../utils/currency.js';
 
@@ -137,7 +138,7 @@ function AdminOrganizationDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626]"></div>
+        <Loader />
       </div>
     );
   }

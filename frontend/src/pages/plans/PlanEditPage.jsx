@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import planApi from '../../services/api/plan.api.js';
 import featureApi from '../../services/api/feature.api.js';
 import Button from '../../components/common/Button.jsx';
@@ -408,7 +409,7 @@ const PlanEditPage = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626]"></div>
+        <Loader />
       </div>
     );
   }

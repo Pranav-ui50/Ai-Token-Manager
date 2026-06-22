@@ -362,18 +362,42 @@ class WebhookService {
         data: payload
       });
 
-      // In production, use fetch or axios
-      // For now, simulate successful delivery
-      // const response = await fetch(url, { method, headers, body, timeout: webhook.timeout });
-      // statusCode = response.status;
-      // success = response.ok;
+      // Make real HTTP request
+      const timeout = webhook.timeout || 30000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      // Simulated response for development
-      await new Promise(resolve => setTimeout(resolve, 100)); // Simulate network latency
-      statusCode = 200;
-      success = true;
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+          body,
+          signal: controller.signal
+        });
 
-      logger.info(`[WebhookService] Webhook delivered: ${webhook._id} to ${url}`);
+        clearTimeout(timeoutId);
+        statusCode = response.status;
+        success = response.ok;
+
+        if (!response.ok) {
+          const responseText = await response.text().catch(() => '');
+          error = `HTTP ${response.status}: ${responseText.substring(0, 200)}`;
+        }
+
+        logger.info(`[WebhookService] Webhook delivered: ${webhook._id} to ${url} (status: ${statusCode})`);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+
+        if (fetchError.name === 'AbortError') {
+          error = 'Request timeout';
+          statusCode = 408;
+        } else {
+          error = fetchError.message;
+          statusCode = 0;
+        }
+
+        logger.error(`[WebhookService] Webhook delivery failed: ${webhook._id} - ${error}`);
+      }
 
     } catch (err) {
       error = err.message;

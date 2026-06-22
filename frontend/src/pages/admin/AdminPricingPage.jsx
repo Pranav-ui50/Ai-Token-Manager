@@ -8,6 +8,7 @@ import { useState, useEffect, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
 import { showToast } from '../../utils/toasts.js';
+import Loader from '../../components/common/Loader.jsx';
 
 function AdminPricingPage() {
   const navigate = useNavigate();
@@ -94,10 +95,7 @@ function AdminPricingPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading pricing data...</p>
-        </div>
+        <Loader text="Loading pricing data..." />
       </div>
     );
   }
@@ -292,9 +290,12 @@ function AdminPricingPage() {
                         ) : (
                           <button
                             onClick={() => handleEditPricing(model)}
-                            className="text-[#DC2626] hover:text-[#B91C1C] text-sm font-medium"
+                            className="p-2 text-[#DC2626] hover:text-[#B91C1C] hover:bg-red-50 rounded-lg transition-colors"
+                            title="Edit pricing"
                           >
-                            Edit Pricing
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
                           </button>
                         )}
                       </td>

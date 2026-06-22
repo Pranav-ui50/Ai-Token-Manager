@@ -43,10 +43,10 @@ const BillingPage = () => {
     try {
       setLoading(true);
       const [billingRes, plansRes, invoicesRes, methodsRes] = await Promise.all([
-        apiClient.get('/api/billing'),
-        apiClient.get('/api/billing/plans'),
-        apiClient.get('/api/billing/invoices'),
-        apiClient.get('/api/payment/methods')
+        apiClient.get('/billing'),
+        apiClient.get('/billing/plans/public'),
+        apiClient.get('/billing/invoices'),
+        apiClient.get('/billing/payment-methods')
       ]);
 
       if (billingRes.data.success) {
@@ -97,7 +97,7 @@ const BillingPage = () => {
   // Handle payment method removal
   const handleRemovePaymentMethod = async (methodId) => {
     try {
-      await apiClient.delete(`/api/payment/methods/${methodId}`);
+      await apiClient.delete(`/billing/payment-methods/${methodId}`);
       setPaymentMethods(paymentMethods.filter(m => m.id !== methodId));
       setSuccess('Payment method removed successfully');
     } catch (err) {
@@ -108,7 +108,7 @@ const BillingPage = () => {
   // Handle set default payment method
   const handleSetDefaultPaymentMethod = async (methodId) => {
     try {
-      await apiClient.put(`/api/payment/methods/${methodId}/default`);
+      await apiClient.put(`/billing/payment-methods/${methodId}/default`);
       setPaymentMethods(paymentMethods.map(m => ({
         ...m,
         isDefault: m.id === methodId
@@ -126,7 +126,7 @@ const BillingPage = () => {
     }
 
     try {
-      await apiClient.delete('/api/billing/subscription');
+      await apiClient.post('/billing/cancel');
       setSuccess('Subscription cancelled successfully');
       fetchBillingData();
     } catch (err) {
@@ -156,7 +156,9 @@ const BillingPage = () => {
     );
   }
 
-  const currentPlan = billingData?.subscription?.plan || 'free';
+  // Get plan display name from billing data
+  const planDisplayName = billingData?.plan?.name || billingData?.plan?.displayName || billingData?.subscription?.plan || 'Free';
+  const planTier = billingData?.plan?.tier || billingData?.subscription?.plan || 'free';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -199,9 +201,14 @@ const BillingPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">Plan</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white capitalize">
-                {currentPlan}
+              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                {planDisplayName}
               </p>
+              {billingData?.plan?.price !== undefined && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {billingData.plan.currency || 'USD'} {billingData.plan.price}/{billingData?.subscription?.billingCycle === 'yearly' ? 'year' : 'month'}
+                </p>
+              )}
             </div>
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
@@ -223,13 +230,45 @@ const BillingPage = () => {
               <h3 className="text-md font-medium text-gray-900 dark:text-white">
                 Usage This Period
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {billingData.usage.projects && (
+                  <UsageProgress
+                    current={billingData.usage.projects.used}
+                    limit={billingData.usage.projects.limit}
+                    label="Projects"
+                    color="blue"
+                  />
+                )}
+                {billingData.usage.features && (
+                  <UsageProgress
+                    current={billingData.usage.features.used}
+                    limit={billingData.usage.features.limit}
+                    label="Features"
+                    color="purple"
+                  />
+                )}
+                {billingData.usage.simulations && (
+                  <UsageProgress
+                    current={billingData.usage.simulations.used}
+                    limit={billingData.usage.simulations.limit}
+                    label="Simulations"
+                    color="orange"
+                  />
+                )}
+                {billingData.usage.teamMembers && (
+                  <UsageProgress
+                    current={billingData.usage.teamMembers.used}
+                    limit={billingData.usage.teamMembers.limit}
+                    label="Team Members"
+                    color="yellow"
+                  />
+                )}
                 {billingData.usage.apiCalls && (
                   <UsageProgress
                     current={billingData.usage.apiCalls.used}
                     limit={billingData.usage.apiCalls.limit}
                     label="API Calls"
-                    color="blue"
+                    color="green"
                   />
                 )}
                 {billingData.usage.tokens && (
@@ -237,7 +276,7 @@ const BillingPage = () => {
                     current={billingData.usage.tokens.used}
                     limit={billingData.usage.tokens.limit}
                     label="Tokens"
-                    color="green"
+                    color="cyan"
                   />
                 )}
               </div>
@@ -281,7 +320,7 @@ const BillingPage = () => {
               <PricingTierCard
                 key={plan.id}
                 tier={plan}
-                selected={selectedPlan === plan.id || currentPlan === plan.id}
+                selected={selectedPlan === plan.id || planTier === plan.tier || billingData?.plan?.id === plan.id}
                 onSelect={handlePlanSelect}
                 billingCycle={billingCycle}
               />
@@ -325,7 +364,7 @@ const BillingPage = () => {
         <BillingHistory invoices={invoices} />
 
         {/* Danger Zone */}
-        {currentPlan !== 'free' && (
+        {planTier !== 'free' && billingData?.subscription?.status !== 'trial' && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
               Danger Zone

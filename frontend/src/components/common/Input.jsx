@@ -38,9 +38,9 @@ const Input = forwardRef(({
         className={cn(
           'w-full px-3 py-2 text-sm text-gray-900 bg-white border rounded-lg shadow-sm',
           'transition-all duration-200 placeholder:text-gray-400',
-          'focus:outline-none focus:border-gray-500',
+          'focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20',
           error
-            ? 'border-error-500 focus:border-error-500'
+            ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
             : 'border-gray-300',
           disabled && 'bg-gray-50 text-gray-500 cursor-not-allowed',
           inputClassName
@@ -48,7 +48,7 @@ const Input = forwardRef(({
         {...props}
       />
       {error && (
-        <p className="mt-1 text-sm text-error-600">{error}</p>
+        <p className="mt-1 text-sm text-red-600">{error}</p>
       )}
       {helperText && !error && (
         <p className="mt-1 text-sm text-gray-500">{helperText}</p>

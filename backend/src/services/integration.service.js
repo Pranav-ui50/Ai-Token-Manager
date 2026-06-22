@@ -209,34 +209,39 @@ class IntegrationService {
       // Decrypt credentials for testing
       const credentials = this._decryptCredentials(integration.credentials);
 
-      // Test based on integration type
+      // Test based on integration type - each test function returns { success, message }
+      let result;
       switch (integration.type) {
         case 'openai':
         case 'anthropic':
           // For AI providers, verify API key
-          success = await this._testAIProvider(integration.type, credentials);
-          message = success ? 'API key validated successfully' : 'Invalid API key';
+          result = await this._testAIProvider(integration.type, credentials);
+          success = result.success;
+          message = result.message;
           break;
 
         case 'stripe':
         case 'razorpay':
           // For payment providers, verify credentials
-          success = await this._testPaymentProvider(integration.type, credentials);
-          message = success ? 'Payment provider connected' : 'Invalid credentials';
+          result = await this._testPaymentProvider(integration.type, credentials);
+          success = result.success;
+          message = result.message;
           break;
 
         case 'slack':
         case 'discord':
           // For notification providers, send test message
-          success = await this._testNotificationProvider(integration.type, integration.config, credentials);
-          message = success ? 'Notification provider connected' : 'Connection failed';
+          result = await this._testNotificationProvider(integration.type, integration.config, credentials);
+          success = result.success;
+          message = result.message;
           break;
 
         case 'webhook':
         case 'custom':
           // For webhooks, ping the endpoint
-          success = await this._testWebhook(integration.config.endpoint, credentials);
-          message = success ? 'Endpoint reachable' : 'Endpoint unreachable';
+          result = await this._testWebhook(integration.config?.endpoint, credentials);
+          success = result.success;
+          message = result.message;
           break;
 
         default:
@@ -417,13 +422,33 @@ class IntegrationService {
   async _testAIProvider(type, credentials) {
     try {
       if (!credentials.apiKey) {
-        return false;
+        return { success: false, message: 'API key is required' };
       }
 
-      // In development/test mode, simulate successful connection
+      // In development/test mode, validate key format but don't make actual API calls
       if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-        logger.info('[IntegrationService] Development mode: simulating successful AI provider test');
-        return true;
+        logger.info('[IntegrationService] Development mode: validating API key format');
+
+        if (type === 'openai') {
+          // OpenAI keys start with 'sk-' and are typically 51 characters
+          if (!credentials.apiKey.startsWith('sk-')) {
+            return { success: false, message: 'Invalid OpenAI API key format. Key should start with "sk-"' };
+          }
+          if (credentials.apiKey.length < 20) {
+            return { success: false, message: 'Invalid OpenAI API key. Key appears to be too short' };
+          }
+          logger.info('[IntegrationService] Development mode: OpenAI key format validation passed');
+          return { success: true, message: 'API key format validated successfully' };
+        } else if (type === 'anthropic') {
+          // Anthropic keys start with 'sk-ant-'
+          if (!credentials.apiKey.startsWith('sk-ant-')) {
+            return { success: false, message: 'Invalid Anthropic API key format. Key should start with "sk-ant-"' };
+          }
+          logger.info('[IntegrationService] Development mode: Anthropic key format validation passed');
+          return { success: true, message: 'API key format validated successfully' };
+        }
+
+        return { success: true, message: 'API key validated successfully' };
       }
 
       // Make actual API call to verify credentials
@@ -433,25 +458,64 @@ class IntegrationService {
             'Authorization': `Bearer ${credentials.apiKey}`
           }
         });
-        return response.ok;
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            return { success: false, message: 'Invalid OpenAI API key. Authentication failed' };
+          } else if (response.status === 429) {
+            return { success: false, message: 'API rate limit exceeded. Please try again later' };
+          }
+          return { success: false, message: `OpenAI API error: ${response.status} ${response.statusText}` };
+        }
+
+        return { success: true, message: 'OpenAI API key validated successfully' };
       } else if (type === 'anthropic') {
         // Anthropic doesn't have a simple test endpoint, verify key format
-        return credentials.apiKey.startsWith('sk-ant-');
+        if (!credentials.apiKey.startsWith('sk-ant-')) {
+          return { success: false, message: 'Invalid Anthropic API key format. Key should start with "sk-ant-"' };
+        }
+        return { success: true, message: 'Anthropic API key format validated' };
       }
 
-      return !!(credentials.apiKey);
+      return { success: !!credentials.apiKey, message: credentials.apiKey ? 'API key provided' : 'API key is required' };
     } catch (error) {
       logger.error(`[IntegrationService] AI provider test failed: ${error.message}`);
-      return false;
+      return { success: false, message: `Connection failed: ${error.message}` };
     }
   }
 
   async _testPaymentProvider(type, credentials) {
     try {
-      // In development/test mode, simulate successful connection
+      // In development/test mode, validate credentials format but don't make actual API calls
       if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-        logger.info('[IntegrationService] Development mode: simulating successful payment provider test');
-        return true;
+        logger.info('[IntegrationService] Development mode: validating payment provider credentials');
+
+        if (type === 'stripe') {
+          if (!credentials.apiKey) {
+            return { success: false, message: 'Stripe API key is required' };
+          }
+          // Stripe keys start with 'sk_test_' or 'sk_live_'
+          if (!credentials.apiKey.startsWith('sk_test_') && !credentials.apiKey.startsWith('sk_live_')) {
+            return { success: false, message: 'Invalid Stripe API key format. Key should start with "sk_test_" or "sk_live_"' };
+          }
+          logger.info('[IntegrationService] Development mode: Stripe key format validation passed');
+          return { success: true, message: 'Stripe API key format validated successfully' };
+        } else if (type === 'razorpay') {
+          if (!credentials.keyId || !credentials.keySecret) {
+            return { success: false, message: 'Razorpay Key ID and Key Secret are required' };
+          }
+          // Razorpay Key ID starts with 'rzp_test_' or 'rzp_live_'
+          if (!credentials.keyId.startsWith('rzp_test_') && !credentials.keyId.startsWith('rzp_live_')) {
+            return { success: false, message: 'Invalid Razorpay Key ID format. Key should start with "rzp_test_" or "rzp_live_"' };
+          }
+          if (credentials.keySecret.length < 10) {
+            return { success: false, message: 'Invalid Razorpay Key Secret. Secret appears to be too short' };
+          }
+          logger.info('[IntegrationService] Development mode: Razorpay credentials format validation passed');
+          return { success: true, message: 'Razorpay credentials format validated successfully' };
+        }
+
+        return { success: true, message: 'Credentials validated successfully' };
       }
 
       if (type === 'stripe' && credentials.apiKey) {
@@ -461,7 +525,17 @@ class IntegrationService {
             'Authorization': `Bearer ${credentials.apiKey}`
           }
         });
-        return response.ok;
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            return { success: false, message: 'Invalid Stripe API key. Authentication failed' };
+          } else if (response.status === 403) {
+            return { success: false, message: 'Stripe API key does not have required permissions' };
+          }
+          return { success: false, message: `Stripe API error: ${response.status} ${response.statusText}` };
+        }
+
+        return { success: true, message: 'Stripe API key validated successfully' };
       } else if (type === 'razorpay' && credentials.keyId && credentials.keySecret) {
         // Razorpay uses basic auth
         const auth = Buffer.from(`${credentials.keyId}:${credentials.keySecret}`).toString('base64');
@@ -470,22 +544,50 @@ class IntegrationService {
             'Authorization': `Basic ${auth}`
           }
         });
-        return response.ok;
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            return { success: false, message: 'Invalid Razorpay credentials. Authentication failed' };
+          } else if (response.status === 403) {
+            return { success: false, message: 'Razorpay credentials do not have required permissions' };
+          }
+          return { success: false, message: `Razorpay API error: ${response.status} ${response.statusText}` };
+        }
+
+        return { success: true, message: 'Razorpay credentials validated successfully' };
       }
 
-      return !!(credentials.apiKey || credentials.secretKey);
+      return { success: !!(credentials.apiKey || credentials.secretKey), message: (credentials.apiKey || credentials.secretKey) ? 'Credentials provided' : 'Credentials are required' };
     } catch (error) {
       logger.error(`[IntegrationService] Payment provider test failed: ${error.message}`);
-      return false;
+      return { success: false, message: `Connection failed: ${error.message}` };
     }
   }
 
   async _testNotificationProvider(type, config, credentials) {
     try {
-      // In development/test mode, simulate successful connection
+      // In development/test mode, validate credentials format
       if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-        logger.info('[IntegrationService] Development mode: simulating successful notification provider test');
-        return true;
+        logger.info('[IntegrationService] Development mode: validating notification provider credentials');
+
+        if (type === 'slack' && credentials.webhookUrl) {
+          if (!credentials.webhookUrl.startsWith('https://hooks.slack.com/')) {
+            return { success: false, message: 'Invalid Slack webhook URL. URL should start with "https://hooks.slack.com/"' };
+          }
+          logger.info('[IntegrationService] Development mode: Slack webhook URL format validation passed');
+          return { success: true, message: 'Slack webhook URL format validated successfully' };
+        } else if (type === 'discord' && credentials.webhookUrl) {
+          if (!credentials.webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
+            return { success: false, message: 'Invalid Discord webhook URL. URL should start with "https://discord.com/api/webhooks/"' };
+          }
+          logger.info('[IntegrationService] Development mode: Discord webhook URL format validation passed');
+          return { success: true, message: 'Discord webhook URL format validated successfully' };
+        }
+
+        if (!credentials.webhookUrl && !credentials.apiKey && !credentials.token) {
+          return { success: false, message: 'Webhook URL or API token is required' };
+        }
+        return { success: true, message: 'Credentials validated successfully' };
       }
 
       if (type === 'slack' && credentials.webhookUrl) {
@@ -495,7 +597,10 @@ class IntegrationService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: 'Connection test from API Token Manager' })
         });
-        return response.ok;
+        if (!response.ok) {
+          return { success: false, message: `Slack webhook failed: ${response.status} ${response.statusText}` };
+        }
+        return { success: true, message: 'Slack webhook validated successfully' };
       } else if (type === 'discord' && credentials.webhookUrl) {
         // Send test message to Discord
         const response = await fetch(credentials.webhookUrl, {
@@ -503,26 +608,39 @@ class IntegrationService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content: 'Connection test from API Token Manager' })
         });
-        return response.ok;
+        if (!response.ok) {
+          return { success: false, message: `Discord webhook failed: ${response.status} ${response.statusText}` };
+        }
+        return { success: true, message: 'Discord webhook validated successfully' };
       }
 
-      return !!(credentials.apiKey || credentials.token);
+      return { success: !!(credentials.apiKey || credentials.token), message: (credentials.apiKey || credentials.token) ? 'Credentials provided' : 'Credentials are required' };
     } catch (error) {
       logger.error(`[IntegrationService] Notification provider test failed: ${error.message}`);
-      return false;
+      return { success: false, message: `Connection failed: ${error.message}` };
     }
   }
 
   async _testWebhook(endpoint, credentials) {
     try {
       if (!endpoint) {
-        return false;
+        return { success: false, message: 'Webhook URL is required' };
       }
 
-      // In development/test mode, simulate successful connection
+      // Validate URL format
+      try {
+        const url = new URL(endpoint);
+        if (!url.protocol.startsWith('http')) {
+          return { success: false, message: 'Invalid webhook URL. URL must start with http:// or https://' };
+        }
+      } catch (e) {
+        return { success: false, message: 'Invalid webhook URL format' };
+      }
+
+      // In development/test mode, validate URL format only
       if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-        logger.info('[IntegrationService] Development mode: simulating successful webhook test');
-        return true;
+        logger.info('[IntegrationService] Development mode: webhook URL format validation passed');
+        return { success: true, message: 'Webhook URL format validated successfully' };
       }
 
       // Send test webhook request
@@ -540,10 +658,13 @@ class IntegrationService {
         })
       });
 
-      return response.ok || response.status === 202;
+      if (response.ok || response.status === 202) {
+        return { success: true, message: 'Webhook endpoint is reachable' };
+      }
+      return { success: false, message: `Webhook test failed: ${response.status} ${response.statusText}` };
     } catch (error) {
       logger.error(`[IntegrationService] Webhook test failed: ${error.message}`);
-      return false;
+      return { success: false, message: `Connection failed: ${error.message}` };
     }
   }
 

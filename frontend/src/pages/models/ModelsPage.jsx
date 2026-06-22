@@ -6,7 +6,7 @@
  */
 
 import Loader from '../../components/common/Loader.jsx';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
@@ -34,7 +34,7 @@ function ModelsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [models, setModels] = useState([]);
   const [providers, setProviders] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [liveModels, setLiveModels] = useState([]);
   const [isLoadingLive, setIsLoadingLive] = useState(false);
@@ -43,14 +43,24 @@ function ModelsPage() {
   // Filters
   const [selectedProvider, setSelectedProvider] = useState(searchParams.get('provider') || '');
   const [selectedType, setSelectedType] = useState(searchParams.get('type') || '');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
 
   useEffect(() => {
     fetchProviders();
   }, []);
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   useEffect(() => {
     fetchModels();
-  }, [selectedProvider, selectedType, pagination.page]);
+  }, [selectedProvider, selectedType, debouncedSearch, pagination.page, pagination.limit]);
 
   const fetchProviders = async () => {
     try {
@@ -70,6 +80,7 @@ function ModelsPage() {
       };
       if (selectedProvider) params.providerId = selectedProvider;
       if (selectedType) params.type = selectedType;
+      if (debouncedSearch) params.search = debouncedSearch;
 
       const response = await modelApi.getAll(params);
       setModels(response.data);
@@ -131,6 +142,8 @@ function ModelsPage() {
       setSelectedProvider(value);
     } else if (key === 'type') {
       setSelectedType(value);
+    } else if (key === 'search') {
+      setSearchQuery(value);
     }
     setPagination(prev => ({ ...prev, page: 1 }));
 
@@ -147,6 +160,8 @@ function ModelsPage() {
   const clearFilters = () => {
     setSelectedProvider('');
     setSelectedType('');
+    setSearchQuery('');
+    setDebouncedSearch('');
     setSearchParams({});
     setPagination(prev => ({ ...prev, page: 1 }));
   };
@@ -188,6 +203,32 @@ function ModelsPage() {
         {/* Filters */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
+            {/* Search Input */}
+            <div className="flex-1 min-w-[250px]">
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Search Models</label>
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  placeholder="Search by model name..."
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => handleFilterChange('search', '')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex-1 min-w-[200px]">
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Provider</label>
               <select
@@ -197,7 +238,7 @@ function ModelsPage() {
                   setShowLiveModels(false);
                   setLiveModels([]);
                 }}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 text-sm"
               >
                 <option value="">All Providers</option>
                 {providers.map(p => (
@@ -210,7 +251,7 @@ function ModelsPage() {
               <select
                 value={selectedType}
                 onChange={(e) => handleFilterChange('type', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent text-sm"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 text-sm"
               >
                 <option value="">All Types</option>
                 {Object.entries(MODEL_TYPES).map(([value, { label }]) => (
@@ -227,10 +268,7 @@ function ModelsPage() {
               >
                 {isLoadingLive ? (
                   <>
-                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
+                    <Loader size="sm" inline />
                     Syncing...
                   </>
                 ) : (
@@ -243,7 +281,7 @@ function ModelsPage() {
                 )}
               </button>
             )}
-            {(selectedProvider || selectedType) && (
+            {(selectedProvider || selectedType || searchQuery) && (
               <button
                 onClick={clearFilters}
                 className="px-4 py-2 text-sm text-gray-600 hover:text-[#DC2626] transition-colors flex items-center gap-1"
@@ -322,13 +360,7 @@ function ModelsPage() {
         {/* Loading State */}
         {isLoading ? (
           <div className="flex items-center justify-center min-h-64">
-            <div className="text-center">
-              <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              <p className="mt-4 text-gray-500">Loading models...</p>
-            </div>
+            <Loader text="Loading models..." />
           </div>
         ) : models.length === 0 ? (
           /* Empty State */
@@ -340,7 +372,7 @@ function ModelsPage() {
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No models found</h3>
             <p className="text-gray-500 max-w-md mx-auto">
-              {selectedProvider || selectedType
+              {selectedProvider || selectedType || searchQuery
                 ? 'No models match your current filters. Try adjusting your criteria.'
                 : 'AI models will appear here once they are configured in the system.'}
             </p>
@@ -439,24 +471,125 @@ function ModelsPage() {
             {/* Pagination */}
             {pagination.pages > 1 && (
               <div className="bg-gray-50 px-6 py-4 border-t border-gray-100">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-500">
-                    Showing page {pagination.page} of {pagination.pages}
-                  </p>
-                  <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-700">Rows per page:</span>
+                    <select
+                      value={pagination.limit}
+                      onChange={(e) => {
+                        const newLimit = parseInt(e.target.value, 10);
+                        setPagination(prev => ({ ...prev, limit: newLimit, page: 1 }));
+                      }}
+                      className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPagination(prev => ({ ...prev, page: 1 }))}
+                      disabled={pagination.page === 1}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="First page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                      </svg>
+                    </button>
                     <button
                       onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                       disabled={pagination.page === 1}
-                      className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Previous
                     </button>
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1">
+                      {(() => {
+                        const pages = [];
+                        const maxVisiblePages = 5;
+                        let startPage = Math.max(1, pagination.page - Math.floor(maxVisiblePages / 2));
+                        let endPage = Math.min(pagination.pages, startPage + maxVisiblePages - 1);
+
+                        if (endPage - startPage + 1 < maxVisiblePages) {
+                          startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                        }
+
+                        if (startPage > 1) {
+                          pages.push(
+                            <button
+                              key={1}
+                              onClick={() => setPagination(prev => ({ ...prev, page: 1 }))}
+                              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                            >
+                              1
+                            </button>
+                          );
+                          if (startPage > 2) {
+                            pages.push(
+                              <span key="ellipsis-start" className="px-1 text-gray-400">...</span>
+                            );
+                          }
+                        }
+
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(
+                            <button
+                              key={i}
+                              onClick={() => setPagination(prev => ({ ...prev, page: i }))}
+                              className={`px-3 py-1 text-sm border rounded ${
+                                i === pagination.page
+                                  ? 'bg-[#DC2626] text-white border-[#DC2626]'
+                                  : 'border-gray-300 hover:bg-gray-100'
+                              }`}
+                            >
+                              {i}
+                            </button>
+                          );
+                        }
+
+                        if (endPage < pagination.pages) {
+                          if (endPage < pagination.pages - 1) {
+                            pages.push(
+                              <span key="ellipsis-end" className="px-1 text-gray-400">...</span>
+                            );
+                          }
+                          pages.push(
+                            <button
+                              key={pagination.pages}
+                              onClick={() => setPagination(prev => ({ ...prev, page: pagination.pages }))}
+                              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                            >
+                              {pagination.pages}
+                            </button>
+                          );
+                        }
+
+                        return pages;
+                      })()}
+                    </div>
                     <button
                       onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                       disabled={pagination.page === pagination.pages}
-                      className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Next
+                    </button>
+                    <button
+                      onClick={() => setPagination(prev => ({ ...prev, page: pagination.pages }))}
+                      disabled={pagination.page === pagination.pages}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Last page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                      </svg>
                     </button>
                   </div>
                 </div>

@@ -111,10 +111,7 @@ function PricingHistoryPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading pricing history...</p>
-        </div>
+        <Loader text="Loading pricing history..." />
       </div>
     );
   }

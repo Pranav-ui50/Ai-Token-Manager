@@ -9,6 +9,7 @@ import Plan from '../models/Plan.js';
 import Provider from '../models/Provider.js';
 import AIModel from '../models/AIModel.js';
 import Feature from '../models/Feature.js';
+import Setting from '../models/Setting.js';
 
 /**
  * Get public plans
@@ -337,6 +338,35 @@ export const getPublicFeatures = async (req, res) => {
     res.status(500).json({
       success: false,
       error: { message: 'Failed to fetch features' }
+    });
+  }
+};
+
+/**
+ * Get public site settings
+ * Returns site name and description for all users
+ * This is accessible without authentication
+ */
+export const getPublicSiteSettings = async (req, res) => {
+  try {
+    const settings = await Setting.getSettings();
+
+    res.json({
+      success: true,
+      data: {
+        siteName: settings.siteName || 'API Token Manager',
+        siteDescription: settings.siteDescription || 'AI API Token Cost Management Platform'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching public site settings:', error);
+    // Return defaults on error
+    res.json({
+      success: true,
+      data: {
+        siteName: 'API Token Manager',
+        siteDescription: 'AI API Token Cost Management Platform'
+      }
     });
   }
 };

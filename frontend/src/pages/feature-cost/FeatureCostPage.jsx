@@ -21,6 +21,10 @@ function FeatureCostPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [currency] = useState('USD');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   useEffect(() => {
     fetchFeatures();
   }, []);
@@ -107,6 +111,28 @@ function FeatureCostPage() {
       return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
     });
 
+  // Pagination logic
+  const totalPages = Math.ceil(sortedFeatures.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedFeatures = sortedFeatures.slice(startIndex, endIndex);
+
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const handlePageSizeChange = (e) => {
+    const newSize = parseInt(e.target.value, 10);
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
+
+  const goToPage = (page) => {
+    const validPage = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(validPage);
+  };
+
   // Calculate totals
   const totalInputTokens = features.reduce((sum, f) => sum + (f.tokenEstimates?.inputTokensPerRequest || 0), 0);
   const totalOutputTokens = features.reduce((sum, f) => sum + (f.tokenEstimates?.outputTokensPerRequest || 0), 0);
@@ -138,20 +164,6 @@ function FeatureCostPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Estimated Feature Cost</h1>
           <p className="text-sm text-gray-500">Estimated AI costs for each feature</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <Link
-            to="/token-estimates"
-            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-center"
-          >
-            Configure Estimates
-          </Link>
-          <Link
-            to="/features/new"
-            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-[#DC2626] rounded-lg hover:bg-[#B91C1C] transition-colors text-center"
-          >
-            Add Feature
-          </Link>
         </div>
       </div>
 
@@ -243,18 +255,9 @@ function FeatureCostPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <h3 className="text-sm font-medium text-gray-900 mb-2">No features found</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500">
               {searchTerm ? 'Try adjusting your search' : 'Create features to see cost estimates'}
             </p>
-            <Link
-              to="/features/new"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#DC2626] text-white font-medium rounded-lg hover:bg-[#B91C1C] transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Feature
-            </Link>
           </div>
         ) : (
           <>
@@ -263,6 +266,9 @@ function FeatureCostPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      S.No
+                    </th>
                     <th
                       className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                       onClick={() => handleSort('name')}
@@ -337,13 +343,16 @@ function FeatureCostPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {sortedFeatures.map((feature) => {
+                  {paginatedFeatures.map((feature, index) => {
                     const costPerRequest = calculateCostPerRequest(feature);
                     const monthlyCost = calculateMonthlyCost(feature);
                     const monthlyRequests = feature.tokenEstimates?.expectedMonthlyRequests || 0;
 
                     return (
                       <tr key={feature._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {startIndex + index + 1}
+                        </td>
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                           <Link to={`/features/${feature._id}`} className="hover:text-[#DC2626]">
                             <p className="font-medium text-gray-900">{feature.name}</p>
@@ -391,9 +400,72 @@ function FeatureCostPage() {
               </table>
             </div>
 
+            {/* Pagination Controls - Desktop */}
+            {totalPages > 1 && (
+              <div className="hidden md:flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={handlePageSizeChange}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">
+                    Showing {startIndex + 1} to {Math.min(endIndex, sortedFeatures.length)} of {sortedFeatures.length} entries
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
-              {sortedFeatures.map((feature) => {
+              {paginatedFeatures.map((feature) => {
                 const costPerRequest = calculateCostPerRequest(feature);
                 const monthlyCost = calculateMonthlyCost(feature);
                 const monthlyRequests = feature.tokenEstimates?.expectedMonthlyRequests || 0;
@@ -435,6 +507,65 @@ function FeatureCostPage() {
                   </div>
                 );
               })}
+              {/* Pagination Controls - Mobile */}
+              {totalPages > 1 && (
+                <div className="md:hidden border-t border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <select
+                      value={pageSize}
+                      onChange={handlePageSizeChange}
+                      className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                    >
+                      <option value={10}>10 rows</option>
+                      <option value={25}>25 rows</option>
+                      <option value={50}>50 rows</option>
+                      <option value={100}>100 rows</option>
+                    </select>
+                    <span className="text-xs text-gray-600 flex-1 text-center">
+                      {startIndex + 1}-{Math.min(endIndex, sortedFeatures.length)} of {sortedFeatures.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => goToPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="First page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    <span className="px-2 py-1.5 text-sm text-gray-700 font-medium">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => goToPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Last page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

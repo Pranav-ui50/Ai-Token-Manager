@@ -407,6 +407,71 @@ class AnalyticsService {
     const totalTokens = features.reduce((sum, f) => sum + (f.stats?.totalTokens || 0), 0);
     const totalRequests = features.reduce((sum, f) => sum + (f.stats?.totalRequests || 0), 0);
 
+    // Calculate time-based usage stats
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    let tokensToday = 0;
+    let requestsToday = 0;
+    let tokensThisMonth = 0;
+    let requestsThisMonth = 0;
+    let failedRequests = 0;
+    let totalResponseTime = 0;
+    let responseTimeCount = 0;
+
+    // Process usage history for time-based stats
+    for (const feature of features) {
+      if (feature.usageHistory && Array.isArray(feature.usageHistory)) {
+        for (const usage of feature.usageHistory) {
+          const usageDate = new Date(usage.date);
+
+          // Today's usage
+          if (usageDate >= todayStart && usageDate <= now) {
+            tokensToday += usage.tokens || 0;
+            requestsToday += usage.requests || 0;
+          }
+
+          // This month's usage
+          if (usageDate >= monthStart && usageDate <= now) {
+            tokensThisMonth += usage.tokens || 0;
+            requestsThisMonth += usage.requests || 0;
+          }
+
+          // Aggregate error counts and latency from all history
+          failedRequests += usage.errorCount || 0;
+          if (usage.avgLatency && usage.avgLatency > 0) {
+            totalResponseTime += usage.avgLatency;
+            responseTimeCount++;
+          }
+        }
+      }
+
+      // Also count failed requests and response times from stats (fallback)
+      if (feature.stats) {
+        failedRequests += feature.stats.failedRequests || feature.stats.errorCount || 0;
+        if (feature.stats.avgResponseTime || feature.stats.avgLatency) {
+          totalResponseTime += feature.stats.avgResponseTime || feature.stats.avgLatency || 0;
+          responseTimeCount++;
+        }
+      }
+    }
+
+    // If no usage history, estimate from total stats
+    if (tokensThisMonth === 0 && totalTokens > 0) {
+      tokensThisMonth = totalTokens;
+      requestsThisMonth = totalRequests;
+    }
+
+    // Calculate average tokens per request
+    const avgTokensPerRequest = totalRequests > 0 ? Math.round(totalTokens / totalRequests) : 0;
+
+    // Calculate error rate
+    const errorRate = totalRequests > 0 ? ((failedRequests / totalRequests) * 100) : 0;
+
+    // Calculate average response time
+    const avgResponseTime = responseTimeCount > 0 ? Math.round(totalResponseTime / responseTimeCount) : 0;
+
     // Cost by category
     const costByCategory = {};
     for (const feature of features) {
@@ -418,6 +483,9 @@ class AnalyticsService {
     // Cost by model
     const costByModel = {};
     const topModels = [];
+    const modelUsage = [];
+    const featureUsage = [];
+
     for (const feature of features) {
       const modelName = feature.model?.displayName || feature.model?.name || 'Unknown';
       const cost = (feature.stats?.totalCost || 0) + this._calculateInfrastructureCost(feature);
@@ -432,27 +500,53 @@ class AnalyticsService {
           provider: feature.provider?.name || 'Unknown'
         });
       }
+
+      // Build model usage for UsagePage
+      modelUsage.push({
+        _id: feature.model?._id || feature._id,
+        name: modelName,
+        tokens: feature.stats?.totalTokens || 0,
+        requests: feature.stats?.totalRequests || 0,
+        cost: cost
+      });
+
+      // Build feature usage for UsagePage
+      featureUsage.push({
+        _id: feature._id,
+        name: feature.name,
+        tokens: feature.stats?.totalTokens || 0,
+        requests: feature.stats?.totalRequests || 0,
+        cost: cost
+      });
     }
 
     // Sort top models by cost
     topModels.sort((a, b) => b.cost - a.cost);
 
+    // Sort model usage by tokens
+    modelUsage.sort((a, b) => b.tokens - a.tokens);
+
+    // Sort feature usage by tokens
+    featureUsage.sort((a, b) => b.tokens - a.tokens);
+
     // Recent activity (features with recent usage)
     const recentFeatures = features
       .filter(f => f.stats?.lastUsedAt)
       .sort((a, b) => new Date(b.stats.lastUsedAt) - new Date(a.stats.lastUsedAt))
-      .slice(0, 5)
+      .slice(0, 10)
       .map(f => ({
-        name: f.name,
-        lastUsed: f.stats.lastUsedAt,
-        requests: f.stats.totalRequests
+        _id: f._id,
+        endpoint: `/api/features/${f._id}/execute`,
+        method: 'POST',
+        tokens: f.stats?.totalTokens || 0,
+        status: 200,
+        timestamp: f.stats?.lastUsedAt
       }));
 
     // Cost trend (last 7 days)
     const costTrend = await this._getCostTrend(organizationId, 7);
 
     // Calculate projected cost (based on current month's daily average * remaining days)
-    const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const currentDay = now.getDate();
     const remainingDays = daysInMonth - currentDay;
@@ -511,6 +605,21 @@ class AnalyticsService {
         activePlans: activePlansCount,  // Active Plans (features)
         monthlySpend: mtdCost,          // Month-to-date spend
 
+        // Token and request stats for Usage Dashboard
+        totalTokens: totalTokens,
+        totalRequests: totalRequests,
+        tokensThisMonth: tokensThisMonth,
+        requestsThisMonth: requestsThisMonth,
+        tokensToday: tokensToday,
+        requestsToday: requestsToday,
+        avgTokensPerRequest: avgTokensPerRequest,
+        errorRate: errorRate,
+        errorPercentage: errorRate,
+        failedRequests: failedRequests,
+        errorCount: failedRequests,
+        avgResponseTime: avgResponseTime,
+        avgLatency: avgResponseTime,
+
         // Additional summary data
         organization: {
           name: organization?.name,
@@ -540,6 +649,8 @@ class AnalyticsService {
         }
       },
       topModels: topModels.slice(0, 5),  // Top 5 models by cost
+      modelUsage: modelUsage.slice(0, 5),  // Top 5 models by token usage
+      featureUsage: featureUsage.slice(0, 5),  // Top 5 features by token usage
       recentActivity: recentFeatures,
       costTrend,
       generatedAt: new Date().toISOString()

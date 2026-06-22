@@ -15,6 +15,7 @@ import Plan from '../models/Plan.js';
 import { AppError } from '../middlewares/error.middleware.js';
 import logger from '../config/logger.js';
 import crypto from 'crypto';
+import limitEnforcementService from './limitEnforcement.service.js';
 
 // Payment provider instances
 let stripe = null;
@@ -637,6 +638,28 @@ class PaymentService {
         billingCycle
       }
     });
+
+    // Enforce plan limits after checkout success
+    try {
+      logger.info(`[Stripe] Enforcing plan limits for organization ${organizationId}`);
+
+      const targetPlan = await Plan.findById(planId).catch(() => null) || await Plan.findOne({ tier: planId?.toLowerCase() });
+
+      if (targetPlan) {
+        logger.info(`[Stripe] Plan found: ${targetPlan.tier}, limits:`, targetPlan.limits);
+        const enforcementResult = await limitEnforcementService.enforceAllLimits(
+          organizationId,
+          organization.owner?._id,
+          targetPlan
+        );
+        logger.info(`[Stripe] Limit enforcement result:`, JSON.stringify(enforcementResult));
+      } else {
+        logger.warn(`[Stripe] Plan not found for limit enforcement: ${planId}`);
+      }
+    } catch (enforcementError) {
+      // Log but don't fail the payment
+      logger.error(`[Stripe] Failed to enforce limits: ${enforcementError.message}`);
+    }
   }
 
   /**
@@ -1421,6 +1444,30 @@ class PaymentService {
         currency: payment.currency
       }
     });
+
+    // Enforce plan limits after payment success
+    try {
+      logger.info(`[Razorpay] Enforcing plan limits for organization ${organizationId}`);
+
+      // Get the plan details
+      const planDetails = await this.getPlan(planId);
+      const targetPlan = await Plan.findById(planId).catch(() => null) || await Plan.findOne({ tier: planId.toLowerCase() });
+
+      if (targetPlan) {
+        logger.info(`[Razorpay] Plan found: ${targetPlan.tier}, limits:`, targetPlan.limits);
+        const enforcementResult = await limitEnforcementService.enforceAllLimits(
+          organizationId,
+          organization.owner?._id,
+          targetPlan
+        );
+        logger.info(`[Razorpay] Limit enforcement result:`, JSON.stringify(enforcementResult));
+      } else {
+        logger.warn(`[Razorpay] Plan not found for limit enforcement: ${planId}`);
+      }
+    } catch (enforcementError) {
+      // Log but don't fail the payment
+      logger.error(`[Razorpay] Failed to enforce limits: ${enforcementError.message}`);
+    }
 
     return {
       success: true,

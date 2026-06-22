@@ -25,13 +25,16 @@
     @apply bg-gray-900 text-gray-100;
   }
 
-  /* Focus styles */
-  *:focus {
-    @apply outline-none;
+  /* Focus styles for interactive elements */
+  *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-[#DC2626];
   }
 
-  *:focus-visible {
-    @apply outline-2 outline-offset-2 outline-gray-400;
+  /* Form element focus styles */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    @apply outline-none border-[#DC2626] ring-2 ring-[#DC2626]/20;
   }
 
   /* Selection */
@@ -60,7 +63,7 @@
 @layer components {
   /* Button Base */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#DC2626] disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
@@ -107,13 +110,21 @@
     @apply p-2;
   }
 
-  /* Input Base */
+  /* Input Base - with proper focus state */
   .input {
-    @apply w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg shadow-sm transition-all duration-200 placeholder:text-gray-400 focus:outline-none focus:border-gray-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed;
+    @apply w-full px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg shadow-sm transition-all duration-200 placeholder:text-gray-400;
+  }
+
+  .input:focus {
+    @apply outline-none border-[#DC2626] ring-2 ring-[#DC2626]/20;
   }
 
   .input-error {
     @apply input border-error-500;
+  }
+
+  .input-error:focus {
+    @apply border-error-500 ring-2 ring-error-500/20;
   }
 
   /* Label */

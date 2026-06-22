@@ -7,6 +7,7 @@
 import providerService from '../services/provider.service.js';
 import dynamicModelsService from '../services/dynamicModels.service.js';
 import auditService from '../services/audit.service.js';
+import eventService from '../services/event.service.js';
 
 class ProviderController {
   /**
@@ -31,6 +32,16 @@ class ProviderController {
           requestMethod: req.method,
           requestPath: req.path
         }
+      });
+
+      // Emit event for webhook triggers
+      await eventService.emit(req.user.organization, 'provider.created', {
+        provider: {
+          id: provider._id,
+          name: provider.name,
+          displayName: provider.displayName
+        },
+        timestamp: new Date().toISOString()
       });
 
       res.status(201).json({
@@ -101,6 +112,9 @@ class ProviderController {
    */
   async update(req, res, next) {
     try {
+      // Get previous state for comparison
+      const previousProvider = await providerService.getById(req.params.id);
+
       const provider = await providerService.update(
         req.params.id,
         req.body,
@@ -122,6 +136,18 @@ class ProviderController {
           requestMethod: req.method,
           requestPath: req.path
         }
+      });
+
+      // Emit event for webhook triggers
+      await eventService.emit(req.user.organization, 'provider.updated', {
+        provider: {
+          id: provider._id,
+          name: provider.name,
+          displayName: provider.displayName,
+          isActive: provider.isActive
+        },
+        changes: req.body,
+        timestamp: new Date().toISOString()
       });
 
       res.json({

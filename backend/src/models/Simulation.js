@@ -8,7 +8,7 @@
 import mongoose from 'mongoose';
 
 const SIMULATION_TYPES = ['growth', 'pricing_change', 'custom', 'expense_forecast', 'revenue_forecast'];
-const SIMULATION_STATUS = ['draft', 'running', 'completed', 'failed', 'archived'];
+const SIMULATION_STATUS = ['draft', 'running', 'completed', 'failed', 'archived', 'disabled'];
 
 const simulationSchema = new mongoose.Schema(
   {
@@ -46,7 +46,11 @@ const simulationSchema = new mongoose.Schema(
     },
     previousStatus: {
       type: String,
-      enum: SIMULATION_STATUS,
+      enum: [...SIMULATION_STATUS, null],
+      default: null
+    },
+    disabledNote: {
+      type: String,
       default: null
     },
 

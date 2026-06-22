@@ -83,6 +83,10 @@ const organizationSchema = new mongoose.Schema(
         enum: ['plan_limit', 'admin_action', 'subscription_expired', null],
         default: null
       },
+      disabledNote: {
+        type: String,
+        default: null
+      },
       disabledBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'

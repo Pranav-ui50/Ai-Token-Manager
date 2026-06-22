@@ -25,32 +25,33 @@ const PLAN_HIERARCHY = {
 };
 
 // Default plan limits (fallback when plan not found)
+// These should match the seeded plans in seeder.js
 const DEFAULT_LIMITS = {
   starter: {
-    maxUsers: 2,
-    maxProjects: 4,
-    maxFeatures: 8,
-    maxSimulations: 10,
-    includedAiCredits: 5000,        // 5,000 tokens
-    maxApiCalls: 1000,              // 1,000 API calls
+    maxUsers: 3,
+    maxProjects: 3,
+    maxFeatures: 10,
+    maxSimulations: 100,
+    includedAiCredits: 500000,      // 500,000 tokens
+    maxApiCalls: 10000,             // 10,000 API calls
     maxTokens: 500000                // 500,000 tokens
   },
   professional: {
-    maxUsers: 5,
-    maxProjects: 6,
-    maxFeatures: 12,
-    maxSimulations: 20,
-    includedAiCredits: 500000,      // 500,000 tokens
+    maxUsers: 10,
+    maxProjects: 10,
+    maxFeatures: 50,
+    maxSimulations: 500,
+    includedAiCredits: 2000000,      // 2,000,000 tokens
     maxApiCalls: 50000,             // 50,000 API calls
     maxTokens: 2000000               // 2,000,000 tokens
   },
   business: {
-    maxUsers: 10,
-    maxProjects: 10,
-    maxFeatures: 20,
-    maxSimulations: 30,
-    includedAiCredits: 2000000,     // 2,000,000 tokens
-    maxApiCalls: 250000,            // 250,000 API calls
+    maxUsers: 50,
+    maxProjects: 50,
+    maxFeatures: 200,
+    maxSimulations: 2000,
+    includedAiCredits: 10000000,    // 10,000,000 tokens
+    maxApiCalls: 200000,            // 200,000 API calls
     maxTokens: 10000000              // 10,000,000 tokens
   }
 };

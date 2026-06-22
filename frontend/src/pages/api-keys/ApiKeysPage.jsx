@@ -351,7 +351,7 @@ function ApiKeysPage() {
       {/* API Keys Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader size="sm" />
+          <Loader />
         </div>
       ) : apiKeys.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
@@ -629,7 +629,7 @@ function ApiKeysPage() {
 
             {keyStats === null ? (
               <div className="flex items-center justify-center py-8">
-                <Loader size="sm" />
+                <Loader />
               </div>
             ) : (
               <>

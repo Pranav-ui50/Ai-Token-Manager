@@ -71,28 +71,55 @@ class BillingService {
    * @returns {Object|null} Plan object with limits
    */
   async getPlanFromDatabase(planIdentifier, organizationId = null) {
-    let query = { status: 'active' };
+    logger.info(`[Plan Lookup] Looking for plan: ${planIdentifier}, orgId: ${organizationId}`);
 
     // Check if it's a valid ObjectId
-    if (planIdentifier && planIdentifier.match(/^[0-9a-fA-F]{24}$/)) {
-      query._id = planIdentifier;
-    } else if (planIdentifier) {
-      // Search by tier
+    if (planIdentifier && /^[0-9a-fA-F]{24}$/.test(planIdentifier)) {
+      const planById = await Plan.findById(planIdentifier).populate('features.feature', 'name slug category');
+      if (planById) {
+        logger.info(`[Plan Lookup] Found plan by ID: ${planById._id}, tier: ${planById.tier}, limits:`, planById.limits);
+        return planById;
+      }
+    }
+
+    // Build query for tier-based lookup
+    const query = { status: 'active' };
+    if (planIdentifier) {
       query.tier = planIdentifier.toLowerCase();
     } else {
-      // Get default plan
       query['settings.isDefault'] = true;
     }
 
-    // If organizationId provided, also try to find org-specific plan
+    // First try organization-specific plans
     if (organizationId) {
       const orgPlan = await Plan.findOne({ ...query, organization: organizationId })
         .populate('features.feature', 'name slug category');
-      if (orgPlan) return orgPlan;
+      if (orgPlan) {
+        logger.info(`[Plan Lookup] Found org-specific plan: ${orgPlan._id}, tier: ${orgPlan.tier}, limits:`, orgPlan.limits);
+        return orgPlan;
+      }
     }
 
-    // Fall back to global plans (no organization filter)
-    return await Plan.findOne(query).populate('features.feature', 'name slug category');
+    // Fall back to public plans (isPublic: true, any organization)
+    const publicPlan = await Plan.findOne({
+      ...query,
+      'settings.isPublic': true
+    }).populate('features.feature', 'name slug category');
+
+    if (publicPlan) {
+      logger.info(`[Plan Lookup] Found public plan: ${publicPlan._id}, tier: ${publicPlan.tier}, limits:`, publicPlan.limits);
+      return publicPlan;
+    }
+
+    // Last resort: find any active plan with matching tier
+    const anyPlan = await Plan.findOne(query).populate('features.feature', 'name slug category');
+    if (anyPlan) {
+      logger.info(`[Plan Lookup] Found any plan: ${anyPlan._id}, tier: ${anyPlan.tier}, limits:`, anyPlan.limits);
+      return anyPlan;
+    }
+
+    logger.warn(`[Plan Lookup] No plan found for: ${planIdentifier}`);
+    return null;
   }
 
   /**
@@ -102,7 +129,8 @@ class BillingService {
    */
   getPlanLimits(plan) {
     if (!plan) {
-      // Default fallback limits
+      // Default fallback limits for free/trial users
+      logger.warn('[Plan Limits] No plan provided, using free tier defaults');
       return {
         maxProjects: 1,
         maxFeatures: 5,
@@ -114,15 +142,27 @@ class BillingService {
       };
     }
 
-    return {
-      maxProjects: plan.limits?.maxProjects || null,
-      maxFeatures: plan.limits?.maxFeatures || null,
-      maxSimulations: plan.limits?.maxSimulations || null,
-      maxTeamMembers: plan.limits?.maxUsers || null,
-      apiCalls: plan.limits?.maxApiCalls || null,
-      tokens: plan.limits?.maxTokens || plan.credits?.includedCredits || null,
-      storage: plan.limits?.maxStorage || null
+    logger.info('[Plan Limits] Extracting limits from plan:', {
+      id: plan._id,
+      tier: plan.tier,
+      name: plan.name,
+      limits: plan.limits,
+      credits: plan.credits
+    });
+
+    // Extract limits from plan, null means unlimited
+    const limits = {
+      maxProjects: plan.limits?.maxProjects ?? null,
+      maxFeatures: plan.limits?.maxFeatures ?? null,
+      maxSimulations: plan.limits?.maxSimulations ?? null,
+      maxTeamMembers: plan.limits?.maxUsers ?? null,
+      apiCalls: plan.limits?.maxApiCalls ?? null,
+      tokens: plan.limits?.maxTokens ?? plan.credits?.includedCredits ?? null,
+      storage: plan.limits?.maxStorage ?? null
     };
+
+    logger.info('[Plan Limits] Final limits:', limits);
+    return limits;
   }
 
   /**
@@ -136,10 +176,76 @@ class BillingService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
+    logger.info(`[Billing] Getting billing for organization ${organizationId}`);
+
     const subscription = organization.subscription || {};
 
-    // Get plan from database
-    const dbPlan = await this.getPlanFromDatabase(subscription.plan, organization._id.toString());
+    logger.info(`[Billing] Current subscription:`, {
+      plan: subscription.plan,
+      planId: subscription.planId,
+      status: subscription.status,
+      billingCycle: subscription.billingCycle
+    });
+
+    // Get plan from database - try planId first, then plan tier
+    let dbPlan = null;
+
+    // First try to find by planId if it's a valid ObjectId
+    if (subscription.planId && /^[0-9a-fA-F]{24}$/.test(subscription.planId)) {
+      dbPlan = await Plan.findById(subscription.planId).populate('features.feature', 'name slug category');
+      if (dbPlan) {
+        logger.info(`[Billing] Found plan by ID: ${dbPlan._id}, tier: ${dbPlan.tier}`);
+      }
+    }
+
+    // If not found by planId, try by tier name
+    if (!dbPlan && subscription.plan) {
+      // First try organization-specific plan
+      dbPlan = await Plan.findOne({
+        tier: subscription.plan.toLowerCase(),
+        organization: organizationId,
+        status: 'active'
+      }).populate('features.feature', 'name slug category');
+
+      if (dbPlan) {
+        logger.info(`[Billing] Found org-specific plan by tier: ${dbPlan._id}, tier: ${dbPlan.tier}`);
+      } else {
+        // Try public plan
+        dbPlan = await Plan.findOne({
+          tier: subscription.plan.toLowerCase(),
+          'settings.isPublic': true,
+          status: 'active'
+        }).populate('features.feature', 'name slug category');
+
+        if (dbPlan) {
+          logger.info(`[Billing] Found public plan by tier: ${dbPlan._id}, tier: ${dbPlan.tier}`);
+        } else {
+          // Last resort: any plan with this tier
+          dbPlan = await Plan.findOne({
+            tier: subscription.plan.toLowerCase(),
+            status: 'active'
+          }).populate('features.feature', 'name slug category');
+
+          if (dbPlan) {
+            logger.info(`[Billing] Found any plan by tier: ${dbPlan._id}, tier: ${dbPlan.tier}`);
+          }
+        }
+      }
+    }
+
+    // Fall back to default plan
+    if (!dbPlan) {
+      dbPlan = await Plan.findOne({
+        'settings.isDefault': true,
+        status: 'active'
+      }).populate('features.feature', 'name slug category');
+
+      if (dbPlan) {
+        logger.info(`[Billing] Found default plan: ${dbPlan._id}, tier: ${dbPlan.tier}`);
+      } else {
+        logger.warn(`[Billing] No plan found, using free tier fallback`);
+      }
+    }
 
     // Format plan details
     const planDetails = dbPlan ? {
@@ -162,13 +268,23 @@ class BillingService {
       limits: this.getPlanLimits(null)
     };
 
+    logger.info(`[Billing] Plan details:`, {
+      id: planDetails.id,
+      tier: planDetails.tier,
+      name: planDetails.name,
+      limits: planDetails.limits
+    });
+
+    // Get usage data
+    const usageData = await this.getUsage(organizationId);
+
     return {
       organization: {
         id: organization._id,
         name: organization.name
       },
       subscription: {
-        plan: subscription.plan || 'free',
+        plan: dbPlan?.tier || subscription.plan || 'free',
         planId: dbPlan?._id || null,
         status: subscription.status || 'trial',
         trialEndsAt: subscription.trialEndsAt,
@@ -188,6 +304,7 @@ class BillingService {
         price: planDetails.price,
         currency: planDetails.currency
       },
+      usage: usageData.usage,
       billingDetails: organization.billingDetails || {},
       paymentMethods: (organization.paymentMethods || []).map(pm => ({
         id: pm.id,
@@ -425,8 +542,9 @@ class BillingService {
 
     logger.info(`Subscription reactivated: ${organizationId} by ${userId}`);
 
-    // Get plan from database
-    const dbPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+    // Get plan from database - try planId first, then plan tier
+    const planIdentifier = organization.subscription?.planId || organization.subscription?.plan;
+    const dbPlan = await this.getPlanFromDatabase(planIdentifier, organization._id.toString());
 
     return {
       status: 'active',
@@ -450,6 +568,13 @@ class BillingService {
       throw new AppError('Organization not found', 404, 'NOT_FOUND');
     }
 
+    logger.info(`[Usage] Getting usage for organization ${organizationId}`);
+    logger.info(`[Usage] Current subscription:`, {
+      plan: organization.subscription?.plan,
+      planId: organization.subscription?.planId,
+      status: organization.subscription?.status
+    });
+
     // Calculate usage from features, projects, etc.
     const Project = (await import('../models/Project.js')).default;
     const Feature = (await import('../models/Feature.js')).default;
@@ -458,12 +583,26 @@ class BillingService {
     const periodStart = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const periodEnd = endDate ? new Date(endDate) : new Date();
 
-    // Get counts
+    // Get counts - only count active (non-disabled) resources
     const [projectCount, featureCount, simulationCount] = await Promise.all([
-      Project.countDocuments({ organization: organizationId, isActive: true }),
-      Feature.countDocuments({ organization: organizationId, status: 'active' }),
-      Simulation.countDocuments({ organization: organizationId })
+      Project.countDocuments({
+        organization: organizationId,
+        status: { $in: ['active', 'inactive'] }
+      }),
+      Feature.countDocuments({
+        organization: organizationId,
+        status: { $in: ['active', 'inactive', 'maintenance'] }
+      }),
+      Simulation.countDocuments({
+        organization: organizationId,
+        status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
+      })
     ]);
+
+    // Count active team members (excluding disabled)
+    const activeTeamMembers = organization.members?.filter(
+      m => m.status === 'active' || m.status === 'inactive'
+    ).length || 0;
 
     // Get feature usage stats
     const featureUsage = await Feature.aggregate([
@@ -485,8 +624,26 @@ class BillingService {
     const usage = featureUsage[0] || { totalRequests: 0, totalTokens: 0, totalCost: 0 };
 
     // Get plan from database for dynamic limits
-    const dbPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+    // Try planId first (ObjectId), then fall back to plan tier name
+    const planIdentifier = organization.subscription?.planId || organization.subscription?.plan;
+    const dbPlan = await this.getPlanFromDatabase(planIdentifier, organization._id.toString());
+
+    if (!dbPlan) {
+      logger.warn(`[Usage] No plan found for organization ${organizationId}`);
+    }
+
     const limits = this.getPlanLimits(dbPlan);
+
+    logger.info(`[Usage] Usage counts:`, {
+      projects: projectCount,
+      features: featureCount,
+      simulations: simulationCount,
+      teamMembers: activeTeamMembers,
+      apiCalls: usage.totalRequests,
+      tokens: usage.totalTokens
+    });
+
+    logger.info(`[Usage] Plan limits:`, limits);
 
     // Helper function to calculate percentage
     const calculatePercentage = (used, limit) => {
@@ -522,9 +679,9 @@ class BillingService {
           percentage: calculatePercentage(simulationCount, limits.maxSimulations)
         },
         teamMembers: {
-          used: organization.members?.length || 0,
+          used: activeTeamMembers,
           limit: formatLimit(limits.maxTeamMembers),
-          percentage: calculatePercentage(organization.members?.length || 0, limits.maxTeamMembers)
+          percentage: calculatePercentage(activeTeamMembers, limits.maxTeamMembers)
         },
         apiCalls: {
           used: usage.totalRequests,
@@ -1094,7 +1251,9 @@ class BillingService {
     }
 
     // Get current and new plan from database
-    const currentPlan = await this.getPlanFromDatabase(organization.subscription?.plan, organization._id.toString());
+    // Try planId first (ObjectId), then fall back to plan tier name
+    const currentPlanIdentifier = organization.subscription?.planId || organization.subscription?.plan;
+    const currentPlan = await this.getPlanFromDatabase(currentPlanIdentifier, organization._id.toString());
     const newPlan = await this.getPlanFromDatabase(plan, organization._id.toString());
 
     if (!newPlan) {

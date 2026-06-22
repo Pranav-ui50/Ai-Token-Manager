@@ -278,7 +278,7 @@ function Sidebar({ isOpen, onClose }) {
           </div>
           <div>
             <h1 className="text-lg font-bold text-gray-900">{settings?.siteName || 'API Token Manager'}</h1>
-            <p className="text-xs text-gray-500">{settings?.siteDescription || 'AI API Token Cost Management'}</p>
+            <p className="text-xs text-gray-500">{settings?.siteDescription || 'AI API Token Cost Management Platform'}</p>
           </div>
         </div>
 

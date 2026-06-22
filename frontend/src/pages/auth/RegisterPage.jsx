@@ -14,6 +14,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { usePlans } from '../../context/PlansContext.jsx';
 import { storage } from '../../utils/helpers.js';
@@ -627,7 +628,7 @@ const RegisterPage = () => {
             {/* Plan Selection */}
             {loadingPlan ? (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#DC2626]"></div>
+                <Loader size="sm" inline />
                 <span className="text-sm text-gray-600">Loading plan details...</span>
               </div>
             ) : selectedPlan ? (
@@ -690,7 +691,7 @@ const RegisterPage = () => {
                 </div>
                 {loadingPlans ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
+                    <Loader />
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3">
@@ -819,8 +820,8 @@ const RegisterPage = () => {
                   onChange={handleChange}
                   placeholder="Your Company Name"
                   maxLength={100}
-                  className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                    formErrors.organizationName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                    formErrors.organizationName ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                   }`}
                 />
               </div>
@@ -848,8 +849,8 @@ const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="First name"
                     maxLength={50}
-                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                      formErrors.firstName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                      formErrors.firstName ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                     }`}
                   />
                 </div>
@@ -875,8 +876,8 @@ const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="Last name"
                     maxLength={50}
-                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                      formErrors.lastName ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                      formErrors.lastName ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                     }`}
                   />
                 </div>
@@ -904,8 +905,8 @@ const RegisterPage = () => {
                   onChange={handleChange}
                   placeholder="admin@gmail.com"
                   maxLength={60}
-                  className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                    formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                    formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                   }`}
                 />
               </div>
@@ -933,8 +934,8 @@ const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="Admin@123"
                     maxLength={100}
-                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                      formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                      formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                     }`}
                   />
                 </div>
@@ -994,8 +995,8 @@ const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="Admin@123"
                     maxLength={100}
-                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                      formErrors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    className={`w-full pl-10 pr-3 py-2.5 bg-white border rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                      formErrors.confirmPassword ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                     }`}
                   />
                 </div>
@@ -1063,10 +1064,7 @@ const RegisterPage = () => {
             >
               {submitting || authLoading ? (
                 <>
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
+                  <Loader size="sm" inline />
                   Processing...
                 </>
               ) : !selectedPlan ? (

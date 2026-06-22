@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
 import providerApi from '../../services/api/provider.api.js';
+import Loader from '../../components/common/Loader.jsx';
 
 const MODEL_TYPES = {
   chat: { label: 'Chat', color: 'bg-blue-100 text-blue-800' },
@@ -253,7 +254,7 @@ function AdminModelsPage() {
   if (isLoading && models.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626]"></div>
+        <Loader />
       </div>
     );
   }

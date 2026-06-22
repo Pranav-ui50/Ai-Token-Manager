@@ -96,7 +96,14 @@ class LimitEnforcementService {
    * @returns {Object} Enforcement results
    */
   async enforceAllLimits(organizationId, userId, targetPlan = null) {
+    logger.info(`[LimitEnforcement] ====== START ENFORCE ALL LIMITS ======`);
+    logger.info(`[LimitEnforcement] Organization: ${organizationId}`);
+    logger.info(`[LimitEnforcement] User: ${userId}`);
+    logger.info(`[LimitEnforcement] Target Plan: ${targetPlan ? `${targetPlan.tier} (${targetPlan._id})` : 'null'}`);
+
     const limits = await this.getPlanLimits(organizationId, targetPlan);
+
+    logger.info(`[LimitEnforcement] Resolved limits:`, JSON.stringify(limits));
 
     const results = {
       members: await this.enforceMemberLimit(organizationId, limits.maxUsers, userId),
@@ -104,6 +111,9 @@ class LimitEnforcementService {
       features: await this.enforceFeatureLimit(organizationId, limits.maxFeatures, userId),
       simulations: await this.enforceSimulationLimit(organizationId, limits.maxSimulations, userId)
     };
+
+    logger.info(`[LimitEnforcement] ====== END ENFORCE ALL LIMITS ======`);
+    logger.info(`[LimitEnforcement] Results:`, JSON.stringify(results));
 
     return results;
   }
@@ -186,6 +196,7 @@ class LimitEnforcementService {
       member.status = previousStatus;
       member.disabledAt = null;
       member.disabledReason = null;
+      member.disabledNote = null;
       member.disabledBy = null;
       member.previousStatus = null;
       member.reamedAt = new Date();
@@ -225,7 +236,11 @@ class LimitEnforcementService {
    * @returns {Object} Result
    */
   async enforceMemberLimit(organizationId, maxMembers, userId) {
+    logger.info(`[LimitEnforcement] Enforcing member limit for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] maxMembers: ${maxMembers}`);
+
     if (maxMembers === null) {
+      logger.info(`[LimitEnforcement] Unlimited members allowed, skipping enforcement`);
       return { disabled: 0, message: 'Unlimited members allowed' };
     }
 
@@ -239,21 +254,28 @@ class LimitEnforcementService {
 
     const activeMembers = eligibleMembers.filter(m => m.status === 'active' || !m.status);
 
+    logger.info(`[LimitEnforcement] Found ${activeMembers.length} active members (excluding owner), limit is ${maxMembers - 1} (total limit: ${maxMembers})`);
+
     if (activeMembers.length <= maxMembers - 1) {
+      logger.info(`[LimitEnforcement] Within limit (${activeMembers.length}/${maxMembers - 1}), no action needed`);
       return { disabled: 0, message: 'Within limit' };
     }
 
     const excess = activeMembers.length - (maxMembers - 1);
+    logger.info(`[LimitEnforcement] Excess members: ${excess} will be disabled`);
+
     // Disable the newest members first (last in the sorted list)
     const membersToDisable = activeMembers.slice(-excess);
     const disabledIds = [];
 
     for (const member of membersToDisable) {
+      logger.info(`[LimitEnforcement] Disabling member ${member.user}`);
       // Store previous status before disabling
       member.previousStatus = member.status || 'active';
       member.status = 'disabled';
       member.disabledAt = new Date();
       member.disabledReason = 'plan_limit';
+      member.disabledNote = 'Plan limit exceeded - upgrade to re-enable';
       member.disabledBy = userId;
 
       disabledIds.push(member.user.toString());
@@ -279,7 +301,7 @@ class LimitEnforcementService {
       afterState: { disabledMembers: disabledIds, maxMembers }
     });
 
-    logger.info(`Enforced member limit: ${disabledIds.length} members disabled for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Enforced member limit: ${disabledIds.length} members disabled for org ${organizationId}`);
 
     return { disabled: disabledIds.length, members: disabledIds };
   }
@@ -292,7 +314,11 @@ class LimitEnforcementService {
    * @returns {Object} Result
    */
   async enforceProjectLimit(organizationId, maxProjects, userId) {
+    logger.info(`[LimitEnforcement] Enforcing project limit for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] maxProjects: ${maxProjects}`);
+
     if (maxProjects === null) {
+      logger.info(`[LimitEnforcement] Unlimited projects allowed, skipping enforcement`);
       return { disabled: 0, message: 'Unlimited projects allowed' };
     }
 
@@ -302,21 +328,28 @@ class LimitEnforcementService {
       status: { $in: ['active', 'inactive'] }
     }).sort({ createdAt: 1 });
 
+    logger.info(`[LimitEnforcement] Found ${activeProjects.length} active projects, limit is ${maxProjects}`);
+
     if (activeProjects.length <= maxProjects) {
+      logger.info(`[LimitEnforcement] Within limit (${activeProjects.length}/${maxProjects}), no action needed`);
       return { disabled: 0, message: 'Within limit' };
     }
 
     const excess = activeProjects.length - maxProjects;
+    logger.info(`[LimitEnforcement] Excess projects: ${excess} will be disabled`);
+
     // Disable the newest projects first (last in the sorted list)
     const projectsToDisable = activeProjects.slice(-excess);
     const disabledIds = [];
 
     for (const project of projectsToDisable) {
+      logger.info(`[LimitEnforcement] Disabling project ${project._id} (${project.name})`);
       // Store previous status before disabling
       project.previousStatus = project.status || 'active';
       project.status = 'disabled';
       project.disabledAt = new Date();
       project.disabledReason = 'plan_limit';
+      project.disabledNote = 'Plan limit exceeded - upgrade to re-enable';
 
       await project.save();
       disabledIds.push(project._id.toString());
@@ -332,44 +365,55 @@ class LimitEnforcementService {
       afterState: { disabledProjects: disabledIds, maxProjects }
     });
 
-    logger.info(`Enforced project limit: ${disabledIds.length} projects disabled for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Enforced project limit: ${disabledIds.length} projects disabled for org ${organizationId}`);
 
     return { disabled: disabledIds.length, projects: disabledIds };
   }
 
   /**
-   * Enforce feature limit - set excess features to inactive
+   * Enforce feature limit - set excess features to disabled
    * @param {string} organizationId - Organization ID
    * @param {number} maxFeatures - Maximum features allowed (null = unlimited)
    * @param {string} userId - User ID performing action
    * @returns {Object} Result
    */
   async enforceFeatureLimit(organizationId, maxFeatures, userId) {
+    logger.info(`[LimitEnforcement] Enforcing feature limit for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] maxFeatures: ${maxFeatures}`);
+
     if (maxFeatures === null) {
+      logger.info(`[LimitEnforcement] Unlimited features allowed, skipping enforcement`);
       return { disabled: 0, message: 'Unlimited features allowed' };
     }
 
     // Get all active features (sorted by creation date - oldest first)
     const activeFeatures = await Feature.find({
       organization: organizationId,
-      status: 'active'
+      status: { $in: ['active', 'inactive', 'maintenance'] }
     }).sort({ createdAt: 1 });
 
+    logger.info(`[LimitEnforcement] Found ${activeFeatures.length} active features, limit is ${maxFeatures}`);
+
     if (activeFeatures.length <= maxFeatures) {
+      logger.info(`[LimitEnforcement] Within limit (${activeFeatures.length}/${maxFeatures}), no action needed`);
       return { disabled: 0, message: 'Within limit' };
     }
 
     const excess = activeFeatures.length - maxFeatures;
+    logger.info(`[LimitEnforcement] Excess features: ${excess} will be disabled`);
+
     // Disable the newest features first (last in the sorted list)
     const featuresToDisable = activeFeatures.slice(-excess);
     const disabledIds = [];
 
     for (const feature of featuresToDisable) {
+      logger.info(`[LimitEnforcement] Disabling feature ${feature._id} (${feature.name})`);
       // Store previous status before disabling
-      feature.previousStatus = 'active';
-      feature.status = 'inactive';
+      feature.previousStatus = feature.status || 'active';
+      feature.status = 'disabled';
       feature.disabledAt = new Date();
       feature.disabledReason = 'plan_limit';
+      feature.disabledNote = 'Plan limit exceeded - upgrade to re-enable';
 
       await feature.save();
       disabledIds.push(feature._id.toString());
@@ -381,49 +425,60 @@ class LimitEnforcementService {
       user: userId,
       action: 'features_disabled_plan_limit',
       resourceType: 'feature',
-      description: `${disabledIds.length} feature(s) set to inactive due to plan limit`,
+      description: `${disabledIds.length} feature(s) disabled due to plan limit`,
       afterState: { disabledFeatures: disabledIds, maxFeatures }
     });
 
-    logger.info(`Enforced feature limit: ${disabledIds.length} features set to inactive for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Enforced feature limit: ${disabledIds.length} features disabled for org ${organizationId}`);
 
     return { disabled: disabledIds.length, features: disabledIds };
   }
 
   /**
-   * Enforce simulation limit - set excess simulations to draft
+   * Enforce simulation limit - set excess simulations to disabled
    * @param {string} organizationId - Organization ID
    * @param {number} maxSimulations - Maximum simulations allowed (null = unlimited)
    * @param {string} userId - User ID performing action
    * @returns {Object} Result
    */
   async enforceSimulationLimit(organizationId, maxSimulations, userId) {
+    logger.info(`[LimitEnforcement] Enforcing simulation limit for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] maxSimulations: ${maxSimulations}`);
+
     if (maxSimulations === null) {
+      logger.info(`[LimitEnforcement] Unlimited simulations allowed, skipping enforcement`);
       return { disabled: 0, message: 'Unlimited simulations allowed' };
     }
 
-    // Get all non-draft simulations (sorted by creation date - oldest first)
-    // Draft simulations don't count against the limit
+    // Get all active simulations (sorted by creation date - oldest first)
+    // Exclude already disabled simulations
     const activeSimulations = await Simulation.find({
       organization: organizationId,
-      status: { $in: ['pending', 'running', 'completed', 'failed'] }
+      status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
     }).sort({ createdAt: 1 });
 
+    logger.info(`[LimitEnforcement] Found ${activeSimulations.length} active simulations, limit is ${maxSimulations}`);
+
     if (activeSimulations.length <= maxSimulations) {
+      logger.info(`[LimitEnforcement] Within limit (${activeSimulations.length}/${maxSimulations}), no action needed`);
       return { disabled: 0, message: 'Within limit' };
     }
 
     const excess = activeSimulations.length - maxSimulations;
+    logger.info(`[LimitEnforcement] Excess simulations: ${excess} will be disabled`);
+
     // Disable the newest simulations first (last in the sorted list)
     const simulationsToDisable = activeSimulations.slice(-excess);
     const disabledIds = [];
 
     for (const simulation of simulationsToDisable) {
+      logger.info(`[LimitEnforcement] Disabling simulation ${simulation._id} (${simulation.name})`);
       // Store previous status before disabling
       simulation.previousStatus = simulation.status;
-      simulation.status = 'draft';
+      simulation.status = 'disabled';
       simulation.disabledAt = new Date();
       simulation.disabledReason = 'plan_limit';
+      simulation.disabledNote = 'Plan limit exceeded - upgrade to re-enable';
 
       await simulation.save();
       disabledIds.push(simulation._id.toString());
@@ -435,11 +490,11 @@ class LimitEnforcementService {
       user: userId,
       action: 'simulations_disabled_plan_limit',
       resourceType: 'simulation',
-      description: `${disabledIds.length} simulation(s) set to draft due to plan limit`,
+      description: `${disabledIds.length} simulation(s) disabled due to plan limit`,
       afterState: { disabledSimulations: disabledIds, maxSimulations }
     });
 
-    logger.info(`Enforced simulation limit: ${disabledIds.length} simulations set to draft for org ${organizationId}`);
+    logger.info(`[LimitEnforcement] Enforced simulation limit: ${disabledIds.length} simulations disabled for org ${organizationId}`);
 
     return { disabled: disabledIds.length, simulations: disabledIds };
   }
@@ -485,6 +540,7 @@ class LimitEnforcementService {
       project.disabledAt = null;
       project.disabledReason = null;
       project.previousStatus = null;
+      project.disabledNote = null;
 
       await project.save();
       reenabledIds.push(project._id.toString());
@@ -516,7 +572,7 @@ class LimitEnforcementService {
     // Find features disabled due to plan limit (sorted by disabledAt to restore in order)
     const disabledFeatures = await Feature.find({
       organization: organizationId,
-      status: 'inactive',
+      status: 'disabled',
       disabledReason: 'plan_limit'
     }).sort({ disabledAt: 1 });
 
@@ -527,7 +583,7 @@ class LimitEnforcementService {
     const maxFeatures = limits.maxFeatures === null ? 999 : limits.maxFeatures;
     const activeFeatures = await Feature.countDocuments({
       organization: organizationId,
-      status: 'active'
+      status: { $in: ['active', 'inactive', 'maintenance'] }
     });
 
     const availableSlots = maxFeatures - activeFeatures;
@@ -540,11 +596,12 @@ class LimitEnforcementService {
     const reenabledIds = [];
 
     for (const feature of featuresToReenable) {
-      // Restore to active status
+      // Restore to previous status (was active, inactive, or maintenance)
       feature.status = feature.previousStatus || 'active';
       feature.disabledAt = null;
       feature.disabledReason = null;
       feature.previousStatus = null;
+      feature.disabledNote = null;
 
       await feature.save();
       reenabledIds.push(feature._id.toString());
@@ -576,8 +633,8 @@ class LimitEnforcementService {
     // Find simulations disabled due to plan limit (have previousStatus set)
     const disabledSimulations = await Simulation.find({
       organization: organizationId,
-      disabledReason: 'plan_limit',
-      previousStatus: { $ne: null }
+      status: 'disabled',
+      disabledReason: 'plan_limit'
     }).sort({ disabledAt: 1 }); // Re-enable in order they were disabled
 
     if (disabledSimulations.length === 0) {
@@ -587,8 +644,7 @@ class LimitEnforcementService {
     const maxSimulations = limits.maxSimulations === null ? 999 : limits.maxSimulations;
     const activeSimulations = await Simulation.countDocuments({
       organization: organizationId,
-      status: { $ne: 'draft' },
-      disabledReason: { $ne: 'plan_limit' }
+      status: { $in: ['draft', 'pending', 'running', 'completed', 'failed'] }
     });
 
     const availableSlots = maxSimulations - activeSimulations;
@@ -601,11 +657,12 @@ class LimitEnforcementService {
     const reenabledIds = [];
 
     for (const simulation of simulationsToReenable) {
-      // Restore to previous status (was running, completed, etc.)
-      simulation.status = simulation.previousStatus;
+      // Restore to previous status (was draft, running, completed, etc.)
+      simulation.status = simulation.previousStatus || 'draft';
       simulation.disabledAt = null;
       simulation.disabledReason = null;
       simulation.previousStatus = null;
+      simulation.disabledNote = null;
 
       await simulation.save();
       reenabledIds.push(simulation._id.toString());

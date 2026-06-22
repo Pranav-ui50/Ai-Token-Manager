@@ -15,6 +15,7 @@ import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 import projectApi from '../../services/api/project.api.js';
 import { getCurrencySymbol, formatCurrencyWithSymbol, getCurrencyLabel } from '../../utils/currency.js';
+import { showToast } from '../../utils/toasts.js';
 
 // Validation constants
 const VALIDATION_RULES = {
@@ -33,7 +34,7 @@ const VALIDATION_RULES = {
 };
 
 // Input field component - defined outside to prevent re-creation on every render
-const InputField = ({ name, label, required, type = 'text', placeholder, maxLength, helpText, disabled, value, onChange, onBlur, error, touched, numericOnly }) => {
+const InputField = ({ name, label, required, type = 'text', placeholder, maxLength, helpText, disabled, value, onChange, onBlur, error, touched, numericOnly, alphaOnly }) => {
   const hasError = touched && error;
   const currentValue = value ?? '';
 
@@ -50,6 +51,18 @@ const InputField = ({ name, label, required, type = 'text', placeholder, maxLeng
         }
       };
       onChange(syntheticEvent);
+    } else if (alphaOnly) {
+      // Only allow letters, spaces, and common word characters
+      const alphaValue = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+      const syntheticEvent = {
+        ...e,
+        target: {
+          ...e.target,
+          value: alphaValue,
+          name: e.target.name
+        }
+      };
+      onChange(syntheticEvent);
     } else {
       onChange(e);
     }
@@ -58,7 +71,7 @@ const InputField = ({ name, label, required, type = 'text', placeholder, maxLeng
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label}{required && <span className="text-red-500 ml-1">*</span>}
+        {label}{required && <span className="text-red-500">*</span>}
       </label>
       <input
         type="text"
@@ -94,7 +107,6 @@ function FeatureCreatePage() {
   const currency = currentOrganization?.settings?.currency || 'USD';
   const currencySymbol = getCurrencySymbol(currency);
 
-  const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [providers, setProviders] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -197,6 +209,16 @@ function FeatureCreatePage() {
 
     const descError = validateField('description', formData.description);
     if (descError) errors.description = descError;
+
+    // Provider is required
+    if (!formData.provider) {
+      errors.provider = 'Provider selection is required';
+    }
+
+    // Model is required
+    if (!formData.model) {
+      errors.model = 'AI Model selection is required';
+    }
 
     const numericFields = [
       'inputTokensPerRequest', 'outputTokensPerRequest', 'dynamicMultiplier',
@@ -369,7 +391,6 @@ function FeatureCreatePage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
     const errors = validateForm();
     if (Object.keys(errors).length > 0) {
@@ -379,6 +400,12 @@ function FeatureCreatePage() {
         newTouched[field] = true;
       });
       setTouched(prev => ({ ...prev, ...newTouched }));
+
+      // Show toast for validation errors
+      const errorMessages = Object.values(errors);
+      if (errorMessages.length > 0) {
+        showToast.validationError(errorMessages[0]);
+      }
 
       const firstErrorField = Object.keys(errors)[0];
       const element = document.querySelector(`[name="${firstErrorField}"]`);
@@ -390,7 +417,7 @@ function FeatureCreatePage() {
     }
 
     if (!currentOrganization) {
-      setError('No organization selected. Please select an organization first.');
+      showToast.error('No organization selected. Please select an organization first.');
       return;
     }
 
@@ -398,7 +425,7 @@ function FeatureCreatePage() {
       if (checkLimit && typeof checkLimit === 'function') {
         const limitCheck = checkLimit('features', 1);
         if (limitCheck && !limitCheck.allowed) {
-          setError(limitCheck.reason || 'Feature limit reached. Please upgrade your subscription to create more features.');
+          showToast.limitExceeded(limitCheck.reason || 'Feature limit reached. Please upgrade your subscription to create more features.');
           setIsSubmitting(false);
           return;
         }
@@ -433,9 +460,9 @@ function FeatureCreatePage() {
           infrastructureType: formData.infrastructureType
         },
         limits: {
-          maxRequestsPerUser: formData.maxRequestsPerUser ? Number(formData.maxRequestsPerUser) : null,
-          maxTokensPerUser: formData.maxTokensPerUser ? Number(formData.maxTokensPerUser) : null,
-          maxRequestsPerMonth: formData.maxRequestsPerMonth ? Number(formData.maxRequestsPerMonth) : null
+          maxRequestsPerUser: formData.maxRequestsPerUser && formData.maxRequestsPerUser.trim() !== '' ? Number(formData.maxRequestsPerUser) : null,
+          maxTokensPerUser: formData.maxTokensPerUser && formData.maxTokensPerUser.trim() !== '' ? Number(formData.maxTokensPerUser) : null,
+          maxRequestsPerMonth: formData.maxRequestsPerMonth && formData.maxRequestsPerMonth.trim() !== '' ? Number(formData.maxRequestsPerMonth) : null
         },
         settings: {
           enabled: formData.enabled,
@@ -460,9 +487,10 @@ function FeatureCreatePage() {
       const response = await featureApi.create(featureData);
 
       if (response.success) {
+        showToast.featureCreated();
         navigate('/features');
       } else {
-        setError(response.message || 'Failed to create feature');
+        showToast.error(response.message || 'Failed to create feature');
       }
     } catch (err) {
       console.error('Feature creation error:', err.response?.data);
@@ -470,7 +498,7 @@ function FeatureCreatePage() {
       if (isSubscriptionError(err)) {
         const errorInfo = handleSubscriptionError(err);
         if (errorInfo) {
-          setError(errorInfo.message);
+          showToast.error(errorInfo.message);
         }
         return;
       }
@@ -486,14 +514,14 @@ function FeatureCreatePage() {
         errorMessage = err.response.data.message;
       }
 
-      setError(errorMessage);
+      showToast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <button
@@ -510,18 +538,6 @@ function FeatureCreatePage() {
         <p className="text-gray-600 mt-1">Define a new AI feature with model and pricing configuration</p>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
-          <span className="text-sm">{error}</span>
-          <button type="button" onClick={() => setError('')} className="text-red-600 hover:text-red-800">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Project Selection */}
@@ -536,12 +552,13 @@ function FeatureCreatePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Project / Product<span className="text-red-500 ml-1">*</span>
+                Project / Product<span className="text-red-500">*</span>
               </label>
               <select
                 name="project"
                 value={formData.project}
                 onChange={handleChange}
+                onBlur={handleBlur}
                 className={`w-full px-3 py-2 border rounded-md ${
                   touched.project && fieldErrors.project ? 'border-red-500' : 'border-gray-300'
                 }`}
@@ -577,6 +594,7 @@ function FeatureCreatePage() {
               name="name"
               label="Feature Name"
               required
+              alphaOnly
               maxLength={100}
               placeholder="e.g., Chat Assistant, Image Generator"
               value={formData.name}
@@ -633,15 +651,23 @@ function FeatureCreatePage() {
 
         {/* Model & Provider */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Model & Provider</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">AI Model & Provider</h2>
+            <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">Required</span>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Provider<span className="text-red-500">*</span>
+              </label>
               <select
                 name="provider"
                 value={formData.provider}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                onBlur={handleBlur}
+                className={`w-full px-3 py-2 border rounded-md ${
+                  touched.provider && fieldErrors.provider ? 'border-red-500' : 'border-gray-300'
+                }`}
               >
                 <option value="">Select Provider</option>
                 {providers.map(provider => (
@@ -650,6 +676,9 @@ function FeatureCreatePage() {
                   </option>
                 ))}
               </select>
+              {touched.provider && fieldErrors.provider && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.provider}</p>
+              )}
               {providers.length === 0 && (
                 <p className="mt-1 text-sm text-amber-600">
                   No providers available. <button type="button" onClick={() => navigate('/providers')} className="underline">Create one</button>
@@ -657,12 +686,17 @@ function FeatureCreatePage() {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">AI Model</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                AI Model<span className="text-red-500">*</span>
+              </label>
               <select
                 name="model"
                 value={formData.model}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100 disabled:cursor-not-allowed"
+                onBlur={handleBlur}
+                className={`w-full px-3 py-2 border rounded-md disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                  touched.model && fieldErrors.model ? 'border-red-500' : 'border-gray-300'
+                }`}
                 disabled={!formData.provider || isLoadingModels}
               >
                 <option value="">
@@ -685,6 +719,9 @@ function FeatureCreatePage() {
                   );
                 })}
               </select>
+              {touched.model && fieldErrors.model && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.model}</p>
+              )}
               {isLoadingModels && (
                 <p className="mt-1 text-sm text-blue-600">Loading models...</p>
               )}
@@ -709,7 +746,6 @@ function FeatureCreatePage() {
               maxLength={15}
               numericOnly
               placeholder="e.g., 500"
-              helpText="Number of input tokens per request (max 15 digits)"
               value={formData.inputTokensPerRequest}
               onChange={handleChange}
               onBlur={handleBlur}
@@ -723,7 +759,6 @@ function FeatureCreatePage() {
               maxLength={15}
               numericOnly
               placeholder="e.g., 1000"
-              helpText="Number of output tokens per request (max 15 digits)"
               value={formData.outputTokensPerRequest}
               onChange={handleChange}
               onBlur={handleBlur}
@@ -771,7 +806,7 @@ function FeatureCreatePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <InputField
               name="fixedCostPerRequest"
-              label={`${getCurrencyLabel('Fixed Cost / Request', currency)}`}
+              label={`${getCurrencyLabel('Fixed Cost / Request', 'INR')}`}
               type="number"
               maxLength={15}
               numericOnly
@@ -789,7 +824,6 @@ function FeatureCreatePage() {
               maxLength={3}
               numericOnly
               placeholder="10"
-              helpText="Value must be between 1 and 100"
               value={formData.overheadPercentage}
               onChange={handleChange}
               onBlur={handleBlur}
@@ -798,7 +832,7 @@ function FeatureCreatePage() {
             />
             <InputField
               name="monthlyFixedCost"
-              label={`${getCurrencyLabel('Monthly Fixed Cost', currency)}`}
+              label={`${getCurrencyLabel('Monthly Fixed Cost', 'INR')}`}
               type="number"
               maxLength={15}
               numericOnly

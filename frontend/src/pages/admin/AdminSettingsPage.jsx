@@ -2,11 +2,13 @@
  * Admin Settings Page
  *
  * Super admin page for system-wide settings and configuration.
+ * Updates site settings globally across all user roles.
  */
 
 import { useState, useEffect } from 'react';
 import { useSiteSettings } from '../../context/SiteSettingsContext.jsx';
 import { showToast } from '../../utils/toasts.js';
+import Loader from '../../components/common/Loader.jsx';
 
 const SETTINGS_TABS = [
   { id: 'general', label: 'General', icon: 'cog' },
@@ -15,9 +17,8 @@ const SETTINGS_TABS = [
 ];
 
 function AdminSettingsPage() {
-  const { settings: siteSettings, updateSettings: updateSiteSettings } = useSiteSettings();
+  const { settings: siteSettings, isLoading: contextLoading, updateSettings: updateSiteSettings } = useSiteSettings();
   const [activeTab, setActiveTab] = useState('general');
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // General settings
@@ -50,64 +51,53 @@ function AdminSettingsPage() {
     passwordRequireSpecialChars: true
   });
 
-  // Load settings
+  // Load settings from context
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        setIsLoading(true);
-
-        // Load from context if available
-        if (siteSettings) {
-          setGeneralSettings({
-            siteName: siteSettings.siteName || 'API Token Manager',
-            siteDescription: siteSettings.siteDescription || 'AI API Token Cost Management Platform'
-          });
-        }
-
-        // Load other settings from localStorage
-        try {
-          const stored = localStorage.getItem('adminSettings');
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed.email) {
-              setEmailSettings(prev => ({ ...prev, ...parsed.email }));
-            }
-            if (parsed.security) {
-              setSecuritySettings(prev => ({ ...prev, ...parsed.security }));
-            }
-          }
-        } catch (e) {
-          console.log('Using default settings');
-        }
-
-        setIsLoading(false);
-      } catch (err) {
-        console.error('Failed to load settings:', err);
-        showToast.error('Failed to load settings');
-        setIsLoading(false);
-      }
-    };
-    loadSettings();
+    if (siteSettings) {
+      setGeneralSettings({
+        siteName: siteSettings.siteName || 'API Token Manager',
+        siteDescription: siteSettings.siteDescription || 'AI API Token Cost Management Platform'
+      });
+    }
   }, [siteSettings]);
+
+  // Load other settings from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('adminSettings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.email) {
+          setEmailSettings(prev => ({ ...prev, ...parsed.email }));
+        }
+        if (parsed.security) {
+          setSecuritySettings(prev => ({ ...prev, ...parsed.security }));
+        }
+      }
+    } catch (e) {
+      console.log('Using default settings');
+    }
+  }, []);
 
   // Save settings
   const handleSaveSettings = async () => {
     try {
       setIsSaving(true);
 
-      // Save to localStorage for persistence
-      localStorage.setItem('adminSettings', JSON.stringify({
-        email: emailSettings,
-        security: securitySettings
-      }));
-
-      // Update the context with new settings (also saves to localStorage)
+      // Save general settings to backend via context (applies globally)
       await updateSiteSettings({
         siteName: generalSettings.siteName,
         siteDescription: generalSettings.siteDescription
       });
 
-      showToast.success('Settings saved successfully');
+      // Save email and security settings to localStorage for now
+      // (these would need backend endpoints to persist properly)
+      localStorage.setItem('adminSettings', JSON.stringify({
+        email: emailSettings,
+        security: securitySettings
+      }));
+
+      showToast.success('Settings saved successfully - changes applied globally');
     } catch (err) {
       console.error('Failed to save settings:', err);
       showToast.error('Failed to save settings');
@@ -116,10 +106,10 @@ function AdminSettingsPage() {
     }
   };
 
-  if (isLoading) {
+  if (contextLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626]"></div>
+        <Loader />
       </div>
     );
   }
@@ -130,7 +120,7 @@ function AdminSettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-          <p className="text-sm text-gray-500">Configure system-wide settings and preferences</p>
+          <p className="text-sm text-gray-500">Configure system-wide settings and preferences. Changes apply globally across all user roles.</p>
         </div>
         <button
           onClick={handleSaveSettings}
@@ -159,12 +149,6 @@ function AdminSettingsPage() {
                   {tab.icon === 'cog' && (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   )}
-                  {tab.icon === 'sparkles' && (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.728 2.728a2 2 0 010 2.828L14 10m-4 4l-2.728-2.728a2 2 0 00-2.828 0L4 14m16-4l-2.728 2.728a2 2 0 010 2.828L20 14" />
-                  )}
-                  {tab.icon === 'chart-bar' && (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  )}
                   {tab.icon === 'mail' && (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   )}
@@ -183,7 +167,26 @@ function AdminSettingsPage() {
           {/* General Settings */}
           {activeTab === 'general' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-6">
-              <h2 className="text-lg font-semibold text-gray-900">General Settings</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">General Settings</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  These settings apply globally across all user roles and dashboards.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <h3 className="text-sm font-medium text-blue-800">Global Settings</h3>
+                    <p className="text-sm text-blue-700 mt-1">
+                      Changes to Site Name and Description will be reflected in the sidebar and across all user dashboards immediately after saving.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -199,6 +202,7 @@ function AdminSettingsPage() {
                     placeholder="Enter site name"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   />
+                  <p className="text-xs text-gray-500 mt-1">This name appears in the sidebar and browser tab.</p>
                 </div>
 
                 <div>
@@ -214,6 +218,25 @@ function AdminSettingsPage() {
                     placeholder="Enter site description"
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#DC2626] focus:border-transparent"
                   />
+                  <p className="text-xs text-gray-500 mt-1">A brief tagline shown under the site name.</p>
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Preview</h3>
+                <div className="bg-gray-50 rounded-lg p-4 max-w-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-[#DC2626] rounded-xl flex items-center justify-center shadow-lg">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h1 className="text-lg font-bold text-gray-900">{generalSettings.siteName || 'API Token Manager'}</h1>
+                      <p className="text-xs text-gray-500">{generalSettings.siteDescription || 'AI API Token Cost Management'}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

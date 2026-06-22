@@ -335,17 +335,7 @@ function ProjectDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <svg className="animate-spin h-10 w-10 text-[#DC2626] mx-auto" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <p className="mt-4 text-gray-500">Loading project...</p>
-        </div>
-      </div>
-    );
+    return <Loader fullPage text="Loading project..." />;
   }
 
   if (!project) {
@@ -605,11 +595,91 @@ function ProjectDetailPage() {
         {/* Feature Statistics */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Feature Statistics</h2>
+
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-600">Total Tokens/Req</p>
+                  <p className="text-lg font-bold text-blue-900">
+                    {features.reduce((sum, f) => sum + (f.tokenEstimates?.inputTokensPerRequest || 0) + (f.tokenEstimates?.outputTokensPerRequest || 0), 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-green-600">Est. Monthly Cost</p>
+                  <p className="text-lg font-bold text-green-900">
+                    {formatCurrency(
+                      features.reduce((sum, f) => {
+                        const inputTokens = f.tokenEstimates?.inputTokensPerRequest || 0;
+                        const outputTokens = f.tokenEstimates?.outputTokensPerRequest || 0;
+                        const requests = f.tokenEstimates?.expectedMonthlyRequests || 0;
+                        const inputPrice = f.model?.pricing?.inputPrice || 0;
+                        const outputPrice = f.model?.pricing?.outputPrice || 0;
+                        return sum + ((inputPrice / 1000000) * inputTokens * requests) + ((outputPrice / 1000000) * outputTokens * requests);
+                      }, 0)
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-orange-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-orange-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-orange-600">Monthly Requests</p>
+                  <p className="text-lg font-bold text-orange-900">
+                    {features.reduce((sum, f) => sum + (f.tokenEstimates?.expectedMonthlyRequests || 0), 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-purple-200 rounded-lg flex items-center justify-center">
+                  <svg className="w-4 h-4 text-purple-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-purple-600">Monthly Tokens</p>
+                  <p className="text-lg font-bold text-purple-900">
+                    {features.reduce((sum, f) => {
+                      const tokens = (f.tokenEstimates?.inputTokensPerRequest || 0) + (f.tokenEstimates?.outputTokensPerRequest || 0);
+                      const requests = f.tokenEstimates?.expectedMonthlyRequests || 0;
+                      return sum + (tokens * requests);
+                    }, 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Breakdown */}
           {stats?.featureStats && stats.featureStats.length > 0 ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-gray-700">By Status</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {stats.featureStats.map((stat, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-4">
+                  <div key={index} className="bg-gray-50 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-700 capitalize">{stat._id || 'Unknown'}</span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -635,13 +705,14 @@ function ProjectDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="text-center py-6 bg-gray-50 rounded-lg">
+              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                 </svg>
               </div>
               <p className="text-gray-500 text-sm">No features added yet</p>
+              <p className="text-gray-400 text-xs mt-1">Add features to see statistics</p>
             </div>
           )}
         </div>
@@ -680,6 +751,7 @@ function ProjectDetailPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
@@ -689,8 +761,11 @@ function ProjectDetailPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {features.map((feature) => (
+                {features.map((feature, index) => (
                   <tr key={feature._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {index + 1}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div>
@@ -731,9 +806,13 @@ function ProjectDetailPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <RouterLink
                         to={`/features/${feature._id}`}
-                        className="text-[#DC2626] hover:text-[#B91C1C] mr-4"
+                        className="text-blue-600 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50 transition-colors inline-flex"
+                        title="View feature"
                       >
-                        View
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                       </RouterLink>
                     </td>
                   </tr>
@@ -783,6 +862,7 @@ function ProjectDetailPage() {
         }}
         title="Edit Project"
         size="md"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleUpdateProject} className="space-y-4">
           <div>
@@ -975,6 +1055,7 @@ function ProjectDetailPage() {
         }}
         title="Add Feature to Project"
         size="2xl"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={async (e) => {
           e.preventDefault();
@@ -1256,10 +1337,7 @@ function ProjectDetailPage() {
                   </select>
                   {isLoadingModels && (
                     <div className="mt-1 flex items-center gap-2 text-xs text-blue-600">
-                      <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <Loader size="sm" inline className="text-blue-600" />
                       <span>Fetching live models from {providers.find(p => p._id === featureForm.provider)?.displayName || 'provider'}...</span>
                     </div>
                   )}

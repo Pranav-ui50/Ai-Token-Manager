@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import modelApi from '../../services/api/model.api.js';
 import providerApi from '../../services/api/provider.api.js';
 
@@ -155,7 +156,7 @@ function ModelCreatePage() {
     return (
       <div className="p-6">
         <div className="flex justify-center items-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626]"></div>
+          <Loader />
         </div>
       </div>
     );
@@ -208,7 +209,7 @@ function ModelCreatePage() {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="e.g., gpt-4-turbo"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
                 required
               />
               <p className="mt-1 text-xs text-gray-500">Internal identifier (e.g., gpt-4-turbo)</p>
@@ -221,7 +222,7 @@ function ModelCreatePage() {
                 value={formData.displayName}
                 onChange={handleChange}
                 placeholder="e.g., GPT-4 Turbo"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
               <p className="mt-1 text-xs text-gray-500">User-friendly name (defaults to model name)</p>
             </div>
@@ -231,7 +232,7 @@ function ModelCreatePage() {
                 name="provider"
                 value={formData.provider}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
                 required
               >
                 <option value="">Select Provider</option>
@@ -253,7 +254,7 @@ function ModelCreatePage() {
                 name="type"
                 value={formData.type}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="chat">Chat</option>
                 <option value="completion">Completion</option>
@@ -271,7 +272,7 @@ function ModelCreatePage() {
                 name="isActive"
                 value={formData.isActive ? 'true' : 'false'}
                 onChange={(e) => setFormData(prev => ({ ...prev, isActive: e.target.value === 'true' }))}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>
@@ -286,7 +287,7 @@ function ModelCreatePage() {
                 value={formData.description}
                 onChange={handleChange}
                 rows={2}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 resize-none"
                 placeholder="Brief description of this model"
               />
             </div>
@@ -312,7 +313,7 @@ function ModelCreatePage() {
                 min="0"
                 step="0.000001"
                 placeholder="e.g., 30"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
               <p className="mt-1 text-xs text-gray-500">Cost per 1M input tokens</p>
             </div>
@@ -328,7 +329,7 @@ function ModelCreatePage() {
                 min="0"
                 step="0.000001"
                 placeholder="e.g., 60"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
               <p className="mt-1 text-xs text-gray-500">Cost per 1M output tokens</p>
             </div>
@@ -340,7 +341,7 @@ function ModelCreatePage() {
                 name="currency"
                 value={formData.currency}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
@@ -381,7 +382,7 @@ function ModelCreatePage() {
                 onChange={handleChange}
                 min="1"
                 placeholder="e.g., 128000"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
             <div>
@@ -395,7 +396,7 @@ function ModelCreatePage() {
                 onChange={handleChange}
                 min="1"
                 placeholder="e.g., 4096"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
           </div>
@@ -463,7 +464,7 @@ function ModelCreatePage() {
                 min="0"
                 max="2"
                 step="0.1"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
             <div>
@@ -478,7 +479,7 @@ function ModelCreatePage() {
                 min="0"
                 max="1"
                 step="0.1"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
             <div>
@@ -493,7 +494,7 @@ function ModelCreatePage() {
                 min="-2"
                 max="2"
                 step="0.1"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
             <div>
@@ -508,7 +509,7 @@ function ModelCreatePage() {
                 min="-2"
                 max="2"
                 step="0.1"
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               />
             </div>
           </div>

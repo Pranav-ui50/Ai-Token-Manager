@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlans } from '../../../context/PlansContext.jsx';
+import Loader from '../../../components/common/Loader.jsx';
 
 const PricingSection = () => {
   const navigate = useNavigate();
@@ -75,8 +76,7 @@ const PricingSection = () => {
       <section id="pricing" className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626] mx-auto"></div>
-            <p className="mt-4 text-gray-500">Loading plans...</p>
+            <Loader text="Loading plans..." />
           </div>
         </div>
       </section>

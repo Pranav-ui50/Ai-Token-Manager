@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import Loader from '../../components/common/Loader.jsx';
 import { useAuth } from '../../hooks/useAuth.js';
 import { showToast } from '../../utils/toasts.js';
 
@@ -234,8 +235,8 @@ const LoginPage = () => {
                   onChange={handleChange}
                   placeholder="admin@gmail.com"
                   maxLength={60}
-                  className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                    formErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                    formErrors.email ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                   }`}
                   autoComplete="email"
                   required
@@ -271,8 +272,8 @@ const LoginPage = () => {
                     onChange={handleChange}
                     placeholder="Admin@123"
                     maxLength={100}
-                    className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-transparent transition-all ${
-                      formErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                    className={`w-full pl-11 pr-4 py-3.5 bg-white border rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 transition-all ${
+                      formErrors.password ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : 'border-gray-300 hover:border-gray-400'
                     }`}
                     autoComplete="current-password"
                     required
@@ -344,10 +345,7 @@ const LoginPage = () => {
             >
               {isButtonDisabled ? (
                 <>
-                  <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
+                  <Loader size="sm" inline />
                   Signing in...
                 </>
               ) : (

@@ -8,7 +8,10 @@
 
 import integrationService from '../services/integration.service.js';
 import usageSyncService from '../services/usageSync.service.js';
+import eventService from '../services/event.service.js';
 import { AppError } from '../middlewares/error.middleware.js';
+import { verifyIntegrationWebhook } from '../middlewares/webhookVerify.middleware.js';
+import Integration from '../models/Integration.js';
 import logger from '../config/logger.js';
 
 class IntegrationController {
@@ -349,23 +352,57 @@ class IntegrationController {
   async handleWebhook(req, res, next) {
     try {
       const { id } = req.params;
-      const signature = req.headers['x-webhook-signature'] || req.headers['stripe-signature'];
 
-      // Process webhook event
+      // Get integration to verify signature
+      const integration = await Integration.findById(id);
+      if (!integration) {
+        logger.warn(`[IntegrationController] Webhook received for unknown integration: ${id}`);
+        return res.status(404).json({
+          success: false,
+          message: 'Integration not found'
+        });
+      }
+
+      // Verify webhook signature (production only)
+      if (process.env.NODE_ENV === 'production') {
+        const isValid = verifyIntegrationWebhook(integration, req);
+        if (!isValid) {
+          logger.warn(`[IntegrationController] Invalid webhook signature for integration: ${id}`);
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid webhook signature'
+          });
+        }
+      }
+
+      // Process webhook event based on integration type
       const result = await usageSyncService.handleWebhookEvent(id, {
+        type: integration.type,
         headers: req.headers,
         body: req.body,
-        signature
+        rawBody: req.rawBody || JSON.stringify(req.body)
       });
 
+      // Emit sync event for webhooks
+      if (result.success) {
+        await eventService.emitIntegrationSyncEvent(
+          integration.organization.toString(),
+          integration.type,
+          'completed',
+          result
+        );
+      }
+
+      // Return 200 to acknowledge receipt (webhooks expect this)
       res.status(200).json({
         success: true,
         message: 'Webhook processed',
-        data: result
+        data: { syncId: result.syncId }
       });
     } catch (error) {
       logger.error(`[IntegrationController] Webhook error: ${error.message}`);
       // Return 200 even on error to prevent retries for known errors
+      // but log the error for debugging
       res.status(200).json({
         success: false,
         message: error.message

@@ -189,7 +189,7 @@ class AuditService {
   }
 
   /**
-   * Get logs for an organization
+   * Get logs for an organization with role-based filtering
    */
   async getLogs(organizationId, options = {}) {
     const {
@@ -204,45 +204,89 @@ class AuditService {
       search,
       page = 1,
       limit = 50,
-      sort = '-createdAt'
+      sort = '-createdAt',
+      allowedResources = null,  // Role-based resource filter
+      allowedActions = null,    // Role-based action filter
+      filterByUserId = null     // Filter by user ID for Developer role
     } = options;
 
-    const logs = await AuditLog.findByOrganization(organizationId, {
-      action,
-      resourceType,
-      resourceId,
-      userId,
-      severity,
-      status,
-      startDate,
-      endDate,
-      search,
-      page,
-      limit,
-      sort
-    });
+    // Build the base query
+    const query = { organization: organizationId };
+    const andConditions = [];
 
-    const total = await AuditLog.countDocuments({
-      organization: organizationId,
-      ...(action && { action }),
-      ...(resourceType && { resourceType }),
-      ...(resourceId && { resourceId }),
-      ...(userId && { user: userId }),
-      ...(severity && { severity }),
-      ...(status && { status }),
-      ...(startDate || endDate) && {
-        createdAt: {
-          ...(startDate && { $gte: new Date(startDate) }),
-          ...(endDate && { $lte: new Date(endDate) })
-        }
-      },
-      ...(search && {
+    // Apply role-based resource filtering
+    // For Developer role: they can see integration/webhook/api_key logs (org-wide)
+    // plus their own auth logs
+    if (allowedResources && Array.isArray(allowedResources)) {
+      const resourceFilter = {
         $or: [
-          { description: { $regex: search, $options: 'i' } },
-          { resourceName: { $regex: search, $options: 'i' } }
+          { resourceType: { $in: allowedResources } },
+          // For auth logs, only show user's own logs
+          ...(filterByUserId ? [{ resourceType: 'auth', user: filterByUserId }] : [])
         ]
-      })
-    });
+      };
+      andConditions.push(resourceFilter);
+    }
+
+    // Apply role-based action filtering
+    if (allowedActions && Array.isArray(allowedActions)) {
+      query.action = { $in: allowedActions };
+    }
+
+    // Apply user-provided filters (if within allowed scope)
+    if (action) {
+      // Only apply if action is allowed for this role
+      if (!allowedActions || allowedActions.includes(action)) {
+        query.action = action;
+      }
+    }
+
+    if (resourceType) {
+      // Only apply if resourceType is allowed for this role
+      if (!allowedResources || allowedResources.includes(resourceType)) {
+        // If we have role-based filtering, add to andConditions instead
+        if (allowedResources) {
+          andConditions.push({ resourceType });
+        } else {
+          query.resourceType = resourceType;
+        }
+      }
+    }
+
+    if (resourceId) query.resourceId = resourceId;
+    if (userId) query.user = userId;
+    if (severity) query.severity = severity;
+    if (status) query.status = status;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { resourceName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Combine all conditions
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
+    }
+
+    console.log('[Audit Service] Query:', JSON.stringify(query, null, 2));
+
+    const logs = await AuditLog.find(query)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('user', 'firstName lastName email')
+      .populate('organization', 'name');
+
+    // Build count query (same filters but without pagination)
+    const total = await AuditLog.countDocuments(query);
 
     return {
       logs,

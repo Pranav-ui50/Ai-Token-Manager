@@ -25,6 +25,10 @@ function UsageAnalyticsPage() {
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   useEffect(() => {
     fetchData();
   }, [timeRange]);
@@ -116,6 +120,28 @@ function UsageAnalyticsPage() {
       isActive: feature.status === 'active'
     };
   }).sort((a, b) => b.monthlyTokens - a.monthlyTokens);
+
+  // Pagination logic
+  const totalPages = Math.ceil(featureStats.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedFeatures = featureStats.slice(startIndex, endIndex);
+
+  // Reset to page 1 when data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [features.length]);
+
+  const handlePageSizeChange = (e) => {
+    const newSize = parseInt(e.target.value, 10);
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
+
+  const goToPage = (page) => {
+    const validPage = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(validPage);
+  };
 
   // Top used features (sorted by monthly tokens, limited to top 5)
   const topUsedFeatures = featureStats.slice(0, 5);
@@ -366,6 +392,9 @@ function UsageAnalyticsPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      S.No
+                    </th>
+                    <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Feature
                     </th>
                     <th className="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">
@@ -389,8 +418,11 @@ function UsageAnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {featureStats.slice(0, 10).map((feature) => (
+                  {paginatedFeatures.map((feature, index) => (
                     <tr key={feature.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {startIndex + index + 1}
+                      </td>
                       <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                         <Link to={`/features/${feature.id}`} className="font-medium text-gray-900 hover:text-[#DC2626]">
                           {feature.name}
@@ -427,15 +459,81 @@ function UsageAnalyticsPage() {
               </table>
             </div>
 
+            {/* Pagination Controls - Desktop */}
+            {totalPages > 1 && (
+              <div className="hidden md:flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={handlePageSizeChange}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-700">
+                    Showing {startIndex + 1} to {Math.min(endIndex, featureStats.length)} of {featureStats.length} entries
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="First page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Last page"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
-              {featureStats.slice(0, 10).map((feature) => (
+              {paginatedFeatures.map((feature, index) => (
                 <div key={feature.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <Link to={`/features/${feature.id}`} className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{feature.name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{feature.category}</p>
-                    </Link>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-sm text-gray-500 flex-shrink-0">{startIndex + index + 1}.</span>
+                      <Link to={`/features/${feature.id}`} className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{feature.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{feature.category}</p>
+                      </Link>
+                    </div>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${feature.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                       {feature.status}
                     </span>
@@ -465,6 +563,65 @@ function UsageAnalyticsPage() {
                   </div>
                 </div>
               ))}
+              {/* Pagination Controls - Mobile */}
+              {totalPages > 1 && (
+                <div className="md:hidden border-t border-gray-200 bg-gray-50 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <select
+                      value={pageSize}
+                      onChange={handlePageSizeChange}
+                      className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#DC2626] focus:ring-1 focus:ring-[#DC2626]"
+                    >
+                      <option value={10}>10 rows</option>
+                      <option value={25}>25 rows</option>
+                      <option value={50}>50 rows</option>
+                      <option value={100}>100 rows</option>
+                    </select>
+                    <span className="text-xs text-gray-600 flex-1 text-center">
+                      {startIndex + 1}-{Math.min(endIndex, featureStats.length)} of {featureStats.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => goToPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="First page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    <span className="px-2 py-1.5 text-sm text-gray-700 font-medium">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => goToPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Last page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

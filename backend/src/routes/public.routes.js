@@ -58,4 +58,12 @@ router.get('/stats', getPublicStats);
  */
 router.get('/features', getPublicFeatures);
 
+/**
+ * @route   GET /api/public/site-settings
+ * @desc    Get public site settings (site name, description)
+ * @access  Public
+ */
+import { getPublicSiteSettings } from '../controllers/public.controller.js';
+router.get('/site-settings', getPublicSiteSettings);
+
 export default router;

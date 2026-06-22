@@ -326,6 +326,7 @@ function MembersTab({ organization, organizationId }) {
           clearError?.();
         }}
         title="Add Team Member"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -415,7 +416,16 @@ function MembersTab({ organization, organizationId }) {
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowInviteModal(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowInviteModal(false);
+                setInviteForm({ firstName: '', lastName: '', email: '', password: '', roleId: '' });
+                setInviteErrors({});
+                clearError?.();
+              }}
+            >
               Cancel
             </Button>
             <Button type="submit" isLoading={isLoading}>
@@ -433,6 +443,7 @@ function MembersTab({ organization, organizationId }) {
           setSelectedMember(null);
         }}
         title="Change Member Role"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleRoleChange} className="space-y-4">
           <p className="text-sm text-gray-600">
@@ -450,7 +461,14 @@ function MembersTab({ organization, organizationId }) {
           />
 
           <div className="flex justify-end space-x-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowRoleModal(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setShowRoleModal(false);
+                setSelectedMember(null);
+              }}
+            >
               Cancel
             </Button>
             <Button type="submit" isLoading={isLoading}>

@@ -164,7 +164,12 @@
       "Bash(node -c src/services/subscription.service.js)",
       "Bash(node --check src/services/limitEnforcement.service.js)",
       "Bash(node --check src/services/subscription.service.js)",
-      "Bash(grep -E \"\\\\.\\(jsx|tsx|js|ts\\)$\")"
+      "Bash(grep -E \"\\\\.\\(jsx|tsx|js|ts\\)$\")",
+      "Bash(node --check src/models/Plan.js)",
+      "Bash(node -c src/controllers/audit.controller.js)",
+      "Bash(node -c src/services/audit.service.js)",
+      "Bash(node -c src/utils/constants.js)",
+      "Bash(node -e \"import\\('./src/hooks/usePermissions.js'\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
     ]
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import Loader from '../../components/common/Loader.jsx';
 
 function AdminSystemHealthPage() {
   const [healthData, setHealthData] = useState({
@@ -81,7 +82,7 @@ function AdminSystemHealthPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#DC2626]"></div>
+        <Loader />
       </div>
     );
   }

@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import integrationController from '../controllers/integration.controller.js';
 import { protect, requirePermissions, checkOrganization } from '../middlewares/auth.middleware.js';
+import { verifyWebhookSignature } from '../middlewares/webhookVerify.middleware.js';
 
 const router = Router();
 
@@ -189,8 +190,11 @@ router.post('/:id/sync/:syncId/retry',
  * @route   POST /api/integrations/:id/webhook
  * @desc    Handle webhook event from external provider
  * @access  Public (validated by signature)
+ * @note    Signature verification is done in the controller based on integration type
  */
 router.post('/:id/webhook',
+  // Webhook signature verification is handled in controller
+  // as it needs to look up the integration first
   integrationController.handleWebhook
 );
 

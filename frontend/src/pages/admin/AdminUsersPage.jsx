@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import adminApi from '../../services/api/admin.api.js';
 import { showToast } from '../../utils/toasts.js';
+import Loader from '../../components/common/Loader.jsx';
 
 function AdminUsersPage() {
   const navigate = useNavigate();
@@ -125,10 +126,7 @@ function AdminUsersPage() {
   if (isLoading && users.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626] mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading users...</p>
-        </div>
+        <Loader text="Loading users..." />
       </div>
     );
   }

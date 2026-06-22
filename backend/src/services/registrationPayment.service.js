@@ -20,6 +20,7 @@ import { AppError } from '../middlewares/error.middleware.js';
 import config from '../config/index.js';
 import logger from '../config/logger.js';
 import emailService from './email.service.js';
+import limitEnforcementService from './limitEnforcement.service.js';
 import stripe from 'stripe';
 import Razorpay from 'razorpay';
 
@@ -464,6 +465,32 @@ class RegistrationPaymentService {
     } catch (error) {
       logger.error('[RegistrationPayment] Failed to send registration emails:', error);
       // Don't throw error - registration should succeed even if email fails
+    }
+
+    // Enforce plan limits for new account
+    try {
+      logger.info(`[RegistrationPayment] Enforcing plan limits for new organization ${organization._id}`);
+
+      // Get the plan details
+      let targetPlan = await Plan.findById(pendingReg.planId).catch(() => null);
+      if (!targetPlan) {
+        targetPlan = await Plan.findOne({ tier: pendingReg.planId?.toLowerCase() });
+      }
+
+      if (targetPlan) {
+        logger.info(`[RegistrationPayment] Plan found: ${targetPlan.tier}, limits:`, targetPlan.limits);
+        const enforcementResult = await limitEnforcementService.enforceAllLimits(
+          organization._id,
+          user._id,
+          targetPlan
+        );
+        logger.info(`[RegistrationPayment] Limit enforcement result:`, JSON.stringify(enforcementResult));
+      } else {
+        logger.warn(`[RegistrationPayment] Plan not found for limit enforcement: ${pendingReg.planId}`);
+      }
+    } catch (enforcementError) {
+      // Log but don't fail the registration
+      logger.error(`[RegistrationPayment] Failed to enforce limits: ${enforcementError.message}`);
     }
 
     // Return user without password

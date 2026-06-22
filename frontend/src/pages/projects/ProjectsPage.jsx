@@ -29,6 +29,29 @@ function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
 
+  // Status colors for project cards
+  const STATUS_COLORS = {
+    active: 'bg-green-100 text-green-700',
+    inactive: 'bg-gray-100 text-gray-600',
+    disabled: 'bg-red-100 text-red-700'
+  };
+
+  // Get status display for project
+  const getProjectStatus = (project) => {
+    // Check status field first (new system)
+    if (project.status === 'disabled') {
+      return { label: 'Disabled', color: STATUS_COLORS.disabled, reason: project.disabledReason, note: project.disabledNote };
+    }
+    if (project.status === 'inactive') {
+      return { label: 'Inactive', color: STATUS_COLORS.inactive };
+    }
+    // Fall back to isActive field (legacy)
+    if (project.isActive === false) {
+      return { label: 'Inactive', color: STATUS_COLORS.inactive };
+    }
+    return { label: 'Active', color: STATUS_COLORS.active };
+  };
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -62,9 +85,13 @@ function ProjectsPage() {
 
   // Filter projects by status and search query
   const filteredProjects = projects.filter(project => {
+    // Get the effective status
+    const status = project.status || (project.isActive === false ? 'inactive' : 'active');
+
     // Status filter
-    if (statusFilter === 'active' && project.isActive === false) return false;
-    if (statusFilter === 'inactive' && project.isActive !== false) return false;
+    if (statusFilter === 'active' && status !== 'active') return false;
+    if (statusFilter === 'inactive' && status !== 'inactive') return false;
+    if (statusFilter === 'disabled' && status !== 'disabled') return false;
 
     // Search filter
     if (searchQuery.trim()) {
@@ -291,7 +318,7 @@ function ProjectsPage() {
               placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
             />
           </div>
         </div>
@@ -320,6 +347,16 @@ function ProjectsPage() {
               Inactive
             </button>
             <button
+              onClick={() => setStatusFilter('disabled')}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                statusFilter === 'disabled'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Disabled
+            </button>
+            <button
               onClick={() => setStatusFilter('all')}
               className={`px-3 py-2 text-sm font-medium transition-colors ${
                 statusFilter === 'all'
@@ -334,7 +371,7 @@ function ProjectsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
@@ -358,7 +395,7 @@ function ProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Active</p>
-              <p className="text-xl font-bold text-gray-900">{projects.filter(p => p.isActive !== false).length}</p>
+              <p className="text-xl font-bold text-gray-900">{projects.filter(p => (p.status || (p.isActive === false ? 'inactive' : 'active')) === 'active').length}</p>
             </div>
           </div>
         </div>
@@ -372,7 +409,21 @@ function ProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-gray-500">Inactive</p>
-              <p className="text-xl font-bold text-gray-900">{projects.filter(p => p.isActive === false).length}</p>
+              <p className="text-xl font-bold text-gray-900">{projects.filter(p => (p.status || (p.isActive === false ? 'inactive' : 'active')) === 'inactive').length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+              <svg className="w-5 h-5 text-red-600" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11H7v-2h10v2z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Disabled</p>
+              <p className="text-xl font-bold text-gray-900">{projects.filter(p => p.status === 'disabled').length}</p>
             </div>
           </div>
         </div>
@@ -463,11 +514,16 @@ function ProjectsPage() {
                       {project.description || 'No description'}
                     </p>
                   </div>
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    project.isActive === false ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-700'
-                  }`}>
-                    {project.isActive === false ? 'Inactive' : 'Active'}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getProjectStatus(project).color}`}>
+                      {getProjectStatus(project).label}
+                    </span>
+                    {project.status === 'disabled' && project.disabledNote && (
+                      <span className="text-xs text-red-600 text-right">
+                        {project.disabledNote}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
@@ -565,6 +621,7 @@ function ProjectsPage() {
         }}
         title="Create New Project"
         size="md"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleCreateProject} className="space-y-4">
           <div>
@@ -574,7 +631,7 @@ function ProjectsPage() {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               maxLength={100}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               placeholder="Enter project name"
             />
           </div>
@@ -588,7 +645,7 @@ function ProjectsPage() {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
               maxLength={300}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 resize-none"
               placeholder="Brief description of the project"
             />
           </div>
@@ -604,7 +661,7 @@ function ProjectsPage() {
                   ...formData,
                   settings: { ...formData.settings, currency: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
@@ -625,7 +682,7 @@ function ProjectsPage() {
                   ...formData,
                   settings: { ...formData.settings, timezone: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="UTC">UTC</option>
                 <option value="America/New_York">Eastern Time (ET)</option>
@@ -664,7 +721,7 @@ function ProjectsPage() {
                     settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(value) || 0 }
                   });
                 }}
-                className={`w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${getCurrencyPadding(formData.settings.currency)}`}
+                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 ${getCurrencyPadding(formData.settings.currency)}`}
                 placeholder="0.00"
               />
             </div>
@@ -701,6 +758,7 @@ function ProjectsPage() {
         }}
         title="Edit Project"
         size="md"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleUpdateProject} className="space-y-4">
           <div>
@@ -710,7 +768,7 @@ function ProjectsPage() {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               maxLength={100}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               placeholder="Enter project name"
             />
           </div>
@@ -724,7 +782,7 @@ function ProjectsPage() {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
               maxLength={300}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent resize-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 resize-none"
               placeholder="Brief description of the project"
             />
           </div>
@@ -740,7 +798,7 @@ function ProjectsPage() {
                   ...formData,
                   settings: { ...formData.settings, currency: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
@@ -761,7 +819,7 @@ function ProjectsPage() {
                   ...formData,
                   settings: { ...formData.settings, timezone: e.target.value }
                 })}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20"
               >
                 <option value="UTC">UTC</option>
                 <option value="America/New_York">Eastern Time (ET)</option>
@@ -800,7 +858,7 @@ function ProjectsPage() {
                     settings: { ...formData.settings, infrastructureCostPerMonth: parseFloat(value) || 0 }
                   });
                 }}
-                className={`w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${getCurrencyPadding(formData.settings.currency)}`}
+                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20 ${getCurrencyPadding(formData.settings.currency)}`}
                 placeholder="0.00"
               />
             </div>

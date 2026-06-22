@@ -11,6 +11,7 @@ import { usePlans } from '../../context/PlansContext.jsx';
 import billingApi from '../../services/api/billing.api.js';
 import { showToast } from '../../utils/toasts.js';
 import { getCurrencySymbol, formatIndianNumber } from '../../utils/currency.js';
+import Loader from '../../components/common/Loader.jsx';
 
 // Track last refresh time to prevent duplicate refreshes
 let lastRefreshTime = 0;
@@ -246,10 +247,8 @@ function BillingPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex justify-center items-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626]"></div>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader />
       </div>
     );
   }
@@ -443,7 +442,7 @@ function BillingPage() {
           {/* Plans Grid */}
           {plansLoading ? (
             <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DC2626]"></div>
+              <Loader />
             </div>
           ) : plansError ? (
             <div className="text-center py-8">

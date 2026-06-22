@@ -14,6 +14,7 @@ import roleApi from '../../services/api/role.api.js';
 import Modal from '../../components/common/Modal.jsx';
 import Button from '../../components/common/Button.jsx';
 import Avatar from '../../components/common/Avatar.jsx';
+import Loader from '../../components/common/Loader.jsx';
 import { showToast } from '../../utils/toasts.js';
 
 const ROLE_OPTIONS = [
@@ -157,9 +158,11 @@ function TeamPage() {
   const fetchRoles = async () => {
     try {
       const rolesData = await roleApi.getOrganizationRoles();
+      console.log('[TeamPage] Fetched roles:', rolesData);
       setRoles(rolesData || []);
     } catch (err) {
       console.error('Failed to fetch roles:', err);
+      showToast.error('Failed to load roles. Please refresh the page.');
     }
   };
 
@@ -200,6 +203,13 @@ function TeamPage() {
     e.preventDefault();
     if (!validateInviteForm()) return;
 
+    // Debug: Log form data being sent
+    console.log('[TeamPage] Adding member with data:', {
+      organizationId,
+      ...inviteForm,
+      password: '***' // Hide password in log
+    });
+
     setIsSubmitting(true);
     try {
       await organizationApi.addMember(organizationId, inviteForm);
@@ -209,13 +219,32 @@ function TeamPage() {
       setInviteErrors({});
       await fetchMembers();
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.response?.data?.error?.message || 'Failed to add team member';
+      // Debug: Log full error response
+      console.error('[TeamPage] Add member error:', {
+        status: err.response?.status,
+        data: err.response?.data
+      });
+
+      // Check for validation errors with details
+      const errorData = err.response?.data;
+      let errorMessage = 'Failed to add team member';
+
+      if (errorData?.error?.details && Array.isArray(errorData.error.details)) {
+        // Show specific validation error messages
+        const validationErrors = errorData.error.details.map(e => e.message).join('. ');
+        errorMessage = validationErrors || errorData.error.message || errorMessage;
+      } else if (errorData?.error?.message) {
+        errorMessage = errorData.error.message;
+      } else if (errorData?.message) {
+        errorMessage = errorData.message;
+      }
+
       // Check if it's a duplicate member error (409 Conflict)
       if (err.response?.status === 409) {
         showToast.error('This email is already associated with a team member');
       }
       // Check if it's a limit exceeded error
-      else if (err.response?.data?.error?.code === 'MEMBER_LIMIT_EXCEEDED' || errorMessage.includes('limit')) {
+      else if (errorData?.error?.code === 'MEMBER_LIMIT_EXCEEDED' || errorMessage.includes('limit')) {
         showToast.error(errorMessage);
       } else {
         showToast.error(errorMessage);
@@ -334,10 +363,8 @@ function TeamPage() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex justify-center items-center min-h-[400px]">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#DC2626]"></div>
-        </div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader text="Loading team members..." />
       </div>
     );
   }
@@ -539,9 +566,16 @@ function TeamPage() {
                             {member.status || 'active'}
                           </span>
                           {member.status === 'disabled' && member.disabledReason && (
-                            <span className="text-xs text-red-600">
-                              {member.disabledReason === 'plan_limit' ? 'Plan limit reached' : member.disabledReason}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-xs text-red-600 font-medium">
+                                {member.disabledReason === 'plan_limit' ? 'Plan limit exceeded' : member.disabledReason}
+                              </span>
+                              {member.disabledNote && (
+                                <span className="text-xs text-red-500">
+                                  {member.disabledNote}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -618,6 +652,7 @@ function TeamPage() {
         }}
         title="Add Team Member"
         size="md"
+        closeOnBackdropClick={false}
       >
         <form onSubmit={handleInviteMember} className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -736,6 +771,7 @@ function TeamPage() {
         }}
         title="Edit Team Member"
         size="md"
+        closeOnBackdropClick={false}
       >
         {selectedMember && (
           <div className="p-6 space-y-6">

@@ -18,10 +18,25 @@ export const PricingTierCard = ({
   billingCycle = 'monthly',
   className = ''
 }) => {
-  const price = billingCycle === 'annual' ? tier.annualPrice : tier.monthlyPrice;
-  const savings = billingCycle === 'annual'
-    ? Math.round((1 - tier.annualPrice / (tier.monthlyPrice * 12)) * 100)
+  // Handle both old format (monthlyPrice/annualPrice) and new API format (price/billingCycle)
+  const monthlyPrice = tier.monthlyPrice || tier.price || 0;
+  const annualPrice = tier.annualPrice || (tier.yearlyDiscount
+    ? monthlyPrice * 12 * (1 - tier.yearlyDiscount / 100)
+    : monthlyPrice * 12 * 0.8); // Default 20% yearly discount
+
+  const price = billingCycle === 'yearly' || billingCycle === 'annual' ? annualPrice : monthlyPrice;
+  const monthlyDisplayPrice = billingCycle === 'yearly' || billingCycle === 'annual'
+    ? Math.round(annualPrice / 12)
+    : monthlyPrice;
+
+  const savings = billingCycle === 'yearly' || billingCycle === 'annual' && monthlyPrice > 0
+    ? Math.round((1 - annualPrice / (monthlyPrice * 12)) * 100)
     : 0;
+
+  // Handle features array - could be strings or objects
+  const featureList = Array.isArray(tier.features)
+    ? tier.features.map(f => typeof f === 'string' ? f : f?.feature?.name || f?.name || '')
+    : [];
 
   return (
     <div
@@ -31,11 +46,11 @@ export const PricingTierCard = ({
           ? 'border-blue-500 ring-2 ring-blue-500 shadow-lg'
           : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
         }
-        ${tier.popular ? 'ring-2 ring-blue-500' : ''}
+        ${tier.isPopular || tier.popular ? 'ring-2 ring-blue-500' : ''}
         ${className}
       `}
     >
-      {tier.popular && (
+      {(tier.isPopular || tier.popular) && (
         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
           <span className="bg-blue-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
             Most Popular
@@ -44,21 +59,54 @@ export const PricingTierCard = ({
       )}
 
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{tier.name}</h3>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{tier.description}</p>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {tier.displayName || tier.name}
+        </h3>
+        {tier.description && (
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{tier.description}</p>
+        )}
 
         <div className="mt-4">
-          <span className="text-4xl font-bold text-gray-900 dark:text-white">
-            ${price}
-          </span>
-          <span className="text-gray-500 dark:text-gray-400">/{billingCycle === 'annual' ? 'mo' : 'month'}</span>
-          {savings > 0 && (
-            <p className="text-sm text-green-500 mt-1">Save {savings}% annually</p>
+          {tier.price === 'custom' || tier.tier === 'enterprise' ? (
+            <div>
+              <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                Contact Sales
+              </span>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Custom pricing</p>
+            </div>
+          ) : (
+            <>
+              <span className="text-4xl font-bold text-gray-900 dark:text-white">
+                ${tier.currency === 'USD' || !tier.currency ? '' : tier.currency}{monthlyDisplayPrice}
+              </span>
+              <span className="text-gray-500 dark:text-gray-400">/{billingCycle === 'yearly' || billingCycle === 'annual' ? 'mo' : 'month'}</span>
+              {(billingCycle === 'yearly' || billingCycle === 'annual') && savings > 0 && (
+                <p className="text-sm text-green-500 mt-1">Save {savings}% annually</p>
+              )}
+            </>
           )}
         </div>
 
+        {/* Display limits */}
+        {tier.limits && (
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+            {tier.limits.maxUsers && (
+              <div>Up to {tier.limits.maxUsers} users</div>
+            )}
+            {tier.limits.maxProjects && (
+              <div>Up to {tier.limits.maxProjects} projects</div>
+            )}
+            {tier.limits.maxFeatures && (
+              <div>Up to {tier.limits.maxFeatures} features</div>
+            )}
+            {tier.limits.maxApiCalls && (
+              <div>{tier.limits.maxApiCalls.toLocaleString()} API calls</div>
+            )}
+          </div>
+        )}
+
         <ul className="mt-6 space-y-3">
-          {tier.features.map((feature, index) => (
+          {featureList.filter(f => f).map((feature, index) => (
             <li key={index} className="flex items-start">
               <svg className="w-5 h-5 text-green-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -78,7 +126,7 @@ export const PricingTierCard = ({
             }
           `}
         >
-          {selected ? 'Selected' : 'Select Plan'}
+          {selected ? 'Current Plan' : 'Select Plan'}
         </button>
       </div>
     </div>
@@ -97,7 +145,10 @@ export const UsageProgress = ({
   color = 'blue',
   className = ''
 }) => {
-  const percentage = limit > 0 ? Math.min((current / limit) * 100, 100) : 0;
+  // Handle unlimited or null limits
+  const isUnlimited = limit === 'unlimited' || limit === null || limit === undefined;
+  const numericLimit = isUnlimited ? null : Number(limit);
+  const percentage = !isUnlimited && numericLimit > 0 ? Math.min((current / numericLimit) * 100, 100) : 0;
   const isWarning = percentage >= 80 && percentage < 100;
   const isCritical = percentage >= 100;
 
@@ -106,7 +157,9 @@ export const UsageProgress = ({
     green: 'bg-green-500',
     yellow: 'bg-yellow-500',
     red: 'bg-red-500',
-    purple: 'bg-purple-500'
+    purple: 'bg-purple-500',
+    orange: 'bg-orange-500',
+    cyan: 'bg-cyan-500'
   };
 
   const bgColorClasses = {
@@ -114,31 +167,45 @@ export const UsageProgress = ({
     green: 'bg-green-100 dark:bg-green-900/20',
     yellow: 'bg-yellow-100 dark:bg-yellow-900/20',
     red: 'bg-red-100 dark:bg-red-900/20',
-    purple: 'bg-purple-100 dark:bg-purple-900/20'
+    purple: 'bg-purple-100 dark:bg-purple-900/20',
+    orange: 'bg-orange-100 dark:bg-orange-900/20',
+    cyan: 'bg-cyan-100 dark:bg-cyan-900/20'
   };
 
   return (
     <div className={className}>
       <div className="flex justify-between items-center mb-1">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
-        {showPercentage && (
+        {showPercentage && !isUnlimited && (
           <span className={`text-sm font-medium ${isCritical ? 'text-red-500' : isWarning ? 'text-yellow-500' : 'text-gray-600 dark:text-gray-400'}`}>
             {percentage.toFixed(1)}%
           </span>
         )}
+        {isUnlimited && (
+          <span className="text-sm font-medium text-green-600 dark:text-green-400">
+            Unlimited
+          </span>
+        )}
       </div>
-      <div className={`h-2 rounded-full ${bgColorClasses[color]}`}>
-        <div
-          className={`h-full rounded-full transition-all duration-300 ${isCritical ? 'bg-red-500' : isWarning ? 'bg-yellow-500' : colorClasses[color]}`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+      {!isUnlimited && (
+        <div className={`h-2 rounded-full ${bgColorClasses[color]}`}>
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${isCritical ? 'bg-red-500' : isWarning ? 'bg-yellow-500' : colorClasses[color]}`}
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+      )}
+      {isUnlimited && (
+        <div className="h-2 rounded-full bg-green-100 dark:bg-green-900/20">
+          <div className="h-full rounded-full bg-green-500" style={{ width: '0%' }} />
+        </div>
+      )}
       <div className="flex justify-between mt-1">
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {current.toLocaleString()}{unit} used
         </span>
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {limit.toLocaleString()}{unit} limit
+          {isUnlimited ? 'Unlimited' : numericLimit?.toLocaleString() + unit}
         </span>
       </div>
     </div>
